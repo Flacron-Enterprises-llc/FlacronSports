@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Live Sports Widgets</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      /* Tailwind's from-blue-50 to-indigo-100 gradient */
+      background: linear-gradient(135deg, #eff6ff 0%, #c7d2fe 100%);
+    }
+    .top-bar {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 24px;
+      background: rgba(255,255,255,0.85);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      padding: 18px 0 12px 0;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .top-bar button {
+      font-size: 1.1rem;
+      font-weight: 600;
+      background: none;
+      border: none;
+      color: #3730a3;
+      padding: 8px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+    .top-bar button.active {
+      background: #6366f1;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(99,102,241,0.08);
+    }
+    .widget-container {
+      max-width: 1000px;
+      margin: 40px auto;
+      background-color: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      min-height: 400px;
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="top-bar">
+    <button id="btn-football" class="active">⚽ Football</button>
+    <button id="btn-baseball">⚾ Baseball</button>
+    <button id="btn-hockey">🏒 Hockey</button>
+    <button id="btn-rugby">🏉 Rugby</button>
+    <button id="btn-basketball">🏀 Basketball</button>
+  </div>
+
+  <div id="widget-container" class="widget-container"></div>
+
+  <script type="module" src="https://widgets.api-sports.io/2.0.3/widgets.js"></script>
+  <script>
+    const sports = [
+      {
+        key: 'football',
+        label: '⚽ Live Football Games',
+        divId: 'wg-api-football-games',
+        dataHost: 'v3.football.api-sports.io',
+        showLogos: 'false'
+      },
+      {
+        key: 'baseball',
+        label: '⚾ Live Baseball Games',
+        divId: 'wg-api-baseball-games',
+        dataHost: 'v1.baseball.api-sports.io',
+        showLogos: 'true'
+      },
+      {
+        key: 'hockey',
+        label: '🏒 Live Hockey Games',
+        divId: 'wg-api-hockey-games',
+        dataHost: 'v1.hockey.api-sports.io',
+        showLogos: 'true'
+      },
+      {
+        key: 'rugby',
+        label: '🏉 Live Rugby Games',
+        divId: 'wg-api-rugby-games',
+        dataHost: 'v1.rugby.api-sports.io',
+        showLogos: 'true'
+      },
+      {
+        key: 'basketball',
+        label: '🏀 Live Basketball Games',
+        divId: 'wg-api-basketball-games',
+        dataHost: 'v1.basketball.api-sports.io',
+        showLogos: 'true'
+      }
+    ];
+
+    const API_KEY = '***REMOVED***';
+    const widgetContainer = document.getElementById('widget-container');
+    const buttons = sports.map(sport => document.getElementById(`btn-${sport.key}`));
+
+    function renderWidget(sport) {
+      // Check last fetch time
+      const lastFetch = localStorage.getItem(`widget-last-fetch-${sport.key}`);
+      const now = Date.now();
+      if (lastFetch && now - Number(lastFetch) < 30 * 60 * 1000) {
+        // Widget was loaded less than 30 minutes ago, just show it
+        widgetContainer.innerHTML = localStorage.getItem(`widget-html-${sport.key}`) || '';
+        return;
+      }
+
+      // Otherwise, create the widget div and update last fetch time
+      widgetContainer.innerHTML = `
+        <h2>${sport.label}</h2>
+        <div id="${sport.divId}"
+          data-host="${sport.dataHost}"
+          data-key="${API_KEY}"
+          data-date=""
+          data-league=""
+          data-season=""
+          data-theme=""
+          data-refresh="15"
+          data-show-toolbar="true"
+          data-show-errors="false"
+          data-show-logos="${sport.showLogos}"
+          data-modal-game="true"
+          data-modal-standings="true"
+          data-modal-show-logos="true">
+        </div>
+      `;
+      localStorage.setItem(`widget-last-fetch-${sport.key}`, now.toString());
+      localStorage.setItem(`widget-html-${sport.key}`, widgetContainer.innerHTML);
+    }
+
+    // Set up button click handlers
+    sports.forEach((sport, idx) => {
+      buttons[idx].addEventListener('click', () => {
+        buttons.forEach(btn => btn.classList.remove('active'));
+        buttons[idx].classList.add('active');
+        renderWidget(sport);
+      });
+    });
+
+    // Render the default widget (Football) on page load
+    renderWidget(sports[0]);
+  </script>
+</body>
+</html> 

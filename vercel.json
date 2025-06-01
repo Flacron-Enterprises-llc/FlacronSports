@@ -1,0 +1,17 @@
+{
+  "functions": {
+    "app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/daily-content",
+      "schedule": "30 5 * * *"
+    },
+    {
+      "path": "/api/cron/newsletter",
+      "schedule": "0 6 * * *"
+    }
+  ]
+}

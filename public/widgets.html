@@ -66,96 +66,174 @@
     <button id="btn-basketball">🏀 Basketball</button>
   </div>
 
-  <div id="widget-container" class="widget-container"></div>
+  <div id="football-container" class="widget-container">
+    <h2>⚽ Live Football Games</h2>
+    <div id="wg-api-football-games"
+         data-host="v3.football.api-sports.io"
+         data-key="***REMOVED***"
+         data-date=""
+         data-league=""
+         data-season=""
+         data-theme=""
+         data-refresh="15"
+         data-show-toolbar="true"
+         data-show-errors="false"
+         data-show-logos="false"
+         data-modal-game="true"
+         data-modal-standings="true"
+         data-modal-show-logos="true">
+    </div>
+  </div>
+
+  <div id="baseball-container" class="widget-container" style="display:none;">
+    <h2>⚾ Live Baseball Games</h2>
+    <div id="wg-api-baseball-games"
+         data-host="v1.baseball.api-sports.io"
+         data-key="***REMOVED***"
+         data-date=""
+         data-league=""
+         data-season=""
+         data-theme=""
+         data-refresh="15"
+         data-show-toolbar="true"
+         data-show-errors="false"
+         data-show-logos="true"
+         data-modal-game="true"
+         data-modal-standings="true"
+         data-modal-show-logos="true">
+    </div>
+  </div>
+
+  <div id="hockey-container" class="widget-container" style="display:none;">
+    <h2>🏒 Live Hockey Games</h2>
+    <div id="wg-api-hockey-games"
+         data-host="v1.hockey.api-sports.io"
+         data-key="***REMOVED***"
+         data-date=""
+         data-league=""
+         data-season=""
+         data-theme=""
+         data-refresh="15"
+         data-show-toolbar="true"
+         data-show-errors="false"
+         data-show-logos="true"
+         data-modal-game="true"
+         data-modal-standings="true"
+         data-modal-show-logos="true">
+    </div>
+  </div>
+
+  <div id="rugby-container" class="widget-container" style="display:none;">
+    <h2>🏉 Live Rugby Games</h2>
+    <div id="wg-api-rugby-games"
+         data-host="v1.rugby.api-sports.io"
+         data-key="***REMOVED***"
+         data-date=""
+         data-league=""
+         data-season=""
+         data-theme=""
+         data-refresh="15"
+         data-show-toolbar="true"
+         data-show-errors="false"
+         data-show-logos="true"
+         data-modal-game="true"
+         data-modal-standings="true"
+         data-modal-show-logos="true">
+    </div>
+  </div>
+
+  <div id="basketball-container" class="widget-container" style="display:none;">
+    <h2>🏀 Live Basketball Games</h2>
+    <div id="wg-api-basketball-games"
+         data-host="v1.basketball.api-sports.io"
+         data-key="***REMOVED***"
+         data-date=""
+         data-league=""
+         data-season=""
+         data-theme=""
+         data-refresh="15"
+         data-show-toolbar="true"
+         data-show-errors="false"
+         data-show-logos="true"
+         data-modal-game="true"
+         data-modal-standings="true"
+         data-modal-show-logos="true">
+    </div>
+  </div>
 
   <script type="module" src="https://widgets.api-sports.io/2.0.3/widgets.js"></script>
   <script>
-    const sports = [
-      {
-        key: 'football',
-        label: '⚽ Live Football Games',
-        divId: 'wg-api-football-games',
-        dataHost: 'v3.football.api-sports.io',
-        showLogos: 'false'
-      },
-      {
-        key: 'baseball',
-        label: '⚾ Live Baseball Games',
-        divId: 'wg-api-baseball-games',
-        dataHost: 'v1.baseball.api-sports.io',
-        showLogos: 'true'
-      },
-      {
-        key: 'hockey',
-        label: '🏒 Live Hockey Games',
-        divId: 'wg-api-hockey-games',
-        dataHost: 'v1.hockey.api-sports.io',
-        showLogos: 'true'
-      },
-      {
-        key: 'rugby',
-        label: '🏉 Live Rugby Games',
-        divId: 'wg-api-rugby-games',
-        dataHost: 'v1.rugby.api-sports.io',
-        showLogos: 'true'
-      },
-      {
-        key: 'basketball',
-        label: '🏀 Live Basketball Games',
-        divId: 'wg-api-basketball-games',
-        dataHost: 'v1.basketball.api-sports.io',
-        showLogos: 'true'
-      }
-    ];
+    const btnFootball = document.getElementById('btn-football');
+    const btnBaseball = document.getElementById('btn-baseball');
+    const btnHockey = document.getElementById('btn-hockey');
+    const btnRugby = document.getElementById('btn-rugby');
+    const btnBasketball = document.getElementById('btn-basketball');
+    const footballContainer = document.getElementById('football-container');
+    const baseballContainer = document.getElementById('baseball-container');
+    const hockeyContainer = document.getElementById('hockey-container');
+    const rugbyContainer = document.getElementById('rugby-container');
+    const basketballContainer = document.getElementById('basketball-container');
 
-    const API_KEY = '***REMOVED***';
-    const widgetContainer = document.getElementById('widget-container');
-    const buttons = sports.map(sport => document.getElementById(`btn-${sport.key}`));
-
-    function renderWidget(sport) {
-      // Check last fetch time
-      const lastFetch = localStorage.getItem(`widget-last-fetch-${sport.key}`);
-      const now = Date.now();
-      if (lastFetch && now - Number(lastFetch) < 30 * 60 * 1000) {
-        // Widget was loaded less than 30 minutes ago, just show it
-        widgetContainer.innerHTML = localStorage.getItem(`widget-html-${sport.key}`) || '';
-        return;
-      }
-
-      // Otherwise, create the widget div and update last fetch time
-      widgetContainer.innerHTML = `
-        <h2>${sport.label}</h2>
-        <div id="${sport.divId}"
-          data-host="${sport.dataHost}"
-          data-key="${API_KEY}"
-          data-date=""
-          data-league=""
-          data-season=""
-          data-theme=""
-          data-refresh="15"
-          data-show-toolbar="true"
-          data-show-errors="false"
-          data-show-logos="${sport.showLogos}"
-          data-modal-game="true"
-          data-modal-standings="true"
-          data-modal-show-logos="true">
-        </div>
-      `;
-      localStorage.setItem(`widget-last-fetch-${sport.key}`, now.toString());
-      localStorage.setItem(`widget-html-${sport.key}`, widgetContainer.innerHTML);
-    }
-
-    // Set up button click handlers
-    sports.forEach((sport, idx) => {
-      buttons[idx].addEventListener('click', () => {
-        buttons.forEach(btn => btn.classList.remove('active'));
-        buttons[idx].classList.add('active');
-        renderWidget(sport);
-      });
+    btnFootball.addEventListener('click', () => {
+      btnFootball.classList.add('active');
+      btnBaseball.classList.remove('active');
+      btnHockey.classList.remove('active');
+      btnRugby.classList.remove('active');
+      btnBasketball.classList.remove('active');
+      footballContainer.style.display = '';
+      baseballContainer.style.display = 'none';
+      hockeyContainer.style.display = 'none';
+      rugbyContainer.style.display = 'none';
+      basketballContainer.style.display = 'none';
     });
-
-    // Render the default widget (Football) on page load
-    renderWidget(sports[0]);
+    btnBaseball.addEventListener('click', () => {
+      btnBaseball.classList.add('active');
+      btnFootball.classList.remove('active');
+      btnHockey.classList.remove('active');
+      btnRugby.classList.remove('active');
+      btnBasketball.classList.remove('active');
+      footballContainer.style.display = 'none';
+      baseballContainer.style.display = '';
+      hockeyContainer.style.display = 'none';
+      rugbyContainer.style.display = 'none';
+      basketballContainer.style.display = 'none';
+    });
+    btnHockey.addEventListener('click', () => {
+      btnHockey.classList.add('active');
+      btnFootball.classList.remove('active');
+      btnBaseball.classList.remove('active');
+      btnRugby.classList.remove('active');
+      btnBasketball.classList.remove('active');
+      footballContainer.style.display = 'none';
+      baseballContainer.style.display = 'none';
+      hockeyContainer.style.display = '';
+      rugbyContainer.style.display = 'none';
+      basketballContainer.style.display = 'none';
+    });
+    btnRugby.addEventListener('click', () => {
+      btnRugby.classList.add('active');
+      btnFootball.classList.remove('active');
+      btnBaseball.classList.remove('active');
+      btnHockey.classList.remove('active');
+      btnBasketball.classList.remove('active');
+      footballContainer.style.display = 'none';
+      baseballContainer.style.display = 'none';
+      hockeyContainer.style.display = 'none';
+      rugbyContainer.style.display = '';
+      basketballContainer.style.display = 'none';
+    });
+    btnBasketball.addEventListener('click', () => {
+      btnBasketball.classList.add('active');
+      btnFootball.classList.remove('active');
+      btnBaseball.classList.remove('active');
+      btnHockey.classList.remove('active');
+      btnRugby.classList.remove('active');
+      footballContainer.style.display = 'none';
+      baseballContainer.style.display = 'none';
+      hockeyContainer.style.display = 'none';
+      rugbyContainer.style.display = 'none';
+      basketballContainer.style.display = '';
+    });
   </script>
 </body>
 </html> 

@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Trophy, TrendingUp, Star } from "lucide-react"
 import Link from "next/link"
-import { HealthStatus } from "@/components/health-status"
+// import { HealthStatus } from "@/components/health-status"
 
 export default function HomePage() {
   const recentArticles = [
@@ -72,9 +72,6 @@ export default function HomePage() {
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Sidebar */}
           <div className="space-y-6 lg:col-start-3">
-            {/* System Health Status */}
-            <HealthStatus />
-
             {/* Recent Articles */}
             <Card>
               <CardHeader>

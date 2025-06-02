@@ -17,7 +17,7 @@ export async function GET(request: Request) {
         hostname: 'api-football-v1.p.rapidapi.com',
         port: null,
         path: '/v2/fixtures/live',
-        headers: {
+          headers: {
           'x-rapidapi-key': '***REMOVED***',
           'x-rapidapi-host': 'api-football-v1.p.rapidapi.com'
         }
@@ -55,7 +55,7 @@ export async function GET(request: Request) {
         hostname: 'api-football-v1.p.rapidapi.com',
         port: null,
         path: '/v2/fixtures/upcoming',
-        headers: {
+          headers: {
           'x-rapidapi-key': '***REMOVED***',
           'x-rapidapi-host': 'api-football-v1.p.rapidapi.com'
         }
@@ -76,14 +76,14 @@ export async function GET(request: Request) {
 
       req.end();
 
-      return NextResponse.json({
-        success: true,
+        return NextResponse.json({
+          success: true,
         data: [],
-        timestamp: new Date().toISOString(),
+          timestamp: new Date().toISOString(),
         count: 0,
-        sport: sport,
+          sport: sport,
         source: "RapidAPI Live Matches",
-      })
+        })
     }
 
     // For other sports, use the regular endpoint with date range
@@ -133,7 +133,7 @@ export async function GET(request: Request) {
           count: 0,
           sport: sport,
           source: "RapidAPI Live Matches",
-        })
+                })
       } catch (error) {
         console.error(`Error fetching ${sport} for ${dateString}:`, error)
       }

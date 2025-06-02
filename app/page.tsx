@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Trophy, TrendingUp, Star } from "lucide-react"
 import Link from "next/link"
+import Navbar from "@/components/Navbar"
 // import { HealthStatus } from "@/components/health-status"
 
 export default function HomePage() {
@@ -24,26 +25,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-2">
-              <Trophy className="h-8 w-8 text-blue-600" />
-              <h1 className="text-2xl font-bold text-gray-900">FlacronSport Daily</h1>
-            </div>
-            <nav className="hidden md:flex space-x-8">
-              <Link href="/" className="text-blue-600 font-medium">
-                Live Scores
-              </Link>
-              <Link href="/blog" className="text-gray-700 hover:text-blue-600">
-                News
-              </Link>
-            </nav>
-          </div>
-        </div>
-      </header>
-
+      <Navbar />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Hero Section */}
         <div className="text-center mb-12">

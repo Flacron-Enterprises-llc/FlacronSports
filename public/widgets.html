@@ -58,12 +58,15 @@
 </head>
 <body>
 
-  <div class="top-bar">
-    <button id="btn-football" class="active">⚽ Football</button>
-    <button id="btn-baseball">⚾ Baseball</button>
-    <button id="btn-hockey">🏒 Hockey</button>
-    <button id="btn-rugby">🏉 Rugby</button>
-    <button id="btn-basketball">🏀 Basketball</button>
+  <div style="text-align:center; margin-bottom: 24px;">
+    <label for="sport-select" style="font-weight:600; margin-right:8px;">Select Sport:</label>
+    <select id="sport-select" style="padding:8px 16px; border-radius:8px; border:1px solid #ccc; font-size:1rem;">
+      <option value="football">Football</option>
+      <option value="baseball">Baseball</option>
+      <option value="hockey">Hockey</option>
+      <option value="rugby">Rugby</option>
+      <option value="basketball">Basketball</option>
+    </select>
   </div>
 
   <div id="football-container" class="widget-container">
@@ -163,77 +166,24 @@
 
   <script type="module" src="https://widgets.api-sports.io/2.0.3/widgets.js"></script>
   <script>
-    const btnFootball = document.getElementById('btn-football');
-    const btnBaseball = document.getElementById('btn-baseball');
-    const btnHockey = document.getElementById('btn-hockey');
-    const btnRugby = document.getElementById('btn-rugby');
-    const btnBasketball = document.getElementById('btn-basketball');
-    const footballContainer = document.getElementById('football-container');
-    const baseballContainer = document.getElementById('baseball-container');
-    const hockeyContainer = document.getElementById('hockey-container');
-    const rugbyContainer = document.getElementById('rugby-container');
-    const basketballContainer = document.getElementById('basketball-container');
-
-    btnFootball.addEventListener('click', () => {
-      btnFootball.classList.add('active');
-      btnBaseball.classList.remove('active');
-      btnHockey.classList.remove('active');
-      btnRugby.classList.remove('active');
-      btnBasketball.classList.remove('active');
-      footballContainer.style.display = '';
-      baseballContainer.style.display = 'none';
-      hockeyContainer.style.display = 'none';
-      rugbyContainer.style.display = 'none';
-      basketballContainer.style.display = 'none';
+    const sportSelect = document.getElementById('sport-select');
+    const containers = {
+      football: document.getElementById('football-container'),
+      baseball: document.getElementById('baseball-container'),
+      hockey: document.getElementById('hockey-container'),
+      rugby: document.getElementById('rugby-container'),
+      basketball: document.getElementById('basketball-container'),
+    };
+    function showContainer(selected) {
+      Object.keys(containers).forEach(key => {
+        containers[key].style.display = key === selected ? '' : 'none';
+      });
+    }
+    sportSelect.addEventListener('change', (e) => {
+      showContainer(e.target.value);
     });
-    btnBaseball.addEventListener('click', () => {
-      btnBaseball.classList.add('active');
-      btnFootball.classList.remove('active');
-      btnHockey.classList.remove('active');
-      btnRugby.classList.remove('active');
-      btnBasketball.classList.remove('active');
-      footballContainer.style.display = 'none';
-      baseballContainer.style.display = '';
-      hockeyContainer.style.display = 'none';
-      rugbyContainer.style.display = 'none';
-      basketballContainer.style.display = 'none';
-    });
-    btnHockey.addEventListener('click', () => {
-      btnHockey.classList.add('active');
-      btnFootball.classList.remove('active');
-      btnBaseball.classList.remove('active');
-      btnRugby.classList.remove('active');
-      btnBasketball.classList.remove('active');
-      footballContainer.style.display = 'none';
-      baseballContainer.style.display = 'none';
-      hockeyContainer.style.display = '';
-      rugbyContainer.style.display = 'none';
-      basketballContainer.style.display = 'none';
-    });
-    btnRugby.addEventListener('click', () => {
-      btnRugby.classList.add('active');
-      btnFootball.classList.remove('active');
-      btnBaseball.classList.remove('active');
-      btnHockey.classList.remove('active');
-      btnBasketball.classList.remove('active');
-      footballContainer.style.display = 'none';
-      baseballContainer.style.display = 'none';
-      hockeyContainer.style.display = 'none';
-      rugbyContainer.style.display = '';
-      basketballContainer.style.display = 'none';
-    });
-    btnBasketball.addEventListener('click', () => {
-      btnBasketball.classList.add('active');
-      btnFootball.classList.remove('active');
-      btnBaseball.classList.remove('active');
-      btnHockey.classList.remove('active');
-      btnRugby.classList.remove('active');
-      footballContainer.style.display = 'none';
-      baseballContainer.style.display = 'none';
-      hockeyContainer.style.display = 'none';
-      rugbyContainer.style.display = 'none';
-      basketballContainer.style.display = '';
-    });
+    // Show football by default
+    showContainer('football');
   </script>
 </body>
 </html> 

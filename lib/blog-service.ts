@@ -1,10 +1,11 @@
 // Blog publishing automation service
 // Handles content generation, formatting, and publishing
 
-import { db, COLLECTIONS, saveBlogPost } from "./firebase-config"
+import { getDb, COLLECTIONS, saveBlogPost } from "./firebase-config"
 import { geminiService } from "./gemini-service"
 import { sportsApiService } from "./sports-api"
 import { generateFeaturedImage } from "./image-service"
+import type { QueryDocumentSnapshot } from "firebase-admin/firestore"
 
 interface BlogPost {
   id: string
@@ -143,7 +144,7 @@ export class BlogService {
       }
 
       // Update original post with all translation references
-      await db.collection(COLLECTIONS.BLOG_POSTS).doc(originalPost.id).update({
+      await getDb().collection(COLLECTIONS.BLOG_POSTS).doc(originalPost.id).update({
         translations,
       })
 
@@ -210,17 +211,20 @@ export class BlogService {
   /**
    * Get recent blog posts
    */
-  async getRecentPosts(language = "en", limit = 10): Promise<BlogPost[]> {
+  async getRecentPosts(language = "en", limit = 10): Promise<Partial<BlogPost>[]> {
     try {
-      const snapshot = await db
-        .collection(COLLECTIONS.BLOG_POSTS)
-        .where("status", "==", "published")
-        .where("language", "==", language)
+      const snapshot = await getDb()
+        .collection("articles")
         .orderBy("publishedAt", "desc")
         .limit(limit)
         .get()
 
-      return snapshot.docs.map((doc) => doc.data() as BlogPost)
+      // Only return id, title, and publishedAt
+      return snapshot.docs.map((doc: QueryDocumentSnapshot) => ({
+        id: doc.id,
+        title: doc.data().title,
+        publishedAt: doc.data().publishedAt,
+      }))
     } catch (error) {
       console.error("Error fetching recent posts:", error)
       return []
@@ -232,7 +236,7 @@ export class BlogService {
    */
   async getPostBySlug(slug: string, language = "en"): Promise<BlogPost | null> {
     try {
-      const snapshot = await db
+      const snapshot = await getDb()
         .collection(COLLECTIONS.BLOG_POSTS)
         .where("slug", "==", slug)
         .where("language", "==", language)
@@ -255,7 +259,7 @@ export class BlogService {
    */
   async getPostsByTeam(team: string, language = "en", limit = 10): Promise<BlogPost[]> {
     try {
-      const snapshot = await db
+      const snapshot = await getDb()
         .collection(COLLECTIONS.BLOG_POSTS)
         .where("teams", "array-contains", team)
         .where("language", "==", language)
@@ -275,7 +279,7 @@ export class BlogService {
    */
   async getPostsByTag(tag: string, language = "en", limit = 10): Promise<BlogPost[]> {
     try {
-      const snapshot = await db
+      const snapshot = await getDb()
         .collection(COLLECTIONS.BLOG_POSTS)
         .where("tags", "array-contains", tag)
         .where("language", "==", language)
@@ -295,11 +299,11 @@ export class BlogService {
    */
   async incrementViewCount(postId: string): Promise<void> {
     try {
-      await db
+      await getDb()
         .collection(COLLECTIONS.BLOG_POSTS)
         .doc(postId)
         .update({
-          views: db.FieldValue.increment(1),
+          views: getDb().FieldValue.increment(1),
         })
     } catch (error) {
       console.error("Error incrementing view count:", error)
@@ -312,27 +316,27 @@ export class BlogService {
   async toggleLike(postId: string, userId: string): Promise<boolean> {
     try {
       // Check if user already liked the post
-      const likeRef = db.collection(COLLECTIONS.BLOG_POSTS).doc(postId).collection("likes").doc(userId)
+      const likeRef = getDb().collection(COLLECTIONS.BLOG_POSTS).doc(postId).collection("likes").doc(userId)
       const likeDoc = await likeRef.get()
 
       if (likeDoc.exists) {
         // Unlike
         await likeRef.delete()
-        await db
+        await getDb()
           .collection(COLLECTIONS.BLOG_POSTS)
           .doc(postId)
           .update({
-            likes: db.FieldValue.increment(-1),
+            likes: getDb().FieldValue.increment(-1),
           })
         return false
       } else {
         // Like
         await likeRef.set({ userId, timestamp: new Date() })
-        await db
+        await getDb()
           .collection(COLLECTIONS.BLOG_POSTS)
           .doc(postId)
           .update({
-            likes: db.FieldValue.increment(1),
+            likes: getDb().FieldValue.increment(1),
           })
         return true
       }

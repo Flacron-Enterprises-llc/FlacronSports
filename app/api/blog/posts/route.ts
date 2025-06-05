@@ -21,7 +21,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
-      data: posts,
+      data: posts.map(post => ({
+        id: post.id,
+        title: post.title,
+        date: post.publishedAt || null,
+      })),
       count: posts.length,
     })
   } catch (error) {

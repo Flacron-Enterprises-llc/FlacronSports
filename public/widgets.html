@@ -17,13 +17,14 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      gap: 24px;
+      gap: 12px;
       background: rgba(255,255,255,0.85);
       box-shadow: 0 2px 8px rgba(0,0,0,0.04);
       padding: 18px 0 12px 0;
       position: sticky;
       top: 0;
       z-index: 10;
+      flex-wrap: wrap;
     }
     .top-bar button {
       font-size: 1.1rem;
@@ -35,6 +36,9 @@
       border-radius: 8px;
       cursor: pointer;
       transition: background 0.2s, color 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
     .top-bar button.active {
       background: #6366f1;
@@ -49,124 +53,178 @@
       border-radius: 12px;
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
       min-height: 400px;
+      position: relative;
     }
     h2 {
       text-align: center;
       margin-bottom: 24px;
     }
+
+    /* Loading Spinner Styles */
+    .loading-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 300px;
+    }
+    
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 5px solid #f3f3f3;
+      border-top: 5px solid #6366f1;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .widget-content {
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .widget-content.loaded {
+      opacity: 1;
+    }
   </style>
 </head>
 <body>
 
-  <div style="text-align:center; margin-bottom: 24px;">
-    <label for="sport-select" style="font-weight:600; margin-right:8px;">Select Sport:</label>
-    <select id="sport-select" style="padding:8px 16px; border-radius:8px; border:1px solid #ccc; font-size:1rem;">
-      <option value="football">Football</option>
-      <option value="baseball">Baseball</option>
-      <option value="hockey">Hockey</option>
-      <option value="rugby">Rugby</option>
-      <option value="basketball">Basketball</option>
-    </select>
+  <div class="top-bar">
+    <button class="sport-btn active" data-sport="football">⚽ Football</button>
+    <button class="sport-btn" data-sport="baseball">⚾ Baseball</button>
+    <button class="sport-btn" data-sport="hockey">🏒 Hockey</button>
+    <button class="sport-btn" data-sport="rugby">🏉 Rugby</button>
+    <button class="sport-btn" data-sport="basketball">🏀 Basketball</button>
   </div>
 
   <div id="football-container" class="widget-container">
     <h2>⚽ Live Football Games</h2>
-    <div id="wg-api-football-games"
-         data-host="v3.football.api-sports.io"
-         data-key="***REMOVED***"
-         data-date=""
-         data-league=""
-         data-season=""
-         data-theme=""
-         data-refresh="15"
-         data-show-toolbar="true"
-         data-show-errors="false"
-         data-show-logos="false"
-         data-modal-game="true"
-         data-modal-standings="true"
-         data-modal-show-logos="true">
+    <div class="loading-container">
+      <div class="loading-spinner"></div>
+    </div>
+    <div class="widget-content">
+      <div id="wg-api-football-games"
+           data-host="v3.football.api-sports.io"
+           data-key="***REMOVED***"
+           data-date=""
+           data-league=""
+           data-season=""
+           data-theme=""
+           data-refresh="15"
+           data-show-toolbar="true"
+           data-show-errors="false"
+           data-show-logos="false"
+           data-modal-game="true"
+           data-modal-standings="true"
+           data-modal-show-logos="true">
+      </div>
     </div>
   </div>
 
   <div id="baseball-container" class="widget-container" style="display:none;">
     <h2>⚾ Live Baseball Games</h2>
-    <div id="wg-api-baseball-games"
-         data-host="v1.baseball.api-sports.io"
-         data-key="***REMOVED***"
-         data-date=""
-         data-league=""
-         data-season=""
-         data-theme=""
-         data-refresh="15"
-         data-show-toolbar="true"
-         data-show-errors="false"
-         data-show-logos="true"
-         data-modal-game="true"
-         data-modal-standings="true"
-         data-modal-show-logos="true">
+    <div class="loading-container">
+      <div class="loading-spinner"></div>
+    </div>
+    <div class="widget-content">
+      <div id="wg-api-baseball-games"
+           data-host="v1.baseball.api-sports.io"
+           data-key="***REMOVED***"
+           data-date=""
+           data-league=""
+           data-season=""
+           data-theme=""
+           data-refresh="15"
+           data-show-toolbar="true"
+           data-show-errors="false"
+           data-show-logos="true"
+           data-modal-game="true"
+           data-modal-standings="true"
+           data-modal-show-logos="true">
+      </div>
     </div>
   </div>
 
   <div id="hockey-container" class="widget-container" style="display:none;">
     <h2>🏒 Live Hockey Games</h2>
-    <div id="wg-api-hockey-games"
-         data-host="v1.hockey.api-sports.io"
-         data-key="***REMOVED***"
-         data-date=""
-         data-league=""
-         data-season=""
-         data-theme=""
-         data-refresh="15"
-         data-show-toolbar="true"
-         data-show-errors="false"
-         data-show-logos="true"
-         data-modal-game="true"
-         data-modal-standings="true"
-         data-modal-show-logos="true">
+    <div class="loading-container">
+      <div class="loading-spinner"></div>
+    </div>
+    <div class="widget-content">
+      <div id="wg-api-hockey-games"
+           data-host="v1.hockey.api-sports.io"
+           data-key="***REMOVED***"
+           data-date=""
+           data-league=""
+           data-season=""
+           data-theme=""
+           data-refresh="15"
+           data-show-toolbar="true"
+           data-show-errors="false"
+           data-show-logos="true"
+           data-modal-game="true"
+           data-modal-standings="true"
+           data-modal-show-logos="true">
+      </div>
     </div>
   </div>
 
   <div id="rugby-container" class="widget-container" style="display:none;">
     <h2>🏉 Live Rugby Games</h2>
-    <div id="wg-api-rugby-games"
-         data-host="v1.rugby.api-sports.io"
-         data-key="***REMOVED***"
-         data-date=""
-         data-league=""
-         data-season=""
-         data-theme=""
-         data-refresh="15"
-         data-show-toolbar="true"
-         data-show-errors="false"
-         data-show-logos="true"
-         data-modal-game="true"
-         data-modal-standings="true"
-         data-modal-show-logos="true">
+    <div class="loading-container">
+      <div class="loading-spinner"></div>
+    </div>
+    <div class="widget-content">
+      <div id="wg-api-rugby-games"
+           data-host="v1.rugby.api-sports.io"
+           data-key="***REMOVED***"
+           data-date=""
+           data-league=""
+           data-season=""
+           data-theme=""
+           data-refresh="15"
+           data-show-toolbar="true"
+           data-show-errors="false"
+           data-show-logos="true"
+           data-modal-game="true"
+           data-modal-standings="true"
+           data-modal-show-logos="true">
+      </div>
     </div>
   </div>
 
   <div id="basketball-container" class="widget-container" style="display:none;">
     <h2>🏀 Live Basketball Games</h2>
-    <div id="wg-api-basketball-games"
-         data-host="v1.basketball.api-sports.io"
-         data-key="***REMOVED***"
-         data-date=""
-         data-league=""
-         data-season=""
-         data-theme=""
-         data-refresh="15"
-         data-show-toolbar="true"
-         data-show-errors="false"
-         data-show-logos="true"
-         data-modal-game="true"
-         data-modal-standings="true"
-         data-modal-show-logos="true">
+    <div class="loading-container">
+      <div class="loading-spinner"></div>
+    </div>
+    <div class="widget-content">
+      <div id="wg-api-basketball-games"
+           data-host="v1.basketball.api-sports.io"
+           data-key="***REMOVED***"
+           data-date=""
+           data-league=""
+           data-season=""
+           data-theme=""
+           data-refresh="15"
+           data-show-toolbar="true"
+           data-show-errors="false"
+           data-show-logos="true"
+           data-modal-game="true"
+           data-modal-standings="true"
+           data-modal-show-logos="true">
+      </div>
     </div>
   </div>
 
   <script type="module" src="https://widgets.api-sports.io/2.0.3/widgets.js"></script>
   <script>
-    const sportSelect = document.getElementById('sport-select');
+    const buttons = document.querySelectorAll('.sport-btn');
     const containers = {
       football: document.getElementById('football-container'),
       baseball: document.getElementById('baseball-container'),
@@ -174,16 +232,73 @@
       rugby: document.getElementById('rugby-container'),
       basketball: document.getElementById('basketball-container'),
     };
+
     function showContainer(selected) {
       Object.keys(containers).forEach(key => {
-        containers[key].style.display = key === selected ? '' : 'none';
+        const container = containers[key];
+        const isSelected = key === selected;
+        container.style.display = isSelected ? '' : 'none';
+        
+        if (isSelected) {
+          // Reset loading state when switching sports
+          const widgetContent = container.querySelector('.widget-content');
+          const loadingContainer = container.querySelector('.loading-container');
+          widgetContent.classList.remove('loaded');
+          loadingContainer.style.display = 'flex';
+          
+          // Check if widget is loaded after a short delay
+          setTimeout(() => {
+            const widget = container.querySelector('[id^="wg-api-"]');
+            if (widget && widget.innerHTML.trim() !== '') {
+              widgetContent.classList.add('loaded');
+              loadingContainer.style.display = 'none';
+            }
+          }, 1000);
+        }
+      });
+      
+      // Update active button state
+      buttons.forEach(btn => {
+        if (btn.dataset.sport === selected) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
       });
     }
-    sportSelect.addEventListener('change', (e) => {
-      showContainer(e.target.value);
+
+    // Function to check if widgets are loaded
+    function setupWidgetLoadingCheck() {
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          if (mutation.type === 'childList' && mutation.target.innerHTML.trim() !== '') {
+            const container = mutation.target.closest('.widget-container');
+            const widgetContent = container.querySelector('.widget-content');
+            const loadingContainer = container.querySelector('.loading-container');
+            
+            widgetContent.classList.add('loaded');
+            loadingContainer.style.display = 'none';
+          }
+        });
+      });
+
+      // Observe all widget containers
+      document.querySelectorAll('[id^="wg-api-"]').forEach(widget => {
+        observer.observe(widget, { childList: true, subtree: true });
+      });
+    }
+
+    buttons.forEach(button => {
+      button.addEventListener('click', (e) => {
+        showContainer(e.target.dataset.sport);
+      });
     });
+
     // Show football by default
     showContainer('football');
+    
+    // Setup loading detection after widgets script is loaded
+    window.addEventListener('load', setupWidgetLoadingCheck);
   </script>
 </body>
 </html> 

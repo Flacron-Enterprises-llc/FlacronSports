@@ -1,6 +1,7 @@
 // User follow service for managing user subscriptions to authors, teams, and tags
 
-import { db, COLLECTIONS } from "./firebase-config"
+import { getDb, COLLECTIONS } from "./firebase-config"
+import type { DocumentSnapshot, QueryDocumentSnapshot } from "firebase-admin/firestore"
 
 interface Follow {
   userId: string
@@ -15,6 +16,9 @@ export class UserFollowService {
    */
   async followItem(userId: string, followType: "author" | "team" | "tag", followId: string): Promise<boolean> {
     try {
+      const db = getDb();
+      if (!db) return false;
+      
       const followRef = db.collection(COLLECTIONS.USER_FOLLOWS).doc(`${userId}_${followType}_${followId}`)
 
       const followDoc = await followRef.get()
@@ -47,6 +51,9 @@ export class UserFollowService {
    */
   async unfollowItem(userId: string, followType: "author" | "team" | "tag", followId: string): Promise<boolean> {
     try {
+      const db = getDb();
+      if (!db) return false;
+      
       const followRef = db.collection(COLLECTIONS.USER_FOLLOWS).doc(`${userId}_${followType}_${followId}`)
 
       const followDoc = await followRef.get()
@@ -74,6 +81,9 @@ export class UserFollowService {
    */
   async isFollowing(userId: string, followType: "author" | "team" | "tag", followId: string): Promise<boolean> {
     try {
+      const db = getDb();
+      if (!db) return false;
+      
       const followRef = db.collection(COLLECTIONS.USER_FOLLOWS).doc(`${userId}_${followType}_${followId}`)
 
       const followDoc = await followRef.get()
@@ -89,6 +99,9 @@ export class UserFollowService {
    */
   async getUserFollows(userId: string, followType?: "author" | "team" | "tag"): Promise<Follow[]> {
     try {
+      const db = getDb();
+      if (!db) return [];
+      
       let query = db.collection(COLLECTIONS.USER_FOLLOWS).where("userId", "==", userId)
 
       if (followType) {
@@ -96,7 +109,7 @@ export class UserFollowService {
       }
 
       const snapshot = await query.get()
-      return snapshot.docs.map((doc) => doc.data() as Follow)
+      return snapshot.docs.map((doc: QueryDocumentSnapshot) => doc.data() as Follow)
     } catch (error) {
       console.error("Error getting user follows:", error)
       return []
@@ -108,13 +121,16 @@ export class UserFollowService {
    */
   async getItemFollowers(followType: "author" | "team" | "tag", followId: string): Promise<string[]> {
     try {
+      const db = getDb();
+      if (!db) return [];
+      
       const snapshot = await db
         .collection(COLLECTIONS.USER_FOLLOWS)
         .where("followType", "==", followType)
         .where("followId", "==", followId)
         .get()
 
-      return snapshot.docs.map((doc) => (doc.data() as Follow).userId)
+      return snapshot.docs.map((doc: QueryDocumentSnapshot) => (doc.data() as Follow).userId)
     } catch (error) {
       console.error("Error getting item followers:", error)
       return []
@@ -130,6 +146,9 @@ export class UserFollowService {
     increment: number,
   ): Promise<void> {
     try {
+      const db = getDb();
+      if (!db) return;
+      
       let collectionName: string
 
       switch (followType) {
@@ -160,6 +179,9 @@ export class UserFollowService {
    */
   async getRecommendedFollows(userId: string, followType: "author" | "team" | "tag", limit = 5): Promise<string[]> {
     try {
+      const db = getDb();
+      if (!db) return [];
+      
       // In a real implementation, this would use a recommendation algorithm
       // For now, return popular items
       let collectionName: string
@@ -178,7 +200,7 @@ export class UserFollowService {
 
       const snapshot = await db.collection(collectionName).orderBy("followerCount", "desc").limit(limit).get()
 
-      return snapshot.docs.map((doc) => doc.id)
+      return snapshot.docs.map((doc: QueryDocumentSnapshot) => doc.id)
     } catch (error) {
       console.error("Error getting recommended follows:", error)
       return []

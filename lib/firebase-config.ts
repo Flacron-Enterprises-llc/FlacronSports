@@ -10,17 +10,17 @@ function initializeFirebase() {
 
   try {
     if (!getApps().length) {
-      const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n")
+      const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n")
 
-      if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !privateKey) {
+      if (!process.env.FIREBASE_ADMIN_PROJECT_ID || !process.env.FIREBASE_ADMIN_CLIENT_EMAIL || !privateKey) {
         console.warn("Firebase environment variables not found")
         return null
       }
 
       initializeApp({
         credential: cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          projectId: process.env.FIREBASE_ADMIN_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
           privateKey: privateKey,
         }),
       })
@@ -43,6 +43,7 @@ export function getDb() {
 export const COLLECTIONS = {
   MATCHES: "matches",
   BLOG_POSTS: "blog-posts",
+  USER_FOLLOWS: "user-follows",
 }
 
 // Mock functions for now to avoid Firebase initialization errors

@@ -7,7 +7,7 @@ import { sportsApiService } from "./sports-api"
 import { generateFeaturedImage } from "./image-service"
 import type { QueryDocumentSnapshot } from "firebase-admin/firestore"
 
-interface BlogPost {
+export interface BlogPost {
   id: string
   title: string
   content: string

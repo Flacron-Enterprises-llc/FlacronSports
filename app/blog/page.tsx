@@ -1,8 +1,4 @@
-import fs from "fs"
-import path from "path"
 import { cookies } from 'next/headers'
-import { initializeApp, cert, getApps } from "firebase-admin/app"
-import { getFirestore } from "firebase-admin/firestore"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,18 +12,10 @@ import TranslateButtonWrapper from '@/components/blog/TranslateButtonWrapper'
 import { usePremium } from "@/lib/contexts/PremiumContext"
 import UpgradeButton from '@/components/UpgradeButton'
 import { useAuthUser } from '@/lib/hooks/useAuthUser'
+import type { DocumentSnapshot } from 'firebase-admin/firestore'
+import type { BlogPost } from '@/lib/blog-service'
 
-// Load service account JSON directly
-const serviceAccountPath = path.join(process.cwd(), "flacronsport-firebase-adminsdk-fbsvc-fefc044fc6.json")
-const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"))
-
-if (!getApps().length) {
-  initializeApp({
-    credential: cert(serviceAccount),
-  })
-}
-const db = getFirestore()
-
+// Initialize Stripe
 const stripe = new Stripe(API_CONFIG.payments.stripe.secretKey, {
   apiVersion: "2025-05-28.basil",
 });
@@ -38,14 +26,13 @@ async function getUserPreferredLanguage(): Promise<string | null> {
   if (!token) return null;
   const decoded = await verifyIdToken(token);
   if (!decoded) return null;
-  const db = getAdminDb();
 
   // Get user email from decoded token
   const userEmail = decoded.email;
   if (!userEmail) return null;
 
   // Fetch from dashboard_settings collection using email as doc ID
-  const doc = await db.collection('dashboard_settings').doc(userEmail).get();
+  const doc = await getAdminDb().collection('dashboard_settings').doc(userEmail).get();
   if (!doc.exists) return null;
   const data = doc.data();
   return data?.language || null;
@@ -86,9 +73,23 @@ async function isUserPremium(userId: string): Promise<boolean> {
   }
 }
 
-async function getNewsPosts() {
+interface NewsPost {
+  id: string;
+  title?: string;
+  content?: string;
+  summary?: string;
+  date: string;
+  [key: string]: any;
+}
+
+interface GroupedPosts {
+  earlyAccess: NewsPost[];
+  freeArticles: NewsPost[];
+}
+
+async function getNewsPosts(): Promise<GroupedPosts> {
   try {
-    const snapshot = await db.collection("articles").orderBy("date", "desc").get();
+    const snapshot = await getAdminDb().collection("articles").orderBy("date", "desc").get();
     const posts = snapshot.docs.map((doc) => {
       let content = doc.data().content;
       let parsed: any = {};
@@ -122,7 +123,7 @@ async function getNewsPosts() {
     const now = new Date();
     const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000); // 14 days ago
 
-    const groupedPosts = {
+    const groupedPosts: GroupedPosts = {
       earlyAccess: posts.filter(post => new Date(post.date) > twoWeeksAgo),
       freeArticles: posts.filter(post => new Date(post.date) <= twoWeeksAgo)
     };
@@ -156,7 +157,7 @@ export default async function BlogPage() {
             <div className="mb-12">
               <h2 className="text-2xl font-bold text-[var(--color-primary)] mb-6">Early Access</h2>
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {earlyAccess.map((post: any) => (
+                {earlyAccess.map((post: NewsPost) => (
                   <Card
                     key={post.id}
                     className="bg-[var(--color-white)] border-2 border-[var(--color-primary)] shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200 group"
@@ -204,7 +205,7 @@ export default async function BlogPage() {
                 Get exclusive access to the latest articles and premium content. Upgrade to premium to unlock early access to all new articles.
               </p>
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                {earlyAccess.map((post: any) => (
+                {earlyAccess.map((post: NewsPost) => (
                   <Card
                     key={post.id}
                     className="bg-[var(--color-white)] border-2 border-[var(--color-primary)] shadow-lg rounded-2xl group"

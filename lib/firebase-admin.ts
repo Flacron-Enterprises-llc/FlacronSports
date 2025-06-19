@@ -4,16 +4,16 @@ import { getFirestore } from 'firebase-admin/firestore';
 import type { ServiceAccount } from 'firebase-admin';
 
 const serviceAccount: ServiceAccount = {
-  projectId: "flacronsport",
-  privateKey: "***REMOVED***",
-  clientEmail: "firebase-adminsdk-fbsvc@flacronsport.iam.gserviceaccount.com"
+  projectId: process.env.FIREBASE_ADMIN_PROJECT_ID,
+  privateKey: process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+  clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL
 };
 
 // Initialize Firebase Admin
 if (!getApps().length) {
   initializeApp({
     credential: cert(serviceAccount),
-    projectId: "flacronsport"
+    projectId: process.env.FIREBASE_ADMIN_PROJECT_ID
   });
 }
 

@@ -1,7 +1,11 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Initialize the Gemini API with direct API key for testing
-const apiKey = '***REMOVED***';
+// Initialize the Gemini API with environment variable
+const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY;
+if (!apiKey) {
+  throw new Error('GEMINI_API_KEY or GOOGLE_AI_API_KEY environment variable is required');
+}
+
 console.log('Using API Key:', `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}`);
 
 const genAI = new GoogleGenerativeAI(apiKey);

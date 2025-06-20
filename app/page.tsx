@@ -4,7 +4,7 @@ import { Trophy, TrendingUp, Star } from "lucide-react"
 import Link from "next/link"
 import Navbar from "@/components/Navbar"
 import AuthPopup from '@/components/auth/AuthPopup'
-// import { HealthStatus } from "@/components/health-status"
+// import { HealthStatus } from 
 
 export default function HomePage() {
   

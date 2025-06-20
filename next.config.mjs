@@ -10,9 +10,7 @@ const nextConfig = {
     domains: ['source.unsplash.com', 'images.unsplash.com'],
     unoptimized: true,
   },
-  experimental: {
-    serverComponentsExternalPackages: ['firebase-admin'],
-  },
+  serverExternalPackages: ['firebase-admin'],
   env: {
     GOOGLE_AI_API_KEY: process.env.GOOGLE_AI_API_KEY,
   },

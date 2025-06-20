@@ -14,6 +14,7 @@ import UpgradeButton from '@/components/UpgradeButton'
 import { useAuthUser } from '@/lib/hooks/useAuthUser'
 import type { DocumentSnapshot } from 'firebase-admin/firestore'
 import type { BlogPost } from '@/lib/blog-service'
+import SportFilter from '@/components/blog/sport-filter'
 
 // Initialize Stripe
 const stripe = new Stripe(API_CONFIG.payments.stripe.secretKey, {
@@ -76,10 +77,9 @@ async function isUserPremium(userId: string): Promise<boolean> {
 interface NewsPost {
   id: string;
   title?: string;
-  content?: string;
-  summary?: string;
   date: string;
-  [key: string]: any;
+  hook?: string;
+  sport?: string;
 }
 
 interface GroupedPosts {
@@ -91,12 +91,13 @@ async function getNewsPosts(): Promise<GroupedPosts> {
   try {
     const snapshot = await getAdminDb().collection("articles").orderBy("date", "desc").get();
     const posts = snapshot.docs.map((doc) => {
-      let content = doc.data().content;
-      let parsed: any = {};
-      try {
-        if (typeof content === "string") {
-          // Remove triple backticks and the word 'json'
-          content = content.trim();
+      const data = doc.data();
+      let parsed: any;
+
+      // Handle content stored as a stringified JSON in a 'content' field (legacy)
+      if (data.content && typeof data.content === 'string') {
+        try {
+          let content = data.content.trim();
           if (content.startsWith("```json")) {
             content = content.replace(/^```json/, "").trim();
           }
@@ -104,28 +105,40 @@ async function getNewsPosts(): Promise<GroupedPosts> {
             content = content.replace(/```$/, "").trim();
           }
           parsed = JSON.parse(content);
-        } else {
-          parsed = content;
+        } catch {
+          parsed = {}; // Fallback for parsing errors
         }
-      } catch {
-        parsed = {};
+      } else {
+        // Handle content stored as top-level fields in the document
+        parsed = data;
       }
-      // Return all available fields from parsed JSON, plus id and fallback date
+      
+      // Return only the specified fields for performance
       return {
         id: doc.id,
-        ...parsed,
-        date: doc.data().date || "",
+        date: data.date || parsed.date || "",
+        title: parsed?.matchData?.title || parsed.title,
+        hook: parsed?.matchData?.hook || parsed.hook,
+        sport: parsed?.matchData?.sport || parsed.sport,
       };
     });
     console.debug("[Firestore] Fetched articles:", posts);
+
+    // Filter posts to only include those with "vs" in their document ID
+    const vsPosts = posts.filter(post => {
+      const documentId = post.id.toLowerCase();
+      return documentId.includes("vs");
+    });
+
+    console.debug("[Firestore] Filtered articles with 'vs':", vsPosts);
 
     // Group posts into Early Access and Free Articles
     const now = new Date();
     const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000); // 14 days ago
 
     const groupedPosts: GroupedPosts = {
-      earlyAccess: posts.filter(post => new Date(post.date) > twoWeeksAgo),
-      freeArticles: posts.filter(post => new Date(post.date) <= twoWeeksAgo)
+      earlyAccess: vsPosts.filter(post => new Date(post.date) > twoWeeksAgo),
+      freeArticles: vsPosts.filter(post => new Date(post.date) <= twoWeeksAgo)
     };
 
     return groupedPosts;
@@ -153,143 +166,21 @@ export default async function BlogPage() {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Latest News</h1>
           <p className="text-lg text-[var(--color-gray-dark)] mb-8">Catch up on the latest sports stories, match highlights, and expert analysis from around the world. Powered by FlacronSport AI.</p>
           
-          {isPremium && earlyAccess.length > 0 && (
-            <div className="mb-12">
-              <h2 className="text-2xl font-bold text-[var(--color-primary)] mb-6">Early Access</h2>
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {earlyAccess.map((post: NewsPost) => (
-                  <Card
-                    key={post.id}
-                    className="bg-[var(--color-white)] border-2 border-[var(--color-primary)] shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200 group"
-                    style={{ boxShadow: '0 4px 24px 0 rgba(255,127,0,0.08)' }}
-                  >
-                    <CardHeader>
-                      <CardTitle className="text-lg leading-tight text-[var(--color-black)] group-hover:text-[var(--color-primary)] transition-colors">
-                        {post.title || post.id}
-                      </CardTitle>
-                      {post.summary && (
-                        <p className="text-sm text-[var(--color-gray-mid)] mt-2 line-clamp-3">{post.summary}</p>
-                      )}
-                      <div className="text-xs text-[var(--color-gray-mid)] mt-1">
-                        {post.date ? new Date(post.date).toLocaleDateString() : ""}
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex gap-2">
-                        {preferredLanguage && preferredLanguage !== 'en' && (
-                          <TranslateButtonWrapper
-                            postId={post.id}
-                            language={preferredLanguage}
-                          />
-                        )}
-                        <Button
-                          className="flex-1 bg-gray-200 text-[var(--color-primary)] font-semibold rounded-full py-2 px-4 shadow border-2 border-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white transition-all duration-150"
-                          asChild
-                        >
-                          <Link href={`/blog/${post.id}`}>
-                            View Original
-                          </Link>
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
+          <SportFilter 
+            posts={{ earlyAccess, freeArticles }} 
+            preferredLanguage={preferredLanguage}
+            isPremium={isPremium}
+            userId={userId}
+          />
 
           {!isPremium && earlyAccess.length > 0 && (
-            <div className="mb-12 p-8 bg-[var(--color-white)] rounded-2xl border-2 border-[var(--color-primary)] shadow-lg">
+            <div className="mt-12 p-8 bg-[var(--color-white)] rounded-2xl border-2 border-[var(--color-primary)] shadow-lg">
               <h2 className="text-2xl font-bold text-[var(--color-primary)] mb-4">Premium Early Access</h2>
               <p className="text-[var(--color-gray-dark)] mb-6">
                 Get exclusive access to the latest articles and premium content. Upgrade to premium to unlock early access to all new articles.
               </p>
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                {earlyAccess.map((post: NewsPost) => (
-                  <Card
-                    key={post.id}
-                    className="bg-[var(--color-white)] border-2 border-[var(--color-primary)] shadow-lg rounded-2xl group"
-                    style={{ boxShadow: '0 4px 24px 0 rgba(255,127,0,0.08)' }}
-                  >
-                    <CardHeader>
-                      <CardTitle className="text-lg leading-tight text-[var(--color-black)] group-hover:text-[var(--color-primary)] transition-colors">
-                        {post.title || post.id}
-                      </CardTitle>
-                      {post.summary && (
-                        <p className="text-sm text-[var(--color-gray-mid)] mt-2 line-clamp-3">{post.summary}</p>
-                      )}
-                      <div className="text-xs text-[var(--color-gray-mid)] mt-1">
-                        {post.date ? new Date(post.date).toLocaleDateString() : ""}
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex gap-2">
-                        <Button
-                          className="flex-1 bg-gray-200 text-[var(--color-primary)] font-semibold rounded-full py-2 px-4 shadow border-2 border-[var(--color-primary)] opacity-60 cursor-not-allowed"
-                          disabled
-                        >
-                          View Original
-                        </Button>
-                        {preferredLanguage && preferredLanguage !== 'en' && (
-                          <Button
-                            className="flex-1 bg-[var(--color-primary)] text-[var(--color-white)] font-semibold rounded-full py-2 px-4 shadow border-2 border-[var(--color-primary)] opacity-60 cursor-not-allowed"
-                            disabled
-                          >
-                            Translate to {preferredLanguage.toUpperCase()}
-                          </Button>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
               <div className="flex justify-center">
                 <UpgradeButton customerId={userId || ""} />
-              </div>
-            </div>
-          )}
-
-          {freeArticles.length > 0 && (
-            <div>
-              <h2 className="text-2xl font-bold text-[var(--color-gray-dark)] mb-6">Free Articles</h2>
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {freeArticles.map((post: any) => (
-                  <Card
-                    key={post.id}
-                    className="bg-[var(--color-white)] border-2 border-[var(--color-primary)] shadow-lg rounded-2xl hover:shadow-xl transition-all duration-200 group"
-                    style={{ boxShadow: '0 4px 24px 0 rgba(255,127,0,0.08)' }}
-                  >
-                    <CardHeader>
-                      <CardTitle className="text-lg leading-tight text-[var(--color-black)] group-hover:text-[var(--color-primary)] transition-colors">
-                        {post.title || post.id}
-                      </CardTitle>
-                      {post.summary && (
-                        <p className="text-sm text-[var(--color-gray-mid)] mt-2 line-clamp-3">{post.summary}</p>
-                      )}
-                      <div className="text-xs text-[var(--color-gray-mid)] mt-1">
-                        {post.date ? new Date(post.date).toLocaleDateString() : ""}
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex gap-2">
-                        {preferredLanguage && preferredLanguage !== 'en' && (
-                          <TranslateButtonWrapper
-                            postId={post.id}
-                            language={preferredLanguage}
-                          />
-                        )}
-                        <Button
-                          className="flex-1 bg-gray-200 text-[var(--color-primary)] font-semibold rounded-full py-2 px-4 shadow border-2 border-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white transition-all duration-150"
-                          asChild
-                        >
-                          <Link href={`/blog/${post.id}`}>
-                            View Original
-                          </Link>
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
               </div>
             </div>
           )}

@@ -3,6 +3,7 @@ import { translateContent } from '@/lib/gemini';
 import { getDb } from "@/lib/firebase-config";
 import Navbar from "@/components/Navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 // All ISO 639-1 language codes and names
 const LANGUAGES = {
@@ -72,13 +73,17 @@ async function getBlogPost(id: string) {
   if (!data) return null;
 
   try {
-    const content = typeof data.content === "string"
-      ? JSON.parse(data.content.replace(/^```json/, "").replace(/```$/, "").trim())
-      : data.content;
+    let articleData: any;
+    if (data.content && typeof data.content === 'string') {
+        articleData = JSON.parse(data.content.replace(/^```json/, "").replace(/```$/, "").trim());
+    } else {
+        articleData = data;
+    }
 
     return {
       id: doc.id,
-      ...content
+      ...articleData,
+      title: articleData?.matchData?.title || articleData?.title
     };
   } catch {
     return null;
@@ -88,59 +93,106 @@ async function getBlogPost(id: string) {
 export default async function BlogPost({ params }: { params: { id: string; lang: string } }) {
   const { id, lang } = params;
   
+  // Decode the document ID to handle spaces and special characters
+  const decodedId = decodeURIComponent(id);
+  
   // Check if language is supported
   if (!(lang in LANGUAGES)) {
     notFound();
   }
   
   // Get the blog post
-  const post = await getBlogPost(id);
+  const post = await getBlogPost(decodedId);
   if (!post) {
     notFound();
   }
 
-  let title = post.title;
-  let headings = post.headings;
+  const article = post.matchData || post;
+  const targetLanguage = LANGUAGES[lang as LanguageCode];
+  
+  let translatedArticle = { ...article };
 
   // Translate content if not English
   if (lang !== 'en') {
     try {
-      // Translate title
-      title = await translateContent(title, LANGUAGES[lang as LanguageCode]);
-
-      // Translate each section
-      headings = await Promise.all(
-        post.headings.map(async (section: any) => ({
-          heading: await translateContent(section.heading, LANGUAGES[lang as LanguageCode]),
-          content: await translateContent(section.content, LANGUAGES[lang as LanguageCode])
-        }))
-      );
+      const [title, headline, hook, details, summary, keyMoments] = await Promise.all([
+        translateContent(article.title, targetLanguage),
+        translateContent(article.headline, targetLanguage),
+        translateContent(article.hook, targetLanguage),
+        translateContent(article.details, targetLanguage),
+        translateContent(article.summary, targetLanguage),
+        Promise.all(article.keyMoments.map((moment: string) => translateContent(moment, targetLanguage)))
+      ]);
+      translatedArticle = { ...article, title, headline, hook, details, summary, keyMoments };
     } catch (error) {
       console.error('Translation failed:', error);
-      // If translation fails, fall back to original content
-      title = post.title;
-      headings = post.headings;
     }
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-      <main className="max-w-2xl mx-auto px-4 py-8">
+      <main className="max-w-4xl mx-auto px-4 py-8">
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl font-bold">{title}</CardTitle>
-            <div className="text-xs text-gray-500 mt-1">
-              {post.date ? new Date(post.date).toLocaleDateString() : ""}
+            {translatedArticle.sport && (
+              <div className="text-center mb-4">
+                <Badge variant="secondary" className="uppercase tracking-wider text-sm font-semibold">{translatedArticle.sport}</Badge>
+              </div>
+            )}
+            <CardTitle className="text-3xl font-bold text-center mb-2">{translatedArticle.title || id}</CardTitle>
+            <p className="text-xl text-gray-600 text-center">{translatedArticle.headline}</p>
+            <div className="text-sm text-gray-500 mt-2 text-center">
+              {translatedArticle.date ? new Date(translatedArticle.date).toLocaleDateString() : ""}
             </div>
+            {translatedArticle.stats && translatedArticle.stats.teamA && translatedArticle.stats.teamB && (
+              <p className="text-md text-gray-600 text-center mt-1">{translatedArticle.stats.teamA} vs {translatedArticle.stats.teamB}</p>
+            )}
           </CardHeader>
-          <CardContent>
-            {headings?.map((section: any, idx: number) => (
-              <section key={idx} className="mb-6">
-                <h2 className="text-xl font-semibold mb-2">{section.heading}</h2>
-                <p className="text-base text-gray-800">{section.content}</p>
-              </section>
-            ))}
+          <CardContent className="prose max-w-none">
+            {translatedArticle.hook && (
+              <p className="text-lg font-semibold italic text-gray-700 my-4 text-center">{translatedArticle.hook}</p>
+            )}
+            <p className="lead">{translatedArticle.details}</p>
+            
+            {translatedArticle.stats && (
+              <div className="my-8 p-4 bg-gray-100 rounded-lg">
+                <h3 className="text-xl font-bold mb-4 text-center">Match Stats</h3>
+                <div className="grid grid-cols-2 gap-4 text-center">
+                  <div>
+                    <p className="font-bold text-lg">{translatedArticle.stats.teamA}</p>
+                    <p className="text-3xl font-bold">{translatedArticle.stats.scoreA}</p>
+                  </div>
+                  <div>
+                    <p className="font-bold text-lg">{translatedArticle.stats.teamB}</p>
+                    <p className="text-3xl font-bold">{translatedArticle.stats.scoreB}</p>
+                  </div>
+                </div>
+                <div className="text-sm text-gray-500 mt-4 text-center">
+                  <p>Competition: {translatedArticle.stats.competition}</p>
+                </div>
+              </div>
+            )}
+
+            {translatedArticle.keyMoments && translatedArticle.keyMoments.length > 0 && (
+              <div className="my-8">
+                <h3 className="text-xl font-bold mb-4">Key Moments</h3>
+                <ol className="list-decimal list-inside space-y-2">
+                  {translatedArticle.keyMoments.map((moment: string, idx: number) => (
+                    <li key={idx}>{moment}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
+            
+            {translatedArticle.summary && (
+              <div className="my-8">
+                <h3 className="text-xl font-bold mb-4">Summary</h3>
+                <blockquote className="p-4 bg-gray-100 border-l-4 border-gray-500 text-gray-600 italic">
+                  <p>{translatedArticle.summary}</p>
+                </blockquote>
+              </div>
+            )}
           </CardContent>
         </Card>
       </main>

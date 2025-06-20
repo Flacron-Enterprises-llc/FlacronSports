@@ -148,7 +148,7 @@ export default function Navbar() {
                   <BadgeCheck className="h-5 w-5 text-yellow-500" /> Premium User
                 </span>
               ) : (
-                <UpgradeButton customerId={user.uid} />
+              <UpgradeButton customerId={user.uid} />
               )
             )}
           </nav>
@@ -202,9 +202,9 @@ export default function Navbar() {
                     <BadgeCheck className="h-5 w-5 text-yellow-500" /> Premium User
                   </span>
                 ) : (
-                  <div className="w-40">
-                    <UpgradeButton customerId={user.uid} />
-                  </div>
+                <div className="w-40">
+                  <UpgradeButton customerId={user.uid} />
+                </div>
                 )
               )}
             </nav>

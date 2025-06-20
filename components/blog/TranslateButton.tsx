@@ -112,7 +112,7 @@ export default function TranslateButton({ postId, language }: TranslateButtonPro
         asChild={isPremium}
       >
         {isPremium ? (
-          <Link href={`/blog/${postId}/${language}`}>
+          <Link href={`/blog/${encodeURIComponent(postId)}/${language}`}>
             Translate to {language.toUpperCase()}
           </Link>
         ) : (

@@ -21,7 +21,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <PremiumProvider>
-          {children}
+        {children}
           <Toaster />
         </PremiumProvider>
         {/* API-Football Widget Script */}

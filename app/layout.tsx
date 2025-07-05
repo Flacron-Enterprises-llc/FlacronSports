@@ -10,12 +10,6 @@ export const metadata: Metadata = {
   title: 'FlacronSport Daily',
   description: 'Your daily dose of sports news and analysis',
   generator: 'v0.dev',
-  other: {
-    'google-adsense-account': 'ca-pub-6607820215117476',
-  },
-  verification: {
-    google: 'ca-pub-6607820215117476',
-  },
 }
 
 export default function RootLayout({
@@ -26,9 +20,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Google AdSense */}
-        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6607820215117476"
-             crossOrigin="anonymous"></script>
+        {/* Google AdSense Script */}
+        <script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6607820215117476"
+          crossOrigin="anonymous"
+        ></script>
       </head>
       <body className={inter.className}>
         <PremiumProvider>

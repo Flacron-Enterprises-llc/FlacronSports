@@ -10,6 +10,9 @@ export const metadata: Metadata = {
   title: 'FlacronSport Daily',
   description: 'Your daily dose of sports news and analysis',
   generator: 'v0.dev',
+  other: {
+    'google-adsense-account': 'ca-pub-6607820215117476',
+  },
 }
 
 export default function RootLayout({

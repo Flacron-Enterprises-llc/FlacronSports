@@ -13,6 +13,9 @@ export const metadata: Metadata = {
   other: {
     'google-adsense-account': 'ca-pub-6607820215117476',
   },
+  verification: {
+    google: 'ca-pub-6607820215117476',
+  },
 }
 
 export default function RootLayout({

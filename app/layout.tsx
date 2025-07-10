@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { Toaster } from '@/components/ui/sonner'
 import { PremiumProvider } from '@/lib/contexts/PremiumContext'
+import Footer from "@/components/Footer";
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -32,6 +33,7 @@ export default function RootLayout({
         {children}
           <Toaster />
         </PremiumProvider>
+        <Footer />
         {/* API-Football Widget Script */}
         <script
           type="module"

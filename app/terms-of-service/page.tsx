@@ -12,7 +12,7 @@ export default function TermsOfServicePage() {
             <CardTitle className="text-3xl font-bold">Terms of Service</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="mb-2 text-gray-500">Last updated: <span className="font-semibold">[Insert Date]</span></p>
+            <p className="mb-2 text-gray-500">Last updated: <span className="font-semibold">January 15, 2025</span></p>
             <p className="mb-4">Welcome to FlacronSport.com. By accessing or using our site, you agree to these terms:</p>
             <h2 className="text-xl font-semibold mt-6 mb-2">1. Use of Content</h2>
             <ul className="list-disc pl-6 mb-4">
@@ -36,7 +36,13 @@ export default function TermsOfServicePage() {
             <ul className="list-disc pl-6 mb-4">
               <li>We are not liable for data errors, score inaccuracies, or missed alerts.</li>
               <li>Use of the site is at your own risk.</li>
+              <li>FlacronSport provides content "as is" without warranties of any kind.</li>
+              <li>Our liability is limited to the maximum extent permitted by law.</li>
             </ul>
+            <h2 className="text-xl font-semibold mt-6 mb-2">6. Governing Law</h2>
+            <p className="mb-4">These terms are governed by the laws of the jurisdiction where FlacronSport operates. Any disputes will be resolved through binding arbitration.</p>
+            <h2 className="text-xl font-semibold mt-6 mb-2">7. Changes to Terms</h2>
+            <p className="mb-4">We may update these terms at any time. Continued use of the service constitutes acceptance of modified terms.</p>
             <p className="mb-2">For questions, contact <a href="mailto:support@flacronsport.com" className="text-blue-600 underline">support@flacronsport.com</a>.</p>
           </CardContent>
         </Card>

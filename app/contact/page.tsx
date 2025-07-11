@@ -28,7 +28,46 @@ export default function ContactPage() {
             </div>
             <div className="mt-8">
               <h2 className="text-xl font-semibold mb-2">Contact Form</h2>
-              <p className="mb-4 text-gray-500">(Contact form coming soon.)</p>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Subject
+                  </label>
+                  <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option>General Inquiry</option>
+                    <option>Technical Support</option>
+                    <option>Partnership Proposal</option>
+                    <option>Media Inquiry</option>
+                    <option>Feedback</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Your Message
+                  </label>
+                  <textarea 
+                    rows={4} 
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Please describe your inquiry in detail..."
+                  ></textarea>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Your Email
+                  </label>
+                  <input 
+                    type="email" 
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="your@email.com"
+                  />
+                </div>
+                <button className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition-colors">
+                  Send Message
+                </button>
+                <p className="text-sm text-gray-500 mt-2">
+                  We typically respond within 24-48 hours during business days.
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>

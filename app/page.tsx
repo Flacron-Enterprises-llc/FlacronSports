@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Trophy, TrendingUp, Star } from "lucide-react"
 import Link from "next/link"
 import Navbar from "@/components/Navbar"
-import AuthPopup from '@/components/auth/AuthPopup'
+// import AuthPopup from '@/components/auth/AuthPopup' - Removed to fix build error
 // import { HealthStatus } from 
 
 export default function HomePage() {
@@ -12,7 +12,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <Navbar />
-      <AuthPopup open={false} onClose={() => {}} />
+      {/* <AuthPopup open={false} onClose={() => {}} /> - Removed to fix build error */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Hero Section */}
         <div className="text-center mb-12">

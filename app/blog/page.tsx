@@ -185,20 +185,6 @@ export default async function BlogPage() {
             </div>
           )}
         </main>
-        <footer className="mt-16 py-8 border-t border-[var(--color-border)] bg-[var(--color-black)] text-[var(--color-white)] text-center rounded-t-2xl shadow-lg">
-          <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 px-4">
-            <div className="flex items-center gap-3 justify-center">
-              <img src="/logo.png" alt="FlacronSport Logo" width={40} height={40} className="rounded" />
-              <span className="font-bold text-xl tracking-wide">FlacronSport</span>
-            </div>
-            <div className="text-sm text-[var(--color-gray-mid)]">&copy; {new Date().getFullYear()} FlacronSport. All rights reserved.</div>
-            <div className="flex gap-4 justify-center">
-              <a href="/" className="hover:text-[var(--color-primary)] transition-colors">Home</a>
-              <a href="/blog" className="hover:text-[var(--color-primary)] transition-colors">Blog</a>
-              <a href="mailto:contact@flacronsport.com" className="hover:text-[var(--color-primary)] transition-colors">Contact</a>
-            </div>
-          </div>
-        </footer>
       </div>
     </ProtectedRoute>
   );

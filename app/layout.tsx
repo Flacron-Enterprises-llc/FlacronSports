@@ -21,12 +21,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Google AdSense Script */}
-        <script
-          async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6607820215117476"
-          crossOrigin="anonymous"
-        ></script>
+        {/* Removed Google AdSense Script from global layout */}
       </head>
       <body className={inter.className}>
         <PremiumProvider>

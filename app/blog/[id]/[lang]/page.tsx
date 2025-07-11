@@ -4,6 +4,7 @@ import { getDb } from "@/lib/firebase-config";
 import Navbar from "@/components/Navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import Head from "next/head";
 
 // All ISO 639-1 language codes and names
 const LANGUAGES = {
@@ -130,72 +131,81 @@ export default async function BlogPost({ params }: { params: { id: string; lang:
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <Card>
-          <CardHeader>
-            {translatedArticle.sport && (
-              <div className="text-center mb-4">
-                <Badge variant="secondary" className="uppercase tracking-wider text-sm font-semibold">{translatedArticle.sport}</Badge>
+    <>
+      <Head>
+        <script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6607820215117476"
+          crossOrigin="anonymous"
+        ></script>
+      </Head>
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <main className="max-w-4xl mx-auto px-4 py-8">
+          <Card>
+            <CardHeader>
+              {translatedArticle.sport && (
+                <div className="text-center mb-4">
+                  <Badge variant="secondary" className="uppercase tracking-wider text-sm font-semibold">{translatedArticle.sport}</Badge>
+                </div>
+              )}
+              <CardTitle className="text-3xl font-bold text-center mb-2">{translatedArticle.title || id}</CardTitle>
+              <p className="text-xl text-gray-600 text-center">{translatedArticle.headline}</p>
+              <div className="text-sm text-gray-500 mt-2 text-center">
+                {translatedArticle.date ? new Date(translatedArticle.date).toLocaleDateString() : ""}
               </div>
-            )}
-            <CardTitle className="text-3xl font-bold text-center mb-2">{translatedArticle.title || id}</CardTitle>
-            <p className="text-xl text-gray-600 text-center">{translatedArticle.headline}</p>
-            <div className="text-sm text-gray-500 mt-2 text-center">
-              {translatedArticle.date ? new Date(translatedArticle.date).toLocaleDateString() : ""}
-            </div>
-            {translatedArticle.stats && translatedArticle.stats.teamA && translatedArticle.stats.teamB && (
-              <p className="text-md text-gray-600 text-center mt-1">{translatedArticle.stats.teamA} vs {translatedArticle.stats.teamB}</p>
-            )}
-          </CardHeader>
-          <CardContent className="prose max-w-none">
-            {translatedArticle.hook && (
-              <p className="text-lg font-semibold italic text-gray-700 my-4 text-center">{translatedArticle.hook}</p>
-            )}
-            <p className="lead">{translatedArticle.details}</p>
-            
-            {translatedArticle.stats && (
-              <div className="my-8 p-4 bg-gray-100 rounded-lg">
-                <h3 className="text-xl font-bold mb-4 text-center">Match Stats</h3>
-                <div className="grid grid-cols-2 gap-4 text-center">
-                  <div>
-                    <p className="font-bold text-lg">{translatedArticle.stats.teamA}</p>
-                    <p className="text-3xl font-bold">{translatedArticle.stats.scoreA}</p>
+              {translatedArticle.stats && translatedArticle.stats.teamA && translatedArticle.stats.teamB && (
+                <p className="text-md text-gray-600 text-center mt-1">{translatedArticle.stats.teamA} vs {translatedArticle.stats.teamB}</p>
+              )}
+            </CardHeader>
+            <CardContent className="prose max-w-none">
+              {translatedArticle.hook && (
+                <p className="text-lg font-semibold italic text-gray-700 my-4 text-center">{translatedArticle.hook}</p>
+              )}
+              <p className="lead">{translatedArticle.details}</p>
+              
+              {translatedArticle.stats && (
+                <div className="my-8 p-4 bg-gray-100 rounded-lg">
+                  <h3 className="text-xl font-bold mb-4 text-center">Match Stats</h3>
+                  <div className="grid grid-cols-2 gap-4 text-center">
+                    <div>
+                      <p className="font-bold text-lg">{translatedArticle.stats.teamA}</p>
+                      <p className="text-3xl font-bold">{translatedArticle.stats.scoreA}</p>
+                    </div>
+                    <div>
+                      <p className="font-bold text-lg">{translatedArticle.stats.teamB}</p>
+                      <p className="text-3xl font-bold">{translatedArticle.stats.scoreB}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-bold text-lg">{translatedArticle.stats.teamB}</p>
-                    <p className="text-3xl font-bold">{translatedArticle.stats.scoreB}</p>
+                  <div className="text-sm text-gray-500 mt-4 text-center">
+                    <p>Competition: {translatedArticle.stats.competition}</p>
                   </div>
                 </div>
-                <div className="text-sm text-gray-500 mt-4 text-center">
-                  <p>Competition: {translatedArticle.stats.competition}</p>
-                </div>
-              </div>
-            )}
+              )}
 
-            {translatedArticle.keyMoments && translatedArticle.keyMoments.length > 0 && (
-              <div className="my-8">
-                <h3 className="text-xl font-bold mb-4">Key Moments</h3>
-                <ol className="list-decimal list-inside space-y-2">
-                  {translatedArticle.keyMoments.map((moment: string, idx: number) => (
-                    <li key={idx}>{moment}</li>
-                  ))}
-                </ol>
-              </div>
-            )}
-            
-            {translatedArticle.summary && (
-              <div className="my-8">
-                <h3 className="text-xl font-bold mb-4">Summary</h3>
-                <blockquote className="p-4 bg-gray-100 border-l-4 border-gray-500 text-gray-600 italic">
-                  <p>{translatedArticle.summary}</p>
-                </blockquote>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </main>
-    </div>
+              {translatedArticle.keyMoments && translatedArticle.keyMoments.length > 0 && (
+                <div className="my-8">
+                  <h3 className="text-xl font-bold mb-4">Key Moments</h3>
+                  <ol className="list-decimal list-inside space-y-2">
+                    {translatedArticle.keyMoments.map((moment: string, idx: number) => (
+                      <li key={idx}>{moment}</li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+              
+              {translatedArticle.summary && (
+                <div className="my-8">
+                  <h3 className="text-xl font-bold mb-4">Summary</h3>
+                  <blockquote className="p-4 bg-gray-100 border-l-4 border-gray-500 text-gray-600 italic">
+                    <p>{translatedArticle.summary}</p>
+                  </blockquote>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    </>
   );
 } 

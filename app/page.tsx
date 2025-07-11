@@ -12,7 +12,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <Navbar />
-      <AuthPopup />
+      <AuthPopup open={false} onClose={() => {}} />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Hero Section */}
         <div className="text-center mb-12">
@@ -50,6 +50,79 @@ export default function HomePage() {
 
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Sidebar removed as requested */}
+        </div>
+        
+        {/* Additional Content Sections */}
+        <div className="mt-16 grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <Card className="p-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Trophy className="h-6 w-6 text-blue-600" />
+                Live Sports Coverage
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-600">
+                Get real-time updates from major leagues including NFL, NBA, Premier League, Champions League, and more. Our AI-powered system delivers instant notifications and detailed match analysis.
+              </p>
+            </CardContent>
+          </Card>
+          
+          <Card className="p-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-6 w-6 text-green-600" />
+                AI-Powered Analysis
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-600">
+                Our advanced AI analyzes player statistics, team performance, and historical data to provide intelligent insights and predictions for upcoming matches.
+              </p>
+            </CardContent>
+          </Card>
+          
+          <Card className="p-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Star className="h-6 w-6 text-yellow-600" />
+                Premium Features
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-600">
+                Unlock exclusive content with premium features including early access to articles, ad-free browsing, and personalized sports newsletters.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+        
+        {/* How It Works Section */}
+        <div className="mt-16 bg-white rounded-2xl p-8 shadow-lg">
+          <h3 className="text-2xl font-bold text-center mb-8">How FlacronSport Works</h3>
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl font-bold text-blue-600">1</span>
+              </div>
+              <h4 className="text-lg font-semibold mb-2">Data Collection</h4>
+              <p className="text-gray-600">We gather real-time sports data from multiple reliable sources across various leagues and tournaments worldwide.</p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl font-bold text-green-600">2</span>
+              </div>
+              <h4 className="text-lg font-semibold mb-2">AI Analysis</h4>
+              <p className="text-gray-600">Our AI processes the data to create insightful summaries, statistics, and predictions for each match and player.</p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl font-bold text-yellow-600">3</span>
+              </div>
+              <h4 className="text-lg font-semibold mb-2">Content Delivery</h4>
+              <p className="text-gray-600">You receive personalized sports content, live updates, and expert analysis delivered in real-time.</p>
+            </div>
+          </div>
         </div>
       </main>
     </div>

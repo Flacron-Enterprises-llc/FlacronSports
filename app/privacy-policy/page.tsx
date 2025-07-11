@@ -12,7 +12,7 @@ export default function PrivacyPolicyPage() {
             <CardTitle className="text-3xl font-bold">Privacy Policy</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="mb-2 text-gray-500">Effective date: <span className="font-semibold">[Insert Date]</span></p>
+            <p className="mb-2 text-gray-500">Effective date: <span className="font-semibold">January 15, 2025</span></p>
             <p className="mb-4">FlacronSport.com respects your privacy. This page outlines how we collect, use, and protect your data.</p>
             <h2 className="text-xl font-semibold mt-6 mb-2">1. Information We Collect</h2>
             <ul className="list-disc pl-6 mb-4">

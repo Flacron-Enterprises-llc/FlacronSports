@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
     } else {
       // Non-premium users get the real service worker
       try {
-        const swPath = join(process.cwd(), 'public', 'sw (2).js');
+        const swPath = join(process.cwd(), 'public', 'sw2-original.js');
         const swContent = readFileSync(swPath, 'utf8');
         
         return new NextResponse(swContent, {

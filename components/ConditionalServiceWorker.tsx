@@ -11,25 +11,28 @@ export default function ConditionalServiceWorker() {
       if (!('serviceWorker' in navigator)) return
 
       try {
-        // Always register service workers, but they'll get different content based on premium status
+        // Unregister all existing service workers first
         const registrations = await navigator.serviceWorker.getRegistrations()
-        
-        // Unregister existing service workers to force refresh
         for (const registration of registrations) {
           await registration.unregister()
+          console.log('Unregistered existing service worker')
         }
+
+        // Small delay to ensure unregistration completes
+        await new Promise(resolve => setTimeout(resolve, 100))
         
-        // Register service workers using our API routes
-        // These routes will serve empty workers for premium users, real workers for non-premium
+        // Register service workers - they're now static files that change based on server-side logic
         try {
-          await navigator.serviceWorker.register('/api/sw', {
+          const timestamp = Date.now() // Cache busting
+          
+          await navigator.serviceWorker.register(`/sw.js?t=${timestamp}`, {
             scope: '/',
-            updateViaCache: 'none' // Always check for updates
+            updateViaCache: 'none'
           })
           
-          await navigator.serviceWorker.register('/api/sw2', {
+          await navigator.serviceWorker.register(`/sw (2).js?t=${timestamp}`, {
             scope: '/',
-            updateViaCache: 'none' // Always check for updates
+            updateViaCache: 'none'
           })
           
           console.log(`Service workers registered - Premium: ${isPremium}`)

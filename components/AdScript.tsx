@@ -7,6 +7,10 @@ export default function AdScript() {
   const { isPremium, isLoading } = usePremium()
 
   useEffect(() => {
+    // TEMPORARILY DISABLED - Testing to see if this stops all ads
+    console.log('🚫 AdScript temporarily disabled for testing')
+    return
+    
     // Don't load ads if user is premium or still loading
     if (isLoading || isPremium) {
       return

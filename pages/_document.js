@@ -4,8 +4,7 @@ export default function Document() {
   return (
     <Html>
       <Head>
-        {/* Multitag script - server-rendered for proper detection */}
-        <script src="https://fpyf8.com/88/tag.min.js" data-zone="165368" async data-cfasync="false"></script>
+        {/* Multitag script will be loaded conditionally by AdScript component */}
       </Head>
       <body>
         <Main />

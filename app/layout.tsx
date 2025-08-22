@@ -4,6 +4,7 @@ import './globals.css'
 import { Toaster } from '@/components/ui/sonner'
 import { PremiumProvider } from '@/lib/contexts/PremiumContext'
 import Footer from "@/components/Footer";
+import AdScript from "@/components/AdScript";
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -25,7 +26,8 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <PremiumProvider>
-        {children}
+          <AdScript />
+          {children}
           <Toaster />
         </PremiumProvider>
         <Footer />

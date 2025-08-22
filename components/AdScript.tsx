@@ -11,7 +11,7 @@ export default function AdScript() {
     if (isLoading || isPremium) {
       return
     }
-
+    
     // Only load the ad script for non-premium users
     const script = document.createElement('script')
     script.src = 'https://fpyf8.com/88/tag.min.js'

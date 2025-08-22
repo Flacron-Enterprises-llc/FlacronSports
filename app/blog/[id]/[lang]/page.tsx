@@ -4,7 +4,6 @@ import { getDb } from "@/lib/firebase-config";
 import Navbar from "@/components/Navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import Head from "next/head";
 
 // All ISO 639-1 language codes and names
 const LANGUAGES = {
@@ -132,13 +131,6 @@ export default async function BlogPost({ params }: { params: { id: string; lang:
 
   return (
     <>
-      <Head>
-        <script
-          async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6607820215117476"
-          crossOrigin="anonymous"
-        ></script>
-      </Head>
       <div className="min-h-screen bg-gray-50">
         <Navbar />
         <main className="max-w-4xl mx-auto px-4 py-8">

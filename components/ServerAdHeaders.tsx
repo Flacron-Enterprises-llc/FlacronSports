@@ -44,6 +44,15 @@ async function isUserPremium(userId: string): Promise<boolean> {
 }
 
 export default async function ServerAdHeaders() {
+  // TEMPORARILY DISABLED - Testing to see if this stops all ads
+  console.log('🚫 ServerAdHeaders temporarily disabled for testing')
+  return (
+    <>
+      {/* All ad headers temporarily disabled for testing */}
+      <meta name="ad-testing" content="disabled" />
+    </>
+  )
+  
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get('firebase_id_token')?.value;

@@ -7,6 +7,10 @@ export default function ConditionalAdHeaders() {
   const { isPremium, isLoading } = usePremium()
 
   useEffect(() => {
+    // TEMPORARILY DISABLED - Testing to see if this stops all ads
+    console.log('🚫 ConditionalAdHeaders temporarily disabled for testing')
+    return
+    
     // Only load ad headers for non-premium users
     if (isLoading || isPremium) {
       console.log('🛡️ Skipping ad headers for premium user')

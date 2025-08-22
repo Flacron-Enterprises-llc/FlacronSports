@@ -9,52 +9,45 @@ export default function AggressiveAdBlocker() {
   useEffect(() => {
     if (!isPremium || isLoading) return
 
-    // Function to remove ad elements from DOM
+    // Function to remove specific Monetag ad elements from DOM
     const removeAdElements = () => {
-      // Common ad selectors
-      const adSelectors = [
-        '[id*="ad"]',
-        '[class*="ad"]',
-        '[id*="banner"]',
-        '[class*="banner"]',
-        '[id*="popup"]',
-        '[class*="popup"]',
-        '[data-zone]',
-        'iframe[src*="ads"]',
-        'iframe[src*="doubleclick"]',
-        'iframe[src*="googlesyndication"]',
-        'iframe[src*="fpyf8"]',
-        'div[style*="position: fixed"]',
-        'div[style*="z-index: 999"]',
-        'div[style*="z-index: 9999"]',
-        // Target specific patterns we saw in the ads
-        'div:has(> img[alt*="trade"])',
-        'div:has(> img[alt*="bonus"])',
-        'div[style*="background: linear-gradient"]'
-      ]
-
       let removedCount = 0
       
-      adSelectors.forEach(selector => {
+      // Look for specific Monetag popup patterns
+      const specificSelectors = [
+        // Monetag specific patterns
+        'div[style*="position: fixed"][style*="z-index"]',
+        'div[style*="position: absolute"][style*="z-index"]',
+        '[data-zone="165368"]', // Your specific ad zone
+        'iframe[src*="monetag"]',
+        'iframe[src*="fpyf8"]',
+        'script[src*="fpyf8"]',
+        'script[src*="monetag"]'
+      ]
+      
+      specificSelectors.forEach(selector => {
         try {
           const elements = document.querySelectorAll(selector)
           elements.forEach(element => {
-            // Check if this looks like an ad
-            const text = element.textContent?.toLowerCase() || ''
-            const hasAdKeywords = text.includes('ad') || 
-                                text.includes('bonus') || 
-                                text.includes('trade') || 
-                                text.includes('click') ||
-                                text.includes('earn')
+            // Additional verification - only remove if it contains monetag content or specific ad patterns
+            const innerHTML = element.innerHTML || ''
+            const outerHTML = element.outerHTML || ''
             
-            if (hasAdKeywords || 
-                element.innerHTML.includes('monetag') ||
-                element.innerHTML.includes('publishers.monetag.com') ||
-                element.innerHTML.includes('fpyf8') ||
-                element.innerHTML.includes('tag.min.js')) {
+            const isMonetag = innerHTML.includes('monetag') || 
+                             innerHTML.includes('fpyf8') ||
+                             innerHTML.includes('trade bonus') ||
+                             innerHTML.includes('You received trade') ||
+                             outerHTML.includes('data-zone="165368"')
+            
+            // Only remove if we're confident it's a Monetag ad
+            if (isMonetag || 
+                (element.tagName === 'SCRIPT' && (
+                  element.getAttribute('src')?.includes('fpyf8') ||
+                  element.getAttribute('src')?.includes('monetag')
+                ))) {
               element.remove()
               removedCount++
-              console.log('Removed Monetag/ad element:', element)
+              console.log('Removed specific Monetag ad element:', element.tagName, element.className || element.id)
             }
           })
         } catch (error) {
@@ -62,8 +55,22 @@ export default function AggressiveAdBlocker() {
         }
       })
 
+      // Also look for specific text patterns that indicate Monetag ads
+      const textElements = document.querySelectorAll('div, span')
+      textElements.forEach(element => {
+        const text = element.textContent?.toLowerCase() || ''
+        if ((text.includes('trade bonus') || 
+             text.includes('you received trade') ||
+             text.includes('you have (1) new message')) &&
+            element.style.position === 'fixed') {
+          element.remove()
+          removedCount++
+          console.log('Removed Monetag popup with text:', text.substring(0, 50))
+        }
+      })
+
       if (removedCount > 0) {
-        console.log(`Removed ${removedCount} ad elements from DOM`)
+        console.log(`Removed ${removedCount} specific Monetag ad elements`)
       }
     }
 

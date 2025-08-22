@@ -55,7 +55,10 @@ self.addEventListener('fetch', function(event) {
        url.includes('antiadblock')) && 
       isPremium && !isLoading) {
     console.log('Blocked Monetag/ad request for premium user:', url);
-    event.respondWith(new Response('', { status: 204 }));
+    event.respondWith(new Response('', { 
+      status: 200,
+      headers: { 'Content-Type': 'application/javascript' }
+    }));
     return;
   }
   

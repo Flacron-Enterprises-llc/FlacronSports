@@ -7,13 +7,15 @@ export default function AdScript() {
   const { isPremium, isLoading } = usePremium()
 
   useEffect(() => {
+    console.log('🔍 AdScript check - isPremium:', isPremium, 'isLoading:', isLoading)
+    
     // Don't load ads if user is premium or still loading
     if (isLoading || isPremium) {
-      console.log('🛡️ Premium user - AdScript blocked')
+      console.log('🛡️ Premium user - AdScript blocked', { isPremium, isLoading })
       return
     }
     
-    console.log('💰 Non-premium user - Loading Monetag script')
+    console.log('💰 Non-premium user - Loading Monetag script', { isPremium, isLoading })
     
     // Only load the Monetag ad script for non-premium users
     const script = document.createElement('script')

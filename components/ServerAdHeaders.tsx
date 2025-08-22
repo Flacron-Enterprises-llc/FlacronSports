@@ -44,15 +44,6 @@ async function isUserPremium(userId: string): Promise<boolean> {
 }
 
 export default async function ServerAdHeaders() {
-  // TEMPORARILY DISABLED - Testing to see if this stops all ads
-  console.log('🚫 ServerAdHeaders temporarily disabled for testing')
-  return (
-    <>
-      {/* All ad headers temporarily disabled for testing */}
-      <meta name="ad-testing" content="disabled" />
-    </>
-  )
-  
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get('firebase_id_token')?.value;
@@ -61,6 +52,7 @@ export default async function ServerAdHeaders() {
 
     // Only render ad headers for non-premium users
     if (isPremium) {
+      console.log('🛡️ Premium user - Server ad headers blocked')
       return (
         <>
           {/* Premium user - no ad headers */}
@@ -69,6 +61,7 @@ export default async function ServerAdHeaders() {
       )
     }
 
+    console.log('💰 Non-premium user - Loading server ad headers')
     return (
       <>
         {/* Non-premium user - include ad optimization headers */}
@@ -82,6 +75,7 @@ export default async function ServerAdHeaders() {
     )
   } catch (error) {
     // If we can't determine premium status, default to no ad headers for safety
+    console.log('🛡️ Error checking premium status - defaulting to no ads')
     return null
   }
 }

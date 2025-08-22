@@ -7,17 +7,13 @@ export default function ConditionalAdHeaders() {
   const { isPremium, isLoading } = usePremium()
 
   useEffect(() => {
-    // TEMPORARILY DISABLED - Testing to see if this stops all ads
-    console.log('🚫 ConditionalAdHeaders temporarily disabled for testing')
-    return
-    
     // Only load ad headers for non-premium users
     if (isLoading || isPremium) {
-      console.log('🛡️ Skipping ad headers for premium user')
+      console.log('🛡️ Premium user - Ad headers blocked')
       return
     }
 
-    console.log('💰 Loading ad headers for non-premium user')
+    console.log('💰 Non-premium user - Loading ad headers')
 
     // Create and add Monetag meta tags and headers for non-premium users
     const metaTags = [

@@ -5,8 +5,9 @@ import { Toaster } from '@/components/ui/sonner'
 import { PremiumProvider } from '@/lib/contexts/PremiumContext'
 import Footer from "@/components/Footer";
 import AdScript from "@/components/AdScript";
-import ConditionalServiceWorker from "@/components/ConditionalServiceWorker";
-import NuclearAdBlocker from "@/components/NuclearAdBlocker";
+import DynamicServiceWorkerManager from "@/components/DynamicServiceWorkerManager";
+import ConditionalAdHeaders from "@/components/ConditionalAdHeaders";
+import ServerAdHeaders from "@/components/ServerAdHeaders";
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -25,17 +26,18 @@ export default function RootLayout({
     <html lang="en">
       <head>
         {/* Removed Google AdSense Script from global layout */}
+        <ServerAdHeaders />
       </head>
       <body className={inter.className}>
         <PremiumProvider>
-          <ConditionalServiceWorker />
-          <NuclearAdBlocker />
+          <ConditionalAdHeaders />
+          <DynamicServiceWorkerManager />
           <AdScript />
           {children}
           <Toaster />
         </PremiumProvider>
         <Footer />
-        {/* API-Football Widget Script */}
+        {/* API-Football Widget Script - Keep for all users (not an ad) */}
         <script
           type="module"
           src="https://widgets.api-sports.io/2.0.3/widgets.js"

@@ -12,9 +12,9 @@ export default function AdScript() {
       return
     }
     
-    // Only load the ad script for non-premium users
+    // Only load the Monetag ad script for non-premium users
     const script = document.createElement('script')
-    script.src = 'https://fpyf8.com/88/tag.min.js'
+    script.src = 'https://fpyf8.com/88/tag.min.js'  // This is your Monetag script
     script.setAttribute('data-zone', '165368')
     script.async = true
     script.setAttribute('data-cfasync', 'false')

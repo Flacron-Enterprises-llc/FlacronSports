@@ -45,14 +45,16 @@ self.addEventListener('fetch', function(event) {
   const url = event.request.url;
   
   // If this is an ad-related request and user is premium, block it
-  if ((url.includes('ads') || 
+  if ((url.includes('monetag.com') || 
+       url.includes('publishers.monetag.com') ||
+       url.includes('ads') || 
        url.includes('doubleclick') || 
        url.includes('googlesyndication') ||
        url.includes('fpyf8.com') ||
        url.includes('tag.min.js') ||
        url.includes('antiadblock')) && 
       isPremium && !isLoading) {
-    console.log('Blocked ad request for premium user:', url);
+    console.log('Blocked Monetag/ad request for premium user:', url);
     event.respondWith(new Response('', { status: 204 }));
     return;
   }

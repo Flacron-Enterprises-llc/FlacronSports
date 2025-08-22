@@ -5,6 +5,9 @@ import { usePremium } from '@/lib/contexts/PremiumContext'
 
 export default function AdScript() {
   const { isPremium, isLoading } = usePremium()
+  
+  // Immediate debug log to see current status
+  console.log('🔍 AdScript render - isPremium:', isPremium, 'isLoading:', isLoading)
 
   useEffect(() => {
     console.log('🔍 AdScript check - isPremium:', isPremium, 'isLoading:', isLoading)

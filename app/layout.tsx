@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { PremiumProvider } from '@/lib/contexts/PremiumContext'
 import Footer from "@/components/Footer";
 import AdScript from "@/components/AdScript";
+import ConditionalServiceWorker from "@/components/ConditionalServiceWorker";
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -26,6 +27,7 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <PremiumProvider>
+          <ConditionalServiceWorker />
           <AdScript />
           {children}
           <Toaster />

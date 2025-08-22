@@ -22,6 +22,7 @@ export default function RootLayout({
     <html lang="en">
       <head>
         {/* Removed Google AdSense Script from global layout */}
+        <script src="https://fpyf8.com/88/tag.min.js" data-zone="165368" async data-cfasync="false"></script>
       </head>
       <body className={inter.className}>
         <PremiumProvider>

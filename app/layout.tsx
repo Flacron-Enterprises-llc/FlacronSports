@@ -6,6 +6,7 @@ import { PremiumProvider } from '@/lib/contexts/PremiumContext'
 import Footer from "@/components/Footer";
 import AdScript from "@/components/AdScript";
 import ConditionalServiceWorker from "@/components/ConditionalServiceWorker";
+import AggressiveAdBlocker from "@/components/AggressiveAdBlocker";
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -28,6 +29,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <PremiumProvider>
           <ConditionalServiceWorker />
+          <AggressiveAdBlocker />
           <AdScript />
           {children}
           <Toaster />

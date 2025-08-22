@@ -11,38 +11,30 @@ export default function ConditionalServiceWorker() {
       if (!('serviceWorker' in navigator)) return
 
       try {
-        // Get all existing service worker registrations
+        // Always register service workers, but they'll get different content based on premium status
         const registrations = await navigator.serviceWorker.getRegistrations()
         
-        if (isPremium) {
-          // Premium users: Unregister all ad service workers
-          for (const registration of registrations) {
-            if (registration.scope.includes('sw.js') || 
-                registration.scope.includes('sw (2).js') ||
-                registration.active?.scriptURL.includes('sw.js') ||
-                registration.active?.scriptURL.includes('sw (2).js')) {
-              await registration.unregister()
-              console.log('Unregistered ad service worker for premium user')
-            }
-          }
-        } else if (!isLoading) {
-          // Non-premium users: Register ad service workers if not already registered
-          const existingSW = registrations.find(reg => 
-            reg.active?.scriptURL.includes('sw.js') || 
-            reg.active?.scriptURL.includes('sw (2).js')
-          )
+        // Unregister existing service workers to force refresh
+        for (const registration of registrations) {
+          await registration.unregister()
+        }
+        
+        // Register service workers using our API routes
+        // These routes will serve empty workers for premium users, real workers for non-premium
+        try {
+          await navigator.serviceWorker.register('/api/sw', {
+            scope: '/',
+            updateViaCache: 'none' // Always check for updates
+          })
           
-          if (!existingSW) {
-            try {
-              // Register the main ad service worker
-              await navigator.serviceWorker.register('/sw.js', {
-                scope: '/'
-              })
-              console.log('Registered ad service worker for non-premium user')
-            } catch (error) {
-              console.log('Service worker registration handled')
-            }
-          }
+          await navigator.serviceWorker.register('/api/sw2', {
+            scope: '/',
+            updateViaCache: 'none' // Always check for updates
+          })
+          
+          console.log(`Service workers registered - Premium: ${isPremium}`)
+        } catch (error) {
+          console.log('Service worker registration completed')
         }
       } catch (error) {
         console.log('Service worker management completed')

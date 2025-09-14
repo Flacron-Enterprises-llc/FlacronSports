@@ -4,7 +4,7 @@ export default function Document() {
   return (
     <Html>
       <Head>
-        {/* Multitag script will be loaded conditionally by AdScript component */}
+        {/* No ad scripts needed */}
       </Head>
       <body>
         <Main />

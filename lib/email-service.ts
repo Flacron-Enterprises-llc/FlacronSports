@@ -34,7 +34,7 @@ export class EmailService {
       const freeSubscribers = subscribers.filter((sub) => sub.subscriptionTier === "free")
       const premiumSubscribers = subscribers.filter((sub) => sub.subscriptionTier === "premium")
 
-      // Send to free subscribers (with ads and limited content)
+      // Send to free subscribers
       if (freeSubscribers.length > 0) {
         await this.sendBulkEmail(
           freeSubscribers,
@@ -43,7 +43,7 @@ export class EmailService {
         )
       }
 
-      // Send to premium subscribers (ad-free with bonus content)
+      // Send to premium subscribers (with bonus content)
       if (premiumSubscribers.length > 0) {
         await this.sendBulkEmail(
           premiumSubscribers,
@@ -355,14 +355,6 @@ export class EmailService {
           <p style="margin-top: 0;">Hi -name-,</p>
           
           ${content}
-          
-          <!-- Ad Space for Free Users -->
-          <div style="background: #f3f4f6; padding: 20px; margin: 30px 0; text-align: center; border: 2px dashed #d1d5db; border-radius: 8px;">
-            <p style="margin: 0; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Advertisement</p>
-            <h3 style="margin: 10px 0; color: #1e40af;">Upgrade to Premium</h3>
-            <p style="margin: 10px 0; color: #4b5563;">Get ad-free newsletters, exclusive content, and advanced analytics</p>
-            <a href="https://flacronsport.com/subscription" style="background: #1e40af; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin-top: 10px;">Upgrade Now - $9.99/month</a>
-          </div>
           
           <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; margin-top: 30px;">
             <h3 style="color: #1e40af; margin-bottom: 15px;">Quick Links</h3>

@@ -4,10 +4,6 @@ import './globals.css'
 import { Toaster } from '@/components/ui/sonner'
 import { PremiumProvider } from '@/lib/contexts/PremiumContext'
 import Footer from "@/components/Footer";
-import AdScript from "@/components/AdScript";
-import DynamicServiceWorkerManager from "@/components/DynamicServiceWorkerManager";
-import ConditionalAdHeaders from "@/components/ConditionalAdHeaders";
-import ServerAdHeaders from "@/components/ServerAdHeaders";
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -25,14 +21,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Removed Google AdSense Script from global layout */}
-        <ServerAdHeaders />
+        {/* No ad headers needed */}
       </head>
       <body className={inter.className}>
         <PremiumProvider>
-          <ConditionalAdHeaders />
-          <DynamicServiceWorkerManager />
-          <AdScript />
           {children}
           <Toaster />
         </PremiumProvider>

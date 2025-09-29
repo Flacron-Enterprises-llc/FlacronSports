@@ -21,6 +21,7 @@ export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { isPremium, isLoading } = usePremium();
+  const firstMobileButtonRef = useRef<HTMLButtonElement | null>(null);
 
   // Set firebase_id_token cookie when user logs in
   useEffect(() => {
@@ -42,6 +43,22 @@ export default function Navbar() {
       setMobileMenuOpen(false);
     }
   };
+  // Improve mobile menu UX: lock body scroll, focus first item, close on Escape
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    // focus first actionable element for accessibility
+    firstMobileButtonRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [mobileMenuOpen]);
 
   const handleLogout = async () => {
     try {
@@ -73,11 +90,19 @@ export default function Navbar() {
           <button
             className="md:hidden flex items-center px-3 py-2 border rounded text-[var(--color-primary)] border-[var(--color-primary)] focus:outline-none"
             onClick={() => setMobileMenuOpen((open) => !open)}
-            aria-label="Toggle menu"
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-nav"
           >
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
+            {mobileMenuOpen ? (
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
           </button>
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center space-x-10">
@@ -155,60 +180,77 @@ export default function Navbar() {
         </div>
         {/* Mobile menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden absolute left-0 right-0 top-20 bg-white border-b border-[var(--color-border)] shadow-lg z-50 animate-fade-in">
-            <nav className="flex flex-col items-center space-y-4 py-6">
-              {user && (
-                <div className="w-full flex flex-col items-center">
-                  <span className="text-[var(--color-primary)] font-semibold mb-2">
-                    Hi, {user.displayName || user.email?.split('@')[0] || 'User'}!
-                  </span>
+          <>
+            <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setMobileMenuOpen(false)}></div>
+            <aside
+              id="mobile-nav"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="mobile-nav-title"
+              className="fixed right-0 top-0 h-full w-5/6 max-w-sm bg-white z-50 shadow-2xl transform transition-transform duration-200 ease-out translate-x-0 flex flex-col"
+            >
+              <div className="flex items-center justify-between px-6 h-16 border-b border-[var(--color-border)]">
+                <h2 id="mobile-nav-title" className="text-base font-semibold text-[var(--color-primary)]">Menu</h2>
+                <button
+                  aria-label="Close menu"
+                  className="p-2 rounded hover:bg-gray-100"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <nav className="flex-1 overflow-y-auto px-6 py-6 space-y-3">
+                {user && (
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-600">Signed in as</p>
+                    <p className="font-semibold text-[var(--color-primary)]">{user.displayName || user.email?.split('@')[0] || 'User'}</p>
+                  </div>
+                )}
+                <button
+                  ref={firstMobileButtonRef}
+                  className="w-full text-left px-4 py-3 rounded-lg bg-[var(--color-primary)] text-white font-semibold hover:bg-[var(--color-primary-dark)] transition-colors"
+                  onClick={() => { router.push('/'); setMobileMenuOpen(false); }}
+                >
+                  Live Scores
+                </button>
+                <button
+                  className="w-full text-left px-4 py-3 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] transition-colors"
+                  onClick={() => { handleProtectedNav('/blog', 'Blog'); setMobileMenuOpen(false); }}
+                >
+                  Blog
+                </button>
+                <button
+                  className="w-full text-left px-4 py-3 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] transition-colors"
+                  onClick={() => { handleProtectedNav('/dashboard', 'User Dashboard'); setMobileMenuOpen(false); }}
+                >
+                  User Dashboard
+                </button>
+              </nav>
+              <div className="px-6 pb-6 pt-3 border-t border-[var(--color-border)]">
+                {user && !isLoading ? (
+                  isPremium ? (
+                    <span className="flex items-center gap-2 px-4 py-2 bg-yellow-100 text-yellow-800 rounded-lg font-semibold justify-center">
+                      <BadgeCheck className="h-5 w-5 text-yellow-500" /> Premium User
+                    </span>
+                  ) : (
+                    <UpgradeButton customerId={user.uid} />
+                  )
+                ) : (
+                  <p className="text-xs text-gray-500 text-center">Login to access more features</p>
+                )}
+                {user && (
                   <button
                     onClick={handleLogout}
-                    className="w-40 text-left px-4 py-2 text-gray-700 hover:bg-[var(--color-primary)] hover:text-white transition-colors flex items-center gap-2 rounded"
+                    className="mt-3 w-full text-left px-4 py-2 rounded-lg border text-gray-700 hover:bg-[var(--color-primary)] hover:text-white transition-colors"
                   >
-                    <svg 
-                      className="w-4 h-4" 
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
                     Logout
                   </button>
-                </div>
-              )}
-              <button
-                className="w-40 bg-[var(--color-primary)] text-[var(--color-white)] font-semibold px-6 py-2 rounded-full border-none cursor-pointer hover:bg-[var(--color-white)] hover:text-[var(--color-primary)] hover:border hover:border-[var(--color-primary)] transition-colors"
-                onClick={() => { router.push("/"); setMobileMenuOpen(false); }}
-              >
-                Live Scores
-              </button>
-              <button
-                className="w-40 bg-[var(--color-primary)] text-[var(--color-white)] font-semibold px-6 py-2 rounded-full border-none cursor-pointer hover:bg-[var(--color-white)] hover:text-[var(--color-primary)] hover:border hover:border-[var(--color-primary)] transition-colors"
-                onClick={() => handleProtectedNav("/blog", "Blog")}
-              >
-                Blog
-              </button>
-              <button
-                className="w-40 bg-[var(--color-primary)] text-[var(--color-white)] font-semibold px-6 py-2 rounded-full border-none cursor-pointer hover:bg-[var(--color-white)] hover:text-[var(--color-primary)] hover:border hover:border-[var(--color-primary)] transition-colors"
-                onClick={() => handleProtectedNav("/dashboard", "User Dashboard")}
-              >
-                User Dashboard
-              </button>
-              {user && !isLoading && (
-                isPremium ? (
-                  <span className="flex items-center gap-2 px-4 py-2 bg-yellow-100 text-yellow-800 rounded-full font-semibold w-40 justify-center">
-                    <BadgeCheck className="h-5 w-5 text-yellow-500" /> Premium User
-                  </span>
-                ) : (
-                <div className="w-40">
-                  <UpgradeButton customerId={user.uid} />
-                </div>
-                )
-              )}
-            </nav>
-          </div>
+                )}
+              </div>
+            </aside>
+          </>
         )}
       </div>
       {showPopup && <AuthPopup key="navbar-popup" open={showPopup} onClose={() => setShowPopup(false)} message={popupMessage} />}

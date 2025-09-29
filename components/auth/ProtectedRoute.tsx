@@ -40,7 +40,14 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   if (!user) {
-    return showPopup ? <AuthPopup key="protected-route-popup" /> : null;
+    return showPopup ? (
+      <AuthPopup
+        key="protected-route-popup"
+        open={showPopup}
+        onClose={() => setShowPopup(false)}
+        message={"Login to continue"}
+      />
+    ) : null;
   }
 
   return <>{children}</>;

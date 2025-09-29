@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { signInWithEmail, signUpWithEmail, signInWithGoogle } from '@/lib/firebase-auth';
 import Image from 'next/image';
 import UpgradeButton from "../UpgradeButton"
@@ -21,6 +21,27 @@ export default function AuthPopup({ message, open, onClose }: AuthPopupProps) {
   const [loading, setLoading] = useState(false);
   const [showPlans, setShowPlans] = useState(false);
   const user = useAuthUser();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, onClose]);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (!open) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,8 +81,16 @@ export default function AuthPopup({ message, open, onClose }: AuthPopupProps) {
 
   if (showPlans) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-2xl p-2 sm:p-4 w-full max-w-2xl mx-2 shadow-xl overflow-auto max-h-[90vh] flex flex-col items-center justify-center border-2 border-[var(--color-primary)] relative" style={{height: 'fit-content'}}>
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose} aria-hidden="true">
+        <div
+          ref={containerRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="auth-plans-title"
+          onClick={(e) => e.stopPropagation()}
+          className="bg-white rounded-2xl p-2 sm:p-4 w-full max-w-2xl mx-2 shadow-xl overflow-auto max-h-[90vh] flex flex-col items-center justify-center border-2 border-[var(--color-primary)] relative"
+          style={{height: 'fit-content'}}
+        >
           <button onClick={onClose} aria-label="Close" className="absolute top-2 right-2 text-[var(--color-primary)] hover:text-white hover:bg-[var(--color-primary)] rounded-full p-1 transition-colors z-10">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -73,7 +102,7 @@ export default function AuthPopup({ message, open, onClose }: AuthPopupProps) {
           {message && (
             <div className="mb-2 text-center text-sm font-semibold text-[var(--color-primary)]">{message}</div>
           )}
-          <h2 className="text-lg font-bold mb-3 text-center">Choose Your Plan</h2>
+          <h2 id="auth-plans-title" className="text-lg font-bold mb-3 text-center">Choose Your Plan</h2>
           
           <div className="flex flex-col md:flex-row gap-3 w-full items-stretch justify-center">
             {/* Free Plan */}
@@ -233,8 +262,16 @@ export default function AuthPopup({ message, open, onClose }: AuthPopupProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl p-2 sm:p-4 w-full max-w-2xl mx-2 shadow-xl overflow-auto max-h-[90vh] flex flex-col items-center justify-center border-2 border-[var(--color-primary)] relative" style={{height: 'fit-content'}}>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose} aria-hidden="true">
+      <div
+        ref={containerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-dialog-title"
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-2xl p-2 sm:p-4 w-full max-w-2xl mx-2 shadow-xl overflow-auto max-h-[90vh] flex flex-col items-center justify-center border-2 border-[var(--color-primary)] relative"
+        style={{height: 'fit-content'}}
+      >
         <button onClick={onClose} aria-label="Close" className="absolute top-2 right-2 text-[var(--color-primary)] hover:text-white hover:bg-[var(--color-primary)] rounded-full p-1 transition-colors z-10">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -246,7 +283,7 @@ export default function AuthPopup({ message, open, onClose }: AuthPopupProps) {
         {message && (
           <div className="mb-2 text-center text-sm font-semibold text-[var(--color-primary)]">{message}</div>
         )}
-        <h2 className="text-lg font-bold mb-3 text-center">
+        <h2 id="auth-dialog-title" className="text-lg font-bold mb-3 text-center">
           {isLogin ? 'Welcome Back!' : 'Join Our Community!'}
         </h2>
         

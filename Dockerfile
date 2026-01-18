@@ -11,11 +11,11 @@ WORKDIR /app
 COPY package.json package-lock.json* pnpm-lock.yaml* ./
 RUN \
   if [ -f pnpm-lock.yaml ]; then \
-    corepack enable pnpm && pnpm i --frozen-lockfile; \
+    corepack enable pnpm && pnpm install; \
   elif [ -f package-lock.json ]; then \
     npm ci; \
   else \
-    echo "Lockfile not found." && exit 1; \
+    npm install; \
   fi
 
 # Rebuild the source code only when needed

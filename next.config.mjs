@@ -15,6 +15,12 @@ const nextConfig = {
   env: {
     GOOGLE_AI_API_KEY: process.env.GOOGLE_AI_API_KEY,
   },
+  // Skip static optimization for API routes that might use Firebase
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '2mb',
+    },
+  },
 }
 
 export default nextConfig

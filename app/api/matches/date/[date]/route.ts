@@ -2,6 +2,10 @@ import { NextResponse } from "next/server"
 import { sportsApiService } from "@/lib/sports-api"
 import { saveMatchData } from "@/lib/firebase-config"
 
+// Mark this route as dynamic to prevent static analysis during build
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 export async function GET(request: Request, { params }: { params: { date: string } }) {
   try {
     const { date } = params

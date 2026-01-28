@@ -3,6 +3,67 @@ import { getDb } from "@/lib/firebase-config";
 import Navbar from "@/components/Navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { cookies } from 'next/headers';
+import { verifyIdToken } from '@/lib/firebase-admin';
+import TranslateButtonWrapper from '@/components/blog/TranslateButtonWrapper';
+import { API_CONFIG } from "@/lib/api-config";
+import Stripe from "stripe";
+
+// Lazy initialization of Stripe to avoid build-time errors
+function getStripe() {
+  const secretKey = API_CONFIG.payments.stripe.secretKey;
+  if (!secretKey) {
+    throw new Error('Stripe secret key not configured');
+  }
+  return new Stripe(secretKey, {
+    apiVersion: "2025-05-28.basil",
+  });
+}
+
+async function isUserPremium(userId: string): Promise<boolean> {
+  try {
+    const stripe = getStripe();
+    const customers = await stripe.customers.search({
+      query: `metadata['userId']:'${userId}'`,
+    });
+    const customer = customers.data[0];
+    if (!customer) {
+      return false;
+    }
+
+    const subs = await stripe.subscriptions.list({ customer: customer.id });
+    const hasActive = subs.data.some(
+      (sub) => sub.status === "active" || sub.status === "trialing"
+    );
+
+    let isPremium = hasActive;
+    if (!isPremium) {
+      const payments = await stripe.paymentIntents.list({
+        customer: customer.id,
+        limit: 1,
+      });
+      if (payments.data.length > 0 && payments.data[0].status === 'succeeded') {
+        isPremium = true;
+      }
+    }
+    return isPremium;
+  } catch (error) {
+    console.error("Error checking premium status:", error);
+    return false;
+  }
+}
+
+async function getUserPreferredLanguage(db: any, email: string): Promise<string | null> {
+  try {
+    const doc = await db.collection('dashboard_settings').doc(email).get();
+    if (!doc.exists) return null;
+    const data = doc.data();
+    return data?.language || null;
+  } catch (error) {
+    console.error("Error getting user language:", error);
+    return null;
+  }
+}
 
 async function getBlogPost(id: string) {
   const db = getDb();
@@ -44,6 +105,13 @@ export default async function BlogPost({ params }: { params: { id: string } }) {
   }
 
   const article = post.matchData || post;
+
+  // Check if user is premium and get preferred language
+  const cookieStore = await cookies();
+  const token = cookieStore.get('firebase_id_token')?.value;
+  const decoded = token ? await verifyIdToken(token) : null;
+  const isPremium = decoded ? await isUserPremium(decoded.uid) : false;
+  const preferredLanguage = decoded && decoded.email ? await getUserPreferredLanguage(getDb(), decoded.email) : null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -107,6 +175,19 @@ export default async function BlogPost({ params }: { params: { id: string } }) {
                 <blockquote className="p-4 bg-gray-100 border-l-4 border-gray-500 text-gray-600 italic">
                   <p>{article.summary}</p>
                 </blockquote>
+              </div>
+            )}
+
+            {isPremium && preferredLanguage && preferredLanguage !== 'en' && (
+              <div className="mt-8 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                <h3 className="text-lg font-semibold mb-3 text-gray-800">🌐 Translate This Article</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  As a premium member, you can read this article in your preferred language.
+                </p>
+                <TranslateButtonWrapper
+                  postId={id}
+                  language={preferredLanguage}
+                />
               </div>
             )}
           </CardContent>

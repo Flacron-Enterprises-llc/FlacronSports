@@ -119,17 +119,58 @@ export default async function BlogPost({ params }: { params: { id: string; lang:
   // Translate content if not English
   if (lang !== 'en') {
     try {
-      const [title, headline, hook, details, summary, keyMoments] = await Promise.all([
-        translateContent(article.title, targetLanguage),
-        translateContent(article.headline, targetLanguage),
-        translateContent(article.hook, targetLanguage),
-        translateContent(article.details, targetLanguage),
-        translateContent(article.summary, targetLanguage),
-        Promise.all(article.keyMoments.map((moment: string) => translateContent(moment, targetLanguage)))
-      ]);
+      console.log(`Starting translation to ${targetLanguage} for post ${decodedId}`);
+      
+      const translationPromises = [];
+      
+      if (article.title) {
+        translationPromises.push(translateContent(article.title, targetLanguage));
+      } else {
+        translationPromises.push(Promise.resolve(article.title));
+      }
+      
+      if (article.headline) {
+        translationPromises.push(translateContent(article.headline, targetLanguage));
+      } else {
+        translationPromises.push(Promise.resolve(article.headline));
+      }
+      
+      if (article.hook) {
+        translationPromises.push(translateContent(article.hook, targetLanguage));
+      } else {
+        translationPromises.push(Promise.resolve(article.hook));
+      }
+      
+      if (article.details) {
+        translationPromises.push(translateContent(article.details, targetLanguage));
+      } else {
+        translationPromises.push(Promise.resolve(article.details));
+      }
+      
+      if (article.summary) {
+        translationPromises.push(translateContent(article.summary, targetLanguage));
+      } else {
+        translationPromises.push(Promise.resolve(article.summary));
+      }
+      
+      if (article.keyMoments && Array.isArray(article.keyMoments)) {
+        translationPromises.push(
+          Promise.all(article.keyMoments.map((moment: string) => 
+            moment ? translateContent(moment, targetLanguage) : Promise.resolve(moment)
+          ))
+        );
+      } else {
+        translationPromises.push(Promise.resolve([]));
+      }
+      
+      const [title, headline, hook, details, summary, keyMoments] = await Promise.all(translationPromises);
+      
       translatedArticle = { ...article, title, headline, hook, details, summary, keyMoments };
+      console.log(`Translation to ${targetLanguage} completed successfully`);
     } catch (error) {
-      console.error('Translation failed:', error);
+      console.error(`Translation to ${targetLanguage} failed:`, error);
+      // Keep the original article if translation fails
+      translatedArticle = { ...article };
     }
   }
 
@@ -138,6 +179,13 @@ export default async function BlogPost({ params }: { params: { id: string; lang:
       <div className="min-h-screen bg-gray-50">
         <Navbar />
         <main className="max-w-4xl mx-auto px-4 py-8">
+          {lang !== 'en' && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-center">
+              <p className="text-sm text-blue-800">
+                <span className="font-semibold">🌐 Translated to {targetLanguage}</span>
+              </p>
+            </div>
+          )}
           <Card>
             <CardHeader>
               {translatedArticle.sport && (

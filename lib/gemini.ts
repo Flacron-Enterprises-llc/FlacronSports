@@ -1,14 +1,19 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Initialize the Gemini API with environment variable
-const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY;
-if (!apiKey) {
-  throw new Error('GEMINI_API_KEY or GOOGLE_AI_API_KEY environment variable is required');
+// Lazy initialization of Gemini API to avoid build-time errors
+let genAI: GoogleGenerativeAI | null = null;
+
+function getGenAI(): GoogleGenerativeAI {
+  if (!genAI) {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY;
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY or GOOGLE_AI_API_KEY environment variable is required');
+    }
+    console.log('Using API Key:', `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}`);
+    genAI = new GoogleGenerativeAI(apiKey);
+  }
+  return genAI;
 }
-
-console.log('Using API Key:', `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}`);
-
-const genAI = new GoogleGenerativeAI(apiKey);
 
 // Cache for storing translations
 const translationCache = new Map<string, string>();
@@ -29,7 +34,8 @@ export async function translateContent(content: string, targetLanguage: string):
       return cachedTranslation;
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const genAIInstance = getGenAI();
+    const model = genAIInstance.getGenerativeModel({ model: 'gemini-2.0-flash' });
     console.log('Using Gemini 2.0 Flash model');
 
     const prompt = `Translate the following text to ${targetLanguage}. Maintain the original formatting and structure, including any HTML tags or markdown. Only return the translated text without any additional explanations:

@@ -90,6 +90,10 @@ async function getBlogPost(id: string) {
   }
 }
 
+// Mark this page as dynamic to prevent static analysis during build
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 export default async function BlogPost({ params }: { params: { id: string; lang: string } }) {
   const { id, lang } = params;
   

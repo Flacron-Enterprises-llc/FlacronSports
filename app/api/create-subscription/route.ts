@@ -2,24 +2,33 @@ import { NextResponse } from "next/server"
 import Stripe from "stripe"
 import { API_CONFIG } from "@/lib/api-config"
 
-// Validate required environment variables
-const stripeSecretKey = API_CONFIG.payments.stripe.secretKey
-const PREMIUM_PRICE_ID = process.env.STRIPE_MONTHLY_PRICE_ID
+// Mark this route as dynamic to prevent static analysis during build
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
-if (!stripeSecretKey) {
-  throw new Error("STRIPE_SECRET_KEY is not set in environment variables")
+// Lazy initialization of Stripe to avoid build-time errors
+function getStripe() {
+  const stripeSecretKey = API_CONFIG.payments.stripe.secretKey
+  if (!stripeSecretKey) {
+    throw new Error("STRIPE_SECRET_KEY is not set in environment variables")
+  }
+  return new Stripe(stripeSecretKey, {
+    apiVersion: "2025-05-28.basil",
+  })
 }
 
-if (!PREMIUM_PRICE_ID) {
-  throw new Error("STRIPE_MONTHLY_PRICE_ID is not set in environment variables")
+function getPremiumPriceId() {
+  const PREMIUM_PRICE_ID = process.env.STRIPE_MONTHLY_PRICE_ID
+  if (!PREMIUM_PRICE_ID) {
+    throw new Error("STRIPE_MONTHLY_PRICE_ID is not set in environment variables")
+  }
+  return PREMIUM_PRICE_ID
 }
-
-const stripe = new Stripe(stripeSecretKey, {
-  apiVersion: "2025-05-28.basil",
-})
 
 export async function POST(request: Request) {
   try {
+    const stripe = getStripe()
+    const PREMIUM_PRICE_ID = getPremiumPriceId()
     const { userId, email } = await request.json()
 
     if (!userId) {

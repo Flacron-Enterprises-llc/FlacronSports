@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -13,6 +14,12 @@ const nextConfig = {
   serverExternalPackages: ['firebase-admin'],
   env: {
     GOOGLE_AI_API_KEY: process.env.GOOGLE_AI_API_KEY,
+  },
+  // Skip static optimization for API routes that might use Firebase
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '2mb',
+    },
   },
 }
 

@@ -16,10 +16,16 @@ import type { DocumentSnapshot } from 'firebase-admin/firestore'
 import type { BlogPost } from '@/lib/blog-service'
 import SportFilter from '@/components/blog/sport-filter'
 
-// Initialize Stripe
-const stripe = new Stripe(API_CONFIG.payments.stripe.secretKey, {
-  apiVersion: "2025-05-28.basil",
-});
+// Lazy initialization of Stripe to avoid build-time errors
+function getStripe() {
+  const secretKey = API_CONFIG.payments.stripe.secretKey;
+  if (!secretKey) {
+    throw new Error('Stripe secret key not configured');
+  }
+  return new Stripe(secretKey, {
+    apiVersion: "2025-05-28.basil",
+  });
+}
 
 async function getUserPreferredLanguage(): Promise<string | null> {
   const cookieStore = await cookies();
@@ -41,6 +47,7 @@ async function getUserPreferredLanguage(): Promise<string | null> {
 
 async function isUserPremium(userId: string): Promise<boolean> {
   try {
+    const stripe = getStripe();
     // Find the Stripe customer by userId in metadata
     const customers = await stripe.customers.search({
       query: `metadata['userId']:'${userId}'`,
@@ -147,6 +154,10 @@ async function getNewsPosts(): Promise<GroupedPosts> {
     return { earlyAccess: [], freeArticles: [] };
   }
 }
+
+// Mark this page as dynamic to prevent static analysis during build
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 export default async function BlogPage() {
   const preferredLanguage = await getUserPreferredLanguage();

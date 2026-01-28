@@ -3,11 +3,23 @@ import { NextResponse } from "next/server"
 import Stripe from "stripe"
 import { API_CONFIG } from "@/lib/api-config"
 
-const stripe = new Stripe(API_CONFIG.payments.stripe.secretKey, {
-  apiVersion: "2025-05-28.basil",
-})
+// Mark this route as dynamic to prevent static analysis during build
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
+// Lazy initialization of Stripe to avoid build-time errors
+function getStripe() {
+  const secretKey = API_CONFIG.payments.stripe.secretKey;
+  if (!secretKey) {
+    throw new Error('Stripe secret key not configured');
+  }
+  return new Stripe(secretKey, {
+    apiVersion: "2025-05-28.basil",
+  });
+}
 
 export async function POST(request: Request) {
+  const stripe = getStripe()
   const body = await request.text()
   const headersList = await headers()
   const signature = headersList.get("stripe-signature")

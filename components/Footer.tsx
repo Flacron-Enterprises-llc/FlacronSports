@@ -25,12 +25,18 @@ export default function Footer() {
           </div>
           
           {/* Legal Links */}
-          <div className="flex gap-2 text-xs text-gray-400">
+          <div className="flex flex-wrap gap-2 text-xs text-gray-400 justify-center">
             <Link href="/about" className="hover:text-blue-400 transition-colors">About</Link>
             <span className="text-gray-500">|</span>
             <Link href="/privacy-policy" className="hover:text-blue-400 transition-colors">Privacy</Link>
             <span className="text-gray-500">|</span>
             <Link href="/terms-of-service" className="hover:text-blue-400 transition-colors">Terms</Link>
+            <span className="text-gray-500">|</span>
+            <Link href="/cookie-policy" className="hover:text-blue-400 transition-colors">Cookies</Link>
+            <span className="text-gray-500">|</span>
+            <Link href="/disclaimer" className="hover:text-blue-400 transition-colors">Disclaimer</Link>
+            <span className="text-gray-500">|</span>
+            <Link href="/refund-policy" className="hover:text-blue-400 transition-colors">Refunds</Link>
           </div>
         </div>
       </div>

@@ -90,13 +90,13 @@ export default function UpgradeButton({ customerId }: UpgradeButtonProps) {
     <>
       <Button
         onClick={() => setIsOpen(true)}
-        className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-white"
+        className="bg-[var(--color-primary)] text-white hover:bg-white hover:text-[var(--color-primary)] border-2 border-transparent hover:border-[var(--color-primary)] transition-all duration-200"
       >
         Upgrade to Premium
       </Button>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-center">Upgrade to Premium</DialogTitle>
             <DialogDescription className="text-center">

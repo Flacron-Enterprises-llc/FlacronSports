@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple Widget Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .debug {
+      background: #000;
+      color: #00ff00;
+      padding: 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      margin-bottom: 20px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧪 Simple Widget Test</h1>
+    
+    <div class="debug" id="debug"></div>
+    
+    <h2>Method 1: Direct Script Load</h2>
+    <div id="method1">
+      <api-sports-widget 
+        data-type="config"
+        data-key="04f48a5dfc83037bed7d86c7fc0b6818"
+        data-sport="football"
+        data-show-logos="true">
+      </api-sports-widget>
+      <api-sports-widget data-type="games"></api-sports-widget>
+    </div>
+
+    <hr style="margin: 40px 0;">
+
+    <h2>Method 2: Dynamic Creation</h2>
+    <div id="method2"></div>
+    <button onclick="createDynamicWidget()">Create Dynamic Widget</button>
+
+    <hr style="margin: 40px 0;">
+
+    <h2>Method 3: Iframe Approach</h2>
+    <div id="method3">
+      <iframe 
+        src="https://widgets.api-sports.io/embed/football/games?key=04f48a5dfc83037bed7d86c7fc0b6818" 
+        width="100%" 
+        height="400" 
+        frameborder="0"
+        style="border-radius: 8px;">
+      </iframe>
+    </div>
+  </div>
+
+  <!-- Try loading script without module type -->
+  <script src="https://widgets.api-sports.io/3.1.0/widgets.js"></script>
+
+  <script>
+    const debugEl = document.getElementById('debug');
+    
+    function log(message) {
+      const timestamp = new Date().toLocaleTimeString();
+      debugEl.innerHTML += `[${timestamp}] ${message}\n`;
+      debugEl.scrollTop = debugEl.scrollHeight;
+      console.log(message);
+    }
+
+    // Comprehensive error catching
+    window.onerror = function(msg, url, line, col, error) {
+      log(`❌ ERROR: ${msg} at ${url}:${line}:${col}`);
+      if (error && error.stack) {
+        log(`Stack: ${error.stack}`);
+      }
+      return false; // Don't prevent default handling
+    };
+
+    window.addEventListener('unhandledrejection', function(event) {
+      log(`❌ PROMISE REJECTION: ${event.reason}`);
+      if (event.reason && event.reason.stack) {
+        log(`Stack: ${event.reason.stack}`);
+      }
+    });
+
+    log('🚀 Starting simple widget test...');
+    log(`API Key: 04f48a5dfc83037bed7d86c7fc0b6818`);
+
+    // Check if script loaded
+    setTimeout(() => {
+      log(`WidgetsAPI available: ${typeof window.WidgetsAPI !== 'undefined'}`);
+      
+      if (window.WidgetsAPI) {
+        log(`WidgetsAPI type: ${typeof window.WidgetsAPI}`);
+        log(`WidgetsAPI.init: ${typeof window.WidgetsAPI.init}`);
+        
+        // Try to initialize
+        try {
+          if (typeof window.WidgetsAPI.init === 'function') {
+            log('🔄 Calling WidgetsAPI.init()...');
+            window.WidgetsAPI.init();
+            log('✅ WidgetsAPI.init() completed');
+          }
+        } catch (error) {
+          log(`❌ WidgetsAPI.init() failed: ${error.message}`);
+        }
+      }
+      
+      // Check widget elements
+      const widgets = document.querySelectorAll('api-sports-widget');
+      log(`Found ${widgets.length} widget elements`);
+      
+      widgets.forEach((widget, index) => {
+        log(`Widget ${index + 1}: ${widget.outerHTML.substring(0, 100)}...`);
+        
+        setTimeout(() => {
+          const hasContent = widget.innerHTML.trim() !== '';
+          log(`Widget ${index + 1} content: ${hasContent ? 'HAS CONTENT' : 'EMPTY'}`);
+          if (hasContent) {
+            log(`Content preview: ${widget.innerHTML.substring(0, 100)}...`);
+          }
+        }, 2000);
+      });
+      
+    }, 1000);
+
+    // Dynamic widget creation function
+    function createDynamicWidget() {
+      log('🔄 Creating dynamic widget...');
+      
+      const container = document.getElementById('method2');
+      container.innerHTML = '';
+      
+      try {
+        const configWidget = document.createElement('api-sports-widget');
+        configWidget.setAttribute('data-type', 'config');
+        configWidget.setAttribute('data-key', '04f48a5dfc83037bed7d86c7fc0b6818');
+        configWidget.setAttribute('data-sport', 'football');
+        configWidget.setAttribute('data-show-logos', 'true');
+        
+        const gamesWidget = document.createElement('api-sports-widget');
+        gamesWidget.setAttribute('data-type', 'games');
+        
+        container.appendChild(configWidget);
+        container.appendChild(gamesWidget);
+        
+        log('✅ Dynamic widgets created');
+        
+        // Try to reinitialize
+        if (window.WidgetsAPI && typeof window.WidgetsAPI.init === 'function') {
+          setTimeout(() => {
+            try {
+              window.WidgetsAPI.init();
+              log('✅ Dynamic widgets initialized');
+            } catch (error) {
+              log(`❌ Dynamic widget init failed: ${error.message}`);
+            }
+          }, 100);
+        }
+        
+      } catch (error) {
+        log(`❌ Dynamic widget creation failed: ${error.message}`);
+      }
+    }
+
+    // Check periodically
+    setInterval(() => {
+      const widgets = document.querySelectorAll('api-sports-widget');
+      let processedCount = 0;
+      widgets.forEach(widget => {
+        if (widget.innerHTML.trim() !== '') {
+          processedCount++;
+        }
+      });
+      
+      if (widgets.length > 0) {
+        log(`📊 Status: ${processedCount}/${widgets.length} widgets processed`);
+      }
+    }, 5000);
+
+    // Make function global
+    window.createDynamicWidget = createDynamicWidget;
+  </script>
+</body>
+</html>

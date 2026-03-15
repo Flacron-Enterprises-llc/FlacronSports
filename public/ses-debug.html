@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SES Debug Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .debug-panel {
+      background: #000;
+      color: #00ff00;
+      padding: 20px;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      margin-bottom: 20px;
+    }
+    .test-section {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .error { color: #ff4444; }
+    .success { color: #44ff44; }
+    .info { color: #4444ff; }
+  </style>
+</head>
+<body>
+  <h1>🔍 SES (Secure EcmaScript) Debug Test</h1>
+  
+  <div class="debug-panel">
+    <h3>🐛 Debug Console</h3>
+    <div id="debug-output"></div>
+  </div>
+
+  <div class="test-section">
+    <h3>🧪 JavaScript Environment Tests</h3>
+    <div id="test-results"></div>
+  </div>
+
+  <div class="test-section">
+    <h3>📡 Widget Test Area</h3>
+    <p>Testing if API-Sports widgets work in this environment:</p>
+    
+    <!-- Simple widget test -->
+    <api-sports-widget 
+      data-type="config"
+      data-key="04f48a5dfc83037bed7d86c7fc0b6818"
+      data-sport="football"
+      data-show-logos="true">
+    </api-sports-widget>
+    <api-sports-widget data-type="games"></api-sports-widget>
+  </div>
+
+  <!-- Load the widget script -->
+  <script type="module" src="https://widgets.api-sports.io/3.1.0/widgets.js"></script>
+
+  <script>
+    const debugOutput = document.getElementById('debug-output');
+    const testResults = document.getElementById('test-results');
+
+    function log(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString();
+      const div = document.createElement('div');
+      div.className = type;
+      div.innerHTML = `[${timestamp}] ${message}`;
+      debugOutput.appendChild(div);
+      debugOutput.scrollTop = debugOutput.scrollHeight;
+    }
+
+    function addTestResult(test, result, details = '') {
+      const div = document.createElement('div');
+      div.innerHTML = `
+        <strong>${test}:</strong> 
+        <span class="${result ? 'success' : 'error'}">${result ? '✅ PASS' : '❌ FAIL'}</span>
+        ${details ? `<br><small>${details}</small>` : ''}
+      `;
+      testResults.appendChild(div);
+    }
+
+    // Initial logging
+    log('🚀 SES Debug Test Started', 'success');
+
+    // Test 1: Check if SES is present
+    log('🔍 Checking for SES presence...', 'info');
+    const sesPresent = typeof window.SES !== 'undefined' || typeof globalThis.SES !== 'undefined';
+    addTestResult('SES Detection', sesPresent, sesPresent ? 'SES is present in global scope' : 'SES not found in global scope');
+    log(`SES Present: ${sesPresent}`, sesPresent ? 'error' : 'success');
+
+    // Test 2: Check for lockdown
+    const lockdownPresent = typeof window.lockdown !== 'undefined' || typeof globalThis.lockdown !== 'undefined';
+    addTestResult('Lockdown Detection', lockdownPresent, lockdownPresent ? 'Lockdown function is available' : 'Lockdown not found');
+    log(`Lockdown Present: ${lockdownPresent}`, lockdownPresent ? 'error' : 'success');
+
+    // Test 3: Check critical APIs
+    const criticalAPIs = {
+      'fetch': typeof fetch !== 'undefined',
+      'XMLHttpRequest': typeof XMLHttpRequest !== 'undefined',
+      'WebSocket': typeof WebSocket !== 'undefined',
+      'localStorage': typeof localStorage !== 'undefined',
+      'sessionStorage': typeof sessionStorage !== 'undefined',
+      'document.createElement': typeof document.createElement === 'function',
+      'JSON.parse': typeof JSON.parse === 'function',
+      'Promise': typeof Promise !== 'undefined',
+      'setTimeout': typeof setTimeout === 'function',
+      'setInterval': typeof setInterval === 'function'
+    };
+
+    log('🧪 Testing Critical APIs...', 'info');
+    Object.entries(criticalAPIs).forEach(([api, available]) => {
+      addTestResult(`API: ${api}`, available, available ? 'Available' : 'Blocked or removed');
+      log(`${api}: ${available ? 'Available' : 'MISSING'}`, available ? 'success' : 'error');
+    });
+
+    // Test 4: Check for intrinsics
+    const intrinsics = {
+      'Array': typeof Array !== 'undefined',
+      'Object': typeof Object !== 'undefined',
+      'Function': typeof Function !== 'undefined',
+      'RegExp': typeof RegExp !== 'undefined',
+      'Date': typeof Date !== 'undefined',
+      'Math': typeof Math !== 'undefined'
+    };
+
+    log('🔧 Testing Core Intrinsics...', 'info');
+    Object.entries(intrinsics).forEach(([intrinsic, available]) => {
+      addTestResult(`Intrinsic: ${intrinsic}`, available, available ? 'Available' : 'Removed by SES');
+      log(`${intrinsic}: ${available ? 'Available' : 'REMOVED'}`, available ? 'success' : 'error');
+    });
+
+    // Test 5: Check console methods
+    const consoleMethods = {
+      'console.log': typeof console.log === 'function',
+      'console.error': typeof console.error === 'function',
+      'console.warn': typeof console.warn === 'function'
+    };
+
+    log('📝 Testing Console Methods...', 'info');
+    Object.entries(consoleMethods).forEach(([method, available]) => {
+      addTestResult(`Console: ${method}`, available);
+      log(`${method}: ${available ? 'Available' : 'BLOCKED'}`, available ? 'success' : 'error');
+    });
+
+    // Test 6: Try to detect what's loading SES
+    log('🕵️ Investigating SES source...', 'info');
+    
+    // Check for common SES-loading libraries
+    const potentialSources = [
+      'Agoric',
+      'Endo',
+      'Hardened JavaScript',
+      'MetaMask',
+      'Browser Extension',
+      'Development Tool'
+    ];
+
+    // Check script tags
+    const scripts = Array.from(document.scripts);
+    log(`Found ${scripts.length} script tags`, 'info');
+    
+    scripts.forEach((script, index) => {
+      if (script.src) {
+        log(`Script ${index + 1}: ${script.src}`, 'info');
+        if (script.src.includes('ses') || script.src.includes('lockdown') || script.src.includes('agoric')) {
+          log(`⚠️ Potential SES source found: ${script.src}`, 'error');
+        }
+      }
+    });
+
+    // Test 7: Monitor for SES messages
+    log('👂 Monitoring for SES messages...', 'info');
+    
+    // Override console to catch SES messages
+    const originalLog = console.log;
+    const originalWarn = console.warn;
+    const originalError = console.error;
+
+    console.log = function(...args) {
+      const message = args.join(' ');
+      if (message.includes('SES') || message.includes('lockdown') || message.includes('intrinsics')) {
+        log(`🎯 SES Message Detected: ${message}`, 'error');
+      }
+      return originalLog.apply(console, args);
+    };
+
+    console.warn = function(...args) {
+      const message = args.join(' ');
+      if (message.includes('SES') || message.includes('lockdown') || message.includes('intrinsics')) {
+        log(`⚠️ SES Warning: ${message}`, 'error');
+      }
+      return originalWarn.apply(console, args);
+    };
+
+    console.error = function(...args) {
+      const message = args.join(' ');
+      if (message.includes('SES') || message.includes('lockdown') || message.includes('intrinsics')) {
+        log(`💥 SES Error: ${message}`, 'error');
+      }
+      return originalError.apply(console, args);
+    };
+
+    // Test 8: Widget functionality test
+    setTimeout(() => {
+      log('🎮 Testing Widget Functionality...', 'info');
+      
+      const widgets = document.querySelectorAll('api-sports-widget');
+      log(`Found ${widgets.length} widget elements`, 'info');
+      
+      if (widgets.length > 0) {
+        widgets.forEach((widget, index) => {
+          const hasContent = widget.innerHTML.trim() !== '';
+          addTestResult(`Widget ${index + 1} Processing`, hasContent, hasContent ? 'Widget has content' : 'Widget appears empty');
+          log(`Widget ${index + 1}: ${hasContent ? 'Processed' : 'Empty'}`, hasContent ? 'success' : 'error');
+        });
+      }
+
+      // Check if WidgetsAPI loaded
+      const widgetsAPIAvailable = typeof window.WidgetsAPI !== 'undefined';
+      addTestResult('WidgetsAPI Loading', widgetsAPIAvailable, widgetsAPIAvailable ? 'WidgetsAPI object found' : 'WidgetsAPI not loaded');
+      log(`WidgetsAPI: ${widgetsAPIAvailable ? 'Loaded' : 'NOT LOADED'}`, widgetsAPIAvailable ? 'success' : 'error');
+
+    }, 3000);
+
+    // Test 9: Network connectivity
+    log('🌐 Testing Network Connectivity...', 'info');
+    
+    if (typeof fetch !== 'undefined') {
+      fetch('https://widgets.api-sports.io/3.1.0/widgets.js', { method: 'HEAD' })
+        .then(response => {
+          const success = response.ok;
+          addTestResult('Network: API-Sports CDN', success, `Status: ${response.status} ${response.statusText}`);
+          log(`API-Sports CDN: ${success ? 'Accessible' : 'Failed'}`, success ? 'success' : 'error');
+        })
+        .catch(error => {
+          addTestResult('Network: API-Sports CDN', false, `Error: ${error.message}`);
+          log(`API-Sports CDN Error: ${error.message}`, 'error');
+        });
+    } else {
+      addTestResult('Network: Fetch API', false, 'Fetch API not available');
+      log('Fetch API: NOT AVAILABLE', 'error');
+    }
+
+    // Final summary
+    setTimeout(() => {
+      log('📊 Test Summary Complete', 'success');
+      log('If widgets are not working and SES is present, SES is likely blocking required APIs', 'info');
+      log('Check browser extensions, development tools, or framework configurations', 'info');
+    }, 5000);
+
+  </script>
+</body>
+</html>

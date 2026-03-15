@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Live Sports Widgets - DEBUG VERSION</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #eff6ff 0%, #c7d2fe 100%);
+    }
+    .debug-panel {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      width: 300px;
+      max-height: 400px;
+      background: rgba(0,0,0,0.9);
+      color: #00ff00;
+      padding: 10px;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      overflow-y: auto;
+      z-index: 1000;
+    }
+    .debug-panel h4 {
+      margin: 0 0 10px 0;
+      color: #ffff00;
+    }
+    .debug-log {
+      margin-bottom: 5px;
+      padding: 2px 0;
+      border-bottom: 1px solid #333;
+    }
+    .debug-error {
+      color: #ff4444;
+    }
+    .debug-success {
+      color: #44ff44;
+    }
+    .debug-info {
+      color: #4444ff;
+    }
+    .top-bar {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+      background: rgba(255,255,255,0.85);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      padding: 18px 0 12px 0;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      flex-wrap: wrap;
+    }
+    .top-bar button {
+      font-size: 1.1rem;
+      font-weight: 600;
+      background: none;
+      border: none;
+      color: #3730a3;
+      padding: 8px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .top-bar button.active {
+      background: #6366f1;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(99,102,241,0.08);
+    }
+    .widget-container {
+      max-width: 1000px;
+      margin: 40px auto;
+      background-color: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      min-height: 400px;
+      position: relative;
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .loading-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 300px;
+    }
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 5px solid #f3f3f3;
+      border-top: 5px solid #6366f1;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .widget-content {
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .widget-content.loaded {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Debug Panel -->
+  <div class="debug-panel">
+    <h4>🐛 Widget Debug Console</h4>
+    <div id="debug-logs"></div>
+    <button onclick="clearDebugLogs()" style="background: #333; color: white; border: none; padding: 5px 10px; border-radius: 4px; margin-top: 10px;">Clear Logs</button>
+  </div>
+
+  <div class="top-bar">
+    <button class="sport-btn active" data-sport="football">⚽ Football</button>
+    <button class="sport-btn" data-sport="baseball">⚾ Baseball</button>
+    <button class="sport-btn" data-sport="hockey">🏒 Hockey</button>
+    <button class="sport-btn" data-sport="rugby">🏉 Rugby</button>
+    <button class="sport-btn" data-sport="basketball">🏀 Basketball</button>
+    <button class="sport-btn" data-sport="volleyball">🏐 Volleyball</button>
+    <button class="sport-btn" data-sport="afl">🏉 AFL</button>
+    <button class="sport-btn" data-sport="formula1">🏎️ Formula 1</button>
+    <button class="sport-btn" data-sport="mma">🥊 MMA</button>
+    <button class="sport-btn" data-sport="nba">🏀 NBA</button>
+    <button class="sport-btn" data-sport="nfl">🏈 NFL</button>
+  </div>
+
+  <!-- Football -->
+  <div id="football-container" class="widget-container">
+    <h2>⚽ Live Football Games</h2>
+    <div class="loading-container"><div class="loading-spinner"></div></div>
+    <div class="widget-content">
+      <api-sports-widget data-type="config"
+        data-key="04f48a5dfc83037bed7d86c7fc0b6818"
+        data-sport="football"
+        data-show-logos="true">
+      </api-sports-widget>
+      <api-sports-widget data-type="games"></api-sports-widget>
+    </div>
+  </div>
+
+  <!-- Baseball -->
+  <div id="baseball-container" class="widget-container" style="display:none;">
+    <h2>⚾ Live Baseball Games</h2>
+    <div class="loading-container"><div class="loading-spinner"></div></div>
+    <div class="widget-content">
+      <api-sports-widget data-type="config"
+        data-key="04f48a5dfc83037bed7d86c7fc0b6818"
+        data-sport="baseball"
+        data-show-logos="true">
+      </api-sports-widget>
+      <api-sports-widget data-type="games"></api-sports-widget>
+    </div>
+  </div>
+
+  <!-- Hockey -->
+  <div id="hockey-container" class="widget-container" style="display:none;">
+    <h2>🏒 Live Hockey Games</h2>
+    <div class="loading-container"><div class="loading-spinner"></div></div>
+    <div class="widget-content">
+      <api-sports-widget data-type="config"
+        data-key="04f48a5dfc83037bed7d86c7fc0b6818"
+        data-sport="hockey"
+        data-show-logos="true">
+      </api-sports-widget>
+      <api-sports-widget data-type="games"></api-sports-widget>
+    </div>
+  </div>
+
+  <!-- Rugby -->
+  <div id="rugby-container" class="widget-container" style="display:none;">
+    <h2>🏉 Live Rugby Games</h2>
+    <div class="loading-container"><div class="loading-spinner"></div></div>
+    <div class="widget-content">
+      <api-sports-widget data-type="config"
+        data-key="04f48a5dfc83037bed7d86c7fc0b6818"
+        data-sport="rugby"
+        data-show-logos="true">
+      </api-sports-widget>
+      <api-sports-widget data-type="games"></api-sports-widget>
+    </div>
+  </div>
+
+  <!-- Basketball -->
+  <div id="basketball-container" class="widget-container" style="display:none;">
+    <h2>🏀 Live Basketball Games</h2>
+    <div class="loading-container"><div class="loading-spinner"></div></div>
+    <div class="widget-content">
+      <api-sports-widget data-type="config"
+        data-key="04f48a5dfc83037bed7d86c7fc0b6818"
+        data-sport="basketball"
+        data-show-logos="true">
+      </api-sports-widget>
+      <api-sports-widget data-type="games"></api-sports-widget>
+    </div>
+  </div>
+
+  <!-- Volleyball -->
+  <div id="volleyball-container" class="widget-container" style="display:none;">
+    <h2>🏐 Live Volleyball Games</h2>
+    <div class="loading-container"><div class="loading-spinner"></div></div>
+    <div class="widget-content">
+      <api-sports-widget data-type="config"
+        data-key="04f48a5dfc83037bed7d86c7fc0b6818"
+        data-sport="volleyball"
+        data-show-logos="true">
+      </api-sports-widget>
+      <api-sports-widget data-type="games"></api-sports-widget>
+    </div>
+  </div>
+
+  <!-- AFL -->
+  <div id="afl-container" class="widget-container" style="display:none;">
+    <h2>🏉 AFL Games</h2>
+    <div class="loading-container"><div class="loading-spinner"></div></div>
+    <div class="widget-content">
+      <api-sports-widget data-type="config"
+        data-key="04f48a5dfc83037bed7d86c7fc0b6818"
+        data-sport="afl"
+        data-refresh="60"
+        data-show-logos="true">
+      </api-sports-widget>
+      <api-sports-widget data-type="games"></api-sports-widget>
+    </div>
+  </div>
+
+  <!-- Formula 1 -->
+  <div id="formula1-container" class="widget-container" style="display:none;">
+    <h2>🏎️ Formula 1 Races</h2>
+    <div class="loading-container"><div class="loading-spinner"></div></div>
+    <div class="widget-content">
+      <api-sports-widget data-type="config"
+        data-key="04f48a5dfc83037bed7d86c7fc0b6818"
+        data-sport="f1"
+        data-show-logos="true"
+        data-rankings="true">
+      </api-sports-widget>
+      <api-sports-widget data-type="races"></api-sports-widget>
+    </div>
+  </div>
+
+  <!-- MMA -->
+  <div id="mma-container" class="widget-container" style="display:none;">
+    <h2>🥊 MMA Fights</h2>
+    <div class="loading-container"><div class="loading-spinner"></div></div>
+    <div class="widget-content">
+      <api-sports-widget data-type="fights"
+        data-key="04f48a5dfc83037bed7d86c7fc0b6818"
+        data-sport="mma">
+      </api-sports-widget>
+      <api-sports-widget data-type="config"
+        data-key="04f48a5dfc83037bed7d86c7fc0b6818"
+        data-sport="mma">
+      </api-sports-widget>
+    </div>
+  </div>
+
+  <!-- NBA -->
+  <div id="nba-container" class="widget-container" style="display:none;">
+    <h2>🏀 NBA Games</h2>
+    <div class="loading-container"><div class="loading-spinner"></div></div>
+    <div class="widget-content">
+      <api-sports-widget data-type="config"
+        data-key="04f48a5dfc83037bed7d86c7fc0b6818"
+        data-sport="nba"
+        data-show-logos="true">
+      </api-sports-widget>
+      <api-sports-widget data-type="games"></api-sports-widget>
+    </div>
+  </div>
+
+  <!-- NFL -->
+  <div id="nfl-container" class="widget-container" style="display:none;">
+    <h2>🏈 NFL Games</h2>
+    <div class="loading-container"><div class="loading-spinner"></div></div>
+    <div class="widget-content">
+      <api-sports-widget data-type="config"
+        data-key="04f48a5dfc83037bed7d86c7fc0b6818"
+        data-sport="american-football"
+        data-show-logos="true">
+      </api-sports-widget>
+      <api-sports-widget data-type="games"></api-sports-widget>
+    </div>
+  </div>
+
+  <script type="module" src="https://widgets.api-sports.io/3.1.0/widgets.js"></script>
+
+  <script>
+    // Debug logging system
+    let debugLogCount = 0;
+    const MAX_DEBUG_LOGS = 50;
+
+    function debugLog(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString();
+      const logElement = document.createElement('div');
+      logElement.className = `debug-log debug-${type}`;
+      logElement.innerHTML = `[${timestamp}] ${message}`;
+      
+      const debugLogs = document.getElementById('debug-logs');
+      debugLogs.appendChild(logElement);
+      
+      // Keep only last MAX_DEBUG_LOGS entries
+      debugLogCount++;
+      if (debugLogCount > MAX_DEBUG_LOGS) {
+        debugLogs.removeChild(debugLogs.firstChild);
+        debugLogCount--;
+      }
+      
+      // Auto-scroll to bottom
+      debugLogs.scrollTop = debugLogs.scrollHeight;
+    }
+
+    function clearDebugLogs() {
+      document.getElementById('debug-logs').innerHTML = '';
+      debugLogCount = 0;
+      debugLog('Debug logs cleared', 'info');
+    }
+
+    // Initialize debug logging
+    debugLog('🚀 Widget debug system initialized', 'success');
+    debugLog(`API Key: 04f48a5dfc83037bed7d86c7fc0b6818`, 'info');
+
+    // Monitor widget script loading
+    const widgetScript = document.querySelector('script[src*="widgets.api-sports.io"]');
+    if (widgetScript) {
+      debugLog('📦 Widget script element found', 'success');
+      
+      widgetScript.onload = function() {
+        debugLog('✅ Widget script loaded successfully', 'success');
+        debugLog(`WidgetsAPI available: ${typeof window.WidgetsAPI !== 'undefined'}`, 'info');
+        
+        // Check if WidgetsAPI methods are available
+        if (window.WidgetsAPI) {
+          debugLog(`WidgetsAPI.init: ${typeof window.WidgetsAPI.init}`, 'info');
+          debugLog('🎯 WidgetsAPI object detected', 'success');
+        }
+      };
+      
+      widgetScript.onerror = function() {
+        debugLog('❌ Widget script failed to load', 'error');
+      };
+    } else {
+      debugLog('❌ Widget script element not found', 'error');
+    }
+
+    // Monitor for API-Sports widget elements
+    function checkWidgetElements() {
+      const widgets = document.querySelectorAll('api-sports-widget');
+      debugLog(`🔍 Found ${widgets.length} api-sports-widget elements`, 'info');
+      
+      widgets.forEach((widget, index) => {
+        const type = widget.getAttribute('data-type');
+        const sport = widget.getAttribute('data-sport');
+        const key = widget.getAttribute('data-key');
+        
+        debugLog(`Widget ${index + 1}: type=${type}, sport=${sport}, key=${key ? 'SET' : 'MISSING'}`, 'info');
+        
+        // Check if widget has been processed
+        if (widget.innerHTML.trim() === '') {
+          debugLog(`⚠️ Widget ${index + 1} appears empty (not processed)`, 'error');
+        } else {
+          debugLog(`✅ Widget ${index + 1} has content`, 'success');
+        }
+      });
+    }
+
+    // Original widget functionality with debug logging
+    const buttons = document.querySelectorAll('.sport-btn');
+    const containers = {
+      football: document.getElementById('football-container'),
+      baseball: document.getElementById('baseball-container'),
+      hockey: document.getElementById('hockey-container'),
+      rugby: document.getElementById('rugby-container'),
+      basketball: document.getElementById('basketball-container'),
+      volleyball: document.getElementById('volleyball-container'),
+      afl: document.getElementById('afl-container'),
+      formula1: document.getElementById('formula1-container'),
+      mma: document.getElementById('mma-container'),
+      nba: document.getElementById('nba-container'),
+      nfl: document.getElementById('nfl-container'),
+    };
+
+    debugLog(`🎮 Found ${buttons.length} sport buttons`, 'info');
+    debugLog(`📦 Found ${Object.keys(containers).length} containers`, 'info');
+
+    function showContainer(selected) {
+      debugLog(`🔄 Switching to sport: ${selected}`, 'info');
+      
+      Object.keys(containers).forEach(key => {
+        const container = containers[key];
+        const isSelected = key === selected;
+        container.style.display = isSelected ? '' : 'none';
+
+        if (isSelected) {
+          debugLog(`👁️ Showing container: ${key}`, 'success');
+          
+          const widgetContent = container.querySelector('.widget-content');
+          const loadingContainer = container.querySelector('.loading-container');
+          
+          if (!widgetContent || !loadingContainer) {
+            debugLog(`❌ Missing elements in ${key} container`, 'error');
+            return;
+          }
+          
+          widgetContent.classList.remove('loaded');
+          loadingContainer.style.display = 'flex';
+          
+          debugLog(`⏳ Loading ${key} widgets...`, 'info');
+
+          // Check widget elements in this container
+          setTimeout(() => {
+            checkWidgetElements();
+          }, 500);
+
+          // regenerate the widget innerHTML for those that might fail when hidden
+          if (key === 'formula1') {
+            debugLog('🏎️ Reinitializing Formula 1 widgets', 'info');
+            widgetContent.innerHTML = `
+              <api-sports-widget
+                data-type="config"
+                data-key="04f48a5dfc83037bed7d86c7fc0b6818"
+                data-sport="f1"
+                data-show-logos="true"
+                data-rankings="true">
+              </api-sports-widget>
+              <api-sports-widget data-type="races"></api-sports-widget>
+            `;
+            if (window.WidgetsAPI && typeof window.WidgetsAPI.init === 'function') {
+              debugLog('🔄 Calling WidgetsAPI.init() for F1', 'info');
+              window.WidgetsAPI.init();
+            } else {
+              debugLog('❌ WidgetsAPI.init not available for F1', 'error');
+            }
+            setTimeout(() => {
+              widgetContent.classList.add('loaded');
+              loadingContainer.style.display = 'none';
+              debugLog('✅ Formula 1 widgets loaded', 'success');
+            }, 800);
+          }
+          else if (key === 'mma') {
+            debugLog('🥊 Reinitializing MMA widgets', 'info');
+            widgetContent.innerHTML = `
+              <api-sports-widget
+                data-type="fights"
+                data-key="04f48a5dfc83037bed7d86c7fc0b6818"
+                data-sport="mma">
+              </api-sports-widget>
+              <api-sports-widget
+                data-type="config"
+                data-key="04f48a5dfc83037bed7d86c7fc0b6818"
+                data-sport="mma">
+              </api-sports-widget>
+            `;
+            if (window.WidgetsAPI && typeof window.WidgetsAPI.init === 'function') {
+              debugLog('🔄 Calling WidgetsAPI.init() for MMA', 'info');
+              window.WidgetsAPI.init();
+            } else {
+              debugLog('❌ WidgetsAPI.init not available for MMA', 'error');
+            }
+            setTimeout(() => {
+              widgetContent.classList.add('loaded');
+              loadingContainer.style.display = 'none';
+              debugLog('✅ MMA widgets loaded', 'success');
+            }, 800);
+          }
+          else {
+            debugLog(`⏱️ Using standard loading for ${key}`, 'info');
+            // For other sports, no need to reassign innerHTML
+            setTimeout(() => {
+              widgetContent.classList.add('loaded');
+              loadingContainer.style.display = 'none';
+              debugLog(`✅ ${key} widgets loaded`, 'success');
+            }, 1000);
+          }
+        }
+      });
+
+      buttons.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.sport === selected);
+      });
+    }
+
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        debugLog(`🖱️ Button clicked: ${btn.dataset.sport}`, 'info');
+        showContainer(btn.dataset.sport);
+      });
+    });
+
+    // Monitor for errors
+    window.addEventListener('error', function(e) {
+      debugLog(`💥 JavaScript Error: ${e.message} at ${e.filename}:${e.lineno}`, 'error');
+    });
+
+    // Monitor for network errors
+    window.addEventListener('unhandledrejection', function(e) {
+      debugLog(`🚫 Unhandled Promise Rejection: ${e.reason}`, 'error');
+    });
+
+    // Check widget status periodically
+    setInterval(() => {
+      const widgets = document.querySelectorAll('api-sports-widget');
+      let processedCount = 0;
+      widgets.forEach(widget => {
+        if (widget.innerHTML.trim() !== '') {
+          processedCount++;
+        }
+      });
+      
+      if (widgets.length > 0) {
+        debugLog(`📊 Widget Status: ${processedCount}/${widgets.length} processed`, 
+                 processedCount === widgets.length ? 'success' : 'info');
+      }
+    }, 5000);
+
+    // Initial setup
+    debugLog('🎬 Starting initial container setup', 'info');
+    
+    // Wait for DOM to be fully ready
+    setTimeout(() => {
+      debugLog('🏁 Initializing default sport (football)', 'info');
+      showContainer('football');
+    }, 100);
+
+    // Check if widgets are working after some time
+    setTimeout(() => {
+      checkWidgetElements();
+      
+      // Test API connectivity
+      debugLog('🌐 Testing API connectivity...', 'info');
+      fetch('https://widgets.api-sports.io/3.1.0/widgets.js')
+        .then(response => {
+          debugLog(`📡 API-Sports CDN: ${response.status} ${response.statusText}`, 
+                   response.ok ? 'success' : 'error');
+        })
+        .catch(error => {
+          debugLog(`❌ API-Sports CDN Error: ${error.message}`, 'error');
+        });
+    }, 2000);
+  </script>
+</body>
+</html>

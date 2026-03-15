@@ -17,7 +17,10 @@ export default function ContactPage() {
             </p>
             <div className="mb-4">
               <div className="mb-2">
-                <span className="font-semibold">Email:</span> <a href="mailto:support@flacronsport.com" className="text-blue-600 underline">support@flacronsport.com</a>
+                <span className="font-semibold">General Contact:</span> <a href="mailto:contact@flacronenterprises.com" className="text-blue-600 underline">contact@flacronenterprises.com</a>
+              </div>
+              <div className="mb-2">
+                <span className="font-semibold">For support:</span> <a href="mailto:support@flacronsport.com" className="text-blue-600 underline">support@flacronsport.com</a>
               </div>
               <div className="mb-2">
                 <span className="font-semibold">For media inquiries:</span> <a href="mailto:press@flacronsport.com" className="text-blue-600 underline">press@flacronsport.com</a>

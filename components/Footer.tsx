@@ -21,7 +21,7 @@ export default function Footer() {
           <div className="flex gap-4">
             <Link href="/" className="hover:text-[var(--color-primary)] transition-colors">Home</Link>
             <Link href="/blog" className="hover:text-[var(--color-primary)] transition-colors">Blog</Link>
-            <a href="mailto:contact@flacronsport.com" className="hover:text-[var(--color-primary)] transition-colors">Contact</a>
+            <Link href="/contact" className="hover:text-[var(--color-primary)] transition-colors">Contact</Link>
           </div>
           
           {/* Legal Links */}

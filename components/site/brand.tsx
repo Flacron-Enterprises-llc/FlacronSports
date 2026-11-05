@@ -12,7 +12,7 @@ export function Logo({ reversed = false, href = "/" }: { reversed?: boolean; hre
           <Image src="/brand/fs-mark-reversed.png" alt="" width={50} height={28} priority className="hidden h-7 w-auto dark:block" />
         </>
       )}
-      <span className={`hidden whitespace-nowrap font-display min-[440px]:inline text-[15px] font-semibold tracking-[0.08em] ${reversed ? "text-white" : "text-navy dark:text-white"}`}>
+      <span data-logotype className={`hidden whitespace-nowrap font-display min-[440px]:inline text-[15px] font-semibold tracking-[0.08em] ${reversed ? "text-white" : "text-navy dark:text-white"}`}>
         FLACRON<span className="text-orange">SPORT</span>
       </span>
     </Link>

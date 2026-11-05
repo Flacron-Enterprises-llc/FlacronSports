@@ -100,7 +100,7 @@ const NAV_ICONS: LucideIcon[] = [Home, CalendarDays, MonitorPlay, Newspaper, Sta
 function MiniSidebar({ s, active = 0 }: { s: Strings; active?: number }) {
   return (
     <div className="hidden w-[150px] shrink-0 flex-col bg-navy-deep px-2 py-3 text-white sm:flex">
-      <p className="px-2 pb-3 font-display text-[11px] font-semibold tracking-[0.08em]">FLACRON<span className="text-orange">SPORT</span></p>
+      <p data-logotype className="px-2 pb-3 font-display text-[11px] font-semibold tracking-[0.08em]">FLACRON<span className="text-orange">SPORT</span></p>
       <ul className="space-y-0.5">
         {s.nav.map((label, index) => {
           const Icon = NAV_ICONS[index]

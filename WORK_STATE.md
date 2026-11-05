@@ -21,8 +21,7 @@ GitHub Support purge of PR #1, MFA upgrade decision, commercial sports feed, vid
 
 ## Next tasks
 
-1. Safari, iOS and Android pass, screen reader and contrast audit.
-2. Failed renewal and downgrade in the Stripe sandbox, restore drill, load test.
-3. Rescheduled-event alert correction, score-freshness alarm, coverage controls in admin.
-4. A repeatable browser test suite in the repo. The live checks so far were throwaway scripts.
-5. MFA once the owner approves the Identity Platform upgrade.
+1. Restore drill once the first daily backup exists.
+2. Real iPhone and Android pass, and a screen reader pass.
+3. Refund of an add-on on the live stack, and a real inbox check.
+4. Admin coverage controls, global search, African discovery.

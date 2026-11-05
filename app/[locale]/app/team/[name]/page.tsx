@@ -51,8 +51,8 @@ export default async function TeamPage({ params, searchParams }: Props) {
       <FavoriteStar team={displayName} />
       {list(t.team.upcoming, upcoming)}
       {list(t.team.recent, recent)}
-      {feed.state !== "unavailable" && !team && <EmptyState title={t.team.notFound} body={t.team.notFoundBody} action={{ href: href("/scores"), label: t.team.browse }} />}
-      {feed.state !== "unavailable" && team && upcoming.length + recent.length === 0 && <EmptyState title={t.team.noFixtures} body={t.team.noFixturesBody} action={{ href: href("/scores"), label: t.team.browse }} />}
+      {feed.state !== "unavailable" && !team && <EmptyState title={t.team.notFound} body={t.team.notFoundBody} action={{ href: href("/app/scores"), label: t.team.browse }} />}
+      {feed.state !== "unavailable" && team && upcoming.length + recent.length === 0 && <EmptyState title={t.team.noFixtures} body={t.team.noFixturesBody} action={{ href: href("/app/scores"), label: t.team.browse }} />}
       <div className="mt-4"><FeedNotice feed={{ ...feed, events: [] }} t={t} /></div>
     </main>
   )

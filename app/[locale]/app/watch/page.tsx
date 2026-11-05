@@ -9,7 +9,7 @@ export default async function WatchPage({ params }: LocaleParams) {
   return (
     <main id="main" className="mx-auto max-w-7xl px-4 sm:px-6">
       <PageHeader title={t.watch.title} lead={t.watch.lead} />
-      <EmptyState title={t.watch.empty} body={t.watch.emptyBody} action={{ href: href("/scores"), label: t.watch.cta }} />
+      <EmptyState title={t.watch.empty} body={t.watch.emptyBody} action={{ href: href("/app/scores"), label: t.watch.cta }} />
       <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {t.watch.sections.map((section) => (
           <li key={section} className="rounded-xl border border-line bg-surface p-4 text-sm font-semibold text-ink-2">{section}</li>

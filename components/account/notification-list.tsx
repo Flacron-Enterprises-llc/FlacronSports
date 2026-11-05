@@ -40,7 +40,7 @@ export function NotificationList() {
   if (!user) return <p className="text-sm text-ink-2">{t.notifications.signedOut} <Link className="font-semibold text-hot-text underline" href={href("/signin")}>{t.nav.signIn}</Link></p>
   if (failed) return <p role="alert" className="rounded-lg border border-line bg-surface p-3 text-sm text-bad">{t.notifications.unavailable}</p>
   if (!items) return <p role="status" className="text-sm text-ink-2">{t.notifications.loading}</p>
-  if (items.length === 0) return <EmptyState title={t.notifications.empty} body={t.notifications.emptyBody} action={{ href: href("/scores"), label: t.notifications.browse }} />
+  if (items.length === 0) return <EmptyState title={t.notifications.empty} body={t.notifications.emptyBody} action={{ href: href("/app/scores"), label: t.notifications.browse }} />
 
   return (
     <ul className="space-y-3">

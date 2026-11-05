@@ -535,7 +535,7 @@ describe("sports assistant", () => {
     const team = await answerQuestion("Arsenal fixtures today", "en", sources([match()]), now)
     expect(team).toMatchObject({ kind: "fixtures", charged: true, asOfUTC: now.toISOString() })
     expect(team.items[0]).toMatchObject({ matchId: "tsdb-1", score: null })
-    expect(team.sources[0].label).toBe("TheSportsDB")
+    expect(team.sources[0].label).toBe("Verified match data")
     expect((await answerQuestion("matchs du jour premier league", "fr", sources([match()]), now)).kind).toBe("fixtures")
   })
 
@@ -577,7 +577,7 @@ describe("sports assistant", () => {
     expect(await answerQuestion("meaning of life", "en", sources([]), now)).toMatchObject({ kind: "unknown", charged: false })
     const none = await answerQuestion("Barcelona fixtures today", "en", sources([match()], { limited: true }), now)
     expect(none).toMatchObject({ kind: "no_data", charged: true, items: [] })
-    expect(none.notes[0]).toMatch(/Limited/)
+    expect(none.notes[0]).toMatch(/Only some fixtures/)
   })
 
   it("does not mistake a stale or failed feed for an answer", async () => {

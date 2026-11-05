@@ -31,7 +31,7 @@ export function EventCard({ event, t, href, timeMode = "time" }: { event: SportE
     <article className="rounded-xl border border-line bg-surface p-4 shadow-[var(--shadow-sm)] transition-shadow hover:shadow-[var(--shadow-md)]">
       <div className="flex items-center justify-between gap-3">
         {event.competition.id ? (
-          <Link href={href(`/standings/${event.competition.id}`)} className="min-w-0 truncate text-xs font-medium text-ink-3 underline-offset-2 hover:text-ink hover:underline">{event.competition.name}</Link>
+          <Link href={href(`/app/standings/${event.competition.id}`)} className="min-w-0 truncate text-xs font-medium text-ink-3 underline-offset-2 hover:text-ink hover:underline">{event.competition.name}</Link>
         ) : (
           <p className="min-w-0 truncate text-xs font-medium text-ink-3">{event.competition.name}</p>
         )}
@@ -45,7 +45,7 @@ export function EventCard({ event, t, href, timeMode = "time" }: { event: SportE
               {team.name === "TBD" ? (
                 <span className="truncate font-medium text-ink">{team.name}</span>
               ) : (
-                <Link href={href(`/team/${encodeURIComponent(team.name)}?sport=${event.sportId}`)} className="truncate font-medium text-ink underline-offset-2 hover:underline">{team.name}</Link>
+                <Link href={href(`/app/team/${encodeURIComponent(team.name)}?sport=${event.sportId}`)} className="truncate font-medium text-ink underline-offset-2 hover:underline">{team.name}</Link>
               )}
             </span>
             <ScoreValue value={value} label={team.name} />
@@ -54,7 +54,7 @@ export function EventCard({ event, t, href, timeMode = "time" }: { event: SportE
       </ul>
       <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-xs text-ink-2">
         {event.scheduledStartUTC ? <LocalTime iso={event.scheduledStartUTC} mode={timeMode} /> : <span>{t.match.tbd}</span>}
-        <Link href={href(`/match/${event.id}`)} className="font-semibold text-hot-text underline-offset-2 hover:underline">
+        <Link href={href(`/app/match/${event.id}`)} className="font-semibold text-hot-text underline-offset-2 hover:underline">
           {t.match.overview}<span className="sr-only">: {home.name} / {away.name}</span>
         </Link>
       </div>
@@ -68,7 +68,7 @@ export function FeedNotice({ feed, t }: { feed: EventFeed; t: Dictionary }) {
       {feed.state === "unavailable" && <p role="alert" className="rounded-lg border border-line bg-surface p-3 text-sm text-bad">{t.feed.unavailable}</p>}
       {feed.state === "stale" && <p role="status" className="rounded-lg border border-line bg-surface p-3 text-sm text-warn">{t.feed.stale}</p>}
       {feed.limited && feed.state !== "unavailable" && <p className="text-xs leading-5 text-ink-3">{t.feed.limited}</p>}
-      <p className="text-xs text-ink-3">{t.feed.source}: {feed.source} · {t.feed.updated}: <LocalTime iso={feed.fetchedAt} /></p>
+      <p className="text-xs text-ink-3">{t.feed.updated}: <LocalTime iso={feed.fetchedAt} /></p>
     </div>
   )
 }

@@ -29,6 +29,17 @@ export function buildMatchSummary(event: SportEvent): MatchSummary {
   }
 }
 
+const STATUS_LABEL: Record<SportEvent["status"], string> = {
+  scheduled: "Upcoming",
+  live: "Live",
+  finished: "Finished",
+  postponed: "Postponed",
+  canceled: "Canceled",
+  interrupted: "Interrupted",
+  abandoned: "Abandoned",
+  unknown: "Not confirmed",
+}
+
 /** The standard PDF font covers Latin-1 only, and provider names can fall outside it. */
 export function pdfSafe(text: string): string {
   return text
@@ -55,7 +66,7 @@ export const renderMatchSummaryPdf: PdfRenderer = async (summary) => {
   const rows: [string, string | null][] = [
     ["Competition", summary.competition],
     ["Kickoff (UTC)", summary.kickoffUTC?.slice(0, 16).replace("T", " ") ?? "To be confirmed"],
-    ["Status", summary.status],
+    ["Status", STATUS_LABEL[summary.status]],
     ["Score", summary.score ?? "Not available"],
     ["Venue", summary.venue],
   ]

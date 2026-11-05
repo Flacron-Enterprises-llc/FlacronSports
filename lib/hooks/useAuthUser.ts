@@ -33,4 +33,17 @@ export function useAuthUser() {
   }, [])
   
   return user
-} 
+}
+
+/** Unlike useAuthUser, this can tell "still loading" apart from "signed out". */
+export function useAuthState() {
+  const [state, setState] = useState<{ user: User | null; ready: boolean }>({ user: null, ready: false })
+
+  useEffect(() => {
+    const app = getFirebaseApp()
+    if (!app) return setState({ user: null, ready: true })
+    return onAuthStateChanged(getAuth(app), (user) => setState({ user, ready: true }))
+  }, [])
+
+  return state
+}

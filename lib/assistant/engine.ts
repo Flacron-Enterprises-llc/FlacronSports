@@ -34,7 +34,6 @@ export interface AssistantSources {
 
 const MAX_ITEMS = 10
 const RESULT_LOOKBACK_DAYS = 7
-const FEED_URL = "https://www.thesportsdb.com/"
 
 // "paris" alone is the city and "cote" is Cote d'Ivoire, so neither can mean betting here.
 const PREDICTION = /\b(predict\w*|forecast\w*|odds|bet|bets|betting|wager|tips?|who(?:'ll| will) win|will \w+(?: \w+){0,3} win|pronosti\w*|paris sportifs?|pari|parier|qui (?:va gagner|gagnera)|va-t-(?:il|elle) gagner)\b/
@@ -113,7 +112,7 @@ export async function answerQuestion(raw: string, locale: Locale, sources: Assis
   const empty = { items: [], notes: [], sources: [], asOfUTC: null }
   const refused = (kind: AnswerKind, text: string): AssistantAnswer => ({ ...empty, kind, text, charged: false })
   const feedNotes = (feed: Omit<EventFeed, "events">) => [...(feed.limited ? [t.feed.limited] : []), ...(feed.state === "stale" ? [t.feed.stale] : [])]
-  const feedSource = (feed: Omit<EventFeed, "events">) => ({ sources: [{ label: feed.source, url: FEED_URL }], asOfUTC: feed.fetchedAt })
+  const feedSource = (feed: Omit<EventFeed, "events">) => ({ sources: [{ label: t.reports.verifiedData, url: null }], asOfUTC: feed.fetchedAt })
 
   if (PREDICTION.test(question)) return refused("declined", copy.declined)
 

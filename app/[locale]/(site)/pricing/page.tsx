@@ -1,13 +1,19 @@
 import type { Metadata } from "next"
 import { PlanCards } from "@/components/billing/plan-cards"
-import { PageHeader } from "@/components/site/states"
+import { CtaBand, PageHeader } from "@/components/site/marketing/blocks"
+import { FaqSection } from "@/components/site/marketing/faq"
 import { PLANS } from "@/lib/billing/plans"
+import { getMarketing } from "@/lib/marketing"
 import { pageContext, type LocaleParams } from "@/lib/page-context"
 
-export const metadata: Metadata = { title: "Pricing" }
+export async function generateMetadata({ params }: LocaleParams): Promise<Metadata> {
+  const { locale, t } = await pageContext(params)
+  return { title: t.nav.pricing, description: getMarketing(locale).pricingPage.seoDescription }
+}
 
 export default async function PricingPage({ params }: LocaleParams) {
-  const { locale, t } = await pageContext(params)
+  const { locale, t, href } = await pageContext(params)
+  const m = getMarketing(locale)
   const fr = locale === "fr"
   const soon = t.pricing.soon
   const rows: [string, string, string, string][] = [
@@ -21,31 +27,48 @@ export default async function PricingPage({ params }: LocaleParams) {
   ]
 
   return (
-    <main id="main" className="mx-auto max-w-7xl px-4 sm:px-6">
-      <PageHeader title={t.pricing.title} lead={t.pricing.lead} />
-      <PlanCards />
-      <section aria-labelledby="compare" className="mt-14">
-        <h2 id="compare" className="text-2xl font-bold text-ink">{t.pricing.compare}</h2>
-        <div className="mt-4 overflow-x-auto rounded-xl border border-line bg-surface">
+    <main id="main">
+      <div className="relative overflow-hidden">
+        <div aria-hidden className="fs-dots pointer-events-none absolute inset-x-0 top-0 h-[420px] opacity-70 [mask-image:linear-gradient(to_bottom,#000,transparent)]" />
+        <div className="relative mx-auto max-w-7xl px-4 pt-12 sm:px-6 lg:pt-16">
+          <PageHeader crumbs={[[m.common.home, href("/")], [t.nav.pricing, href("/pricing")]]} title={t.pricing.title} lead={t.pricing.lead} />
+          <div className="mt-12"><PlanCards /></div>
+          <p className="mt-6 max-w-4xl text-sm leading-6 text-ink-2">{t.pricing.disclaimer}</p>
+        </div>
+      </div>
+
+      <section aria-labelledby="compare" className="mx-auto mt-20 max-w-7xl px-4 sm:px-6">
+        <h2 id="compare" data-reveal className="text-[1.75rem] font-semibold tracking-[-0.025em] text-ink">{t.pricing.compare}</h2>
+        <div data-reveal className="mt-8 overflow-x-auto rounded-2xl border border-line bg-surface shadow-[var(--shadow-sm)]">
           <table className="w-full min-w-[640px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-line text-ink">
-                <th scope="col" className="p-3 font-semibold">{t.pricing.benefit}</th>
-                {(["free", "plus", "premium"] as const).map((id) => <th key={id} scope="col" className="p-3 font-semibold">{PLANS[id].name}</th>)}
+            <caption className="sr-only">{t.pricing.compare}</caption>
+            <thead className="bg-surface-muted text-xs text-ink-3">
+              <tr>
+                <th scope="col" className="px-5 py-3 font-semibold">{t.pricing.benefit}</th>
+                {(["free", "plus", "premium"] as const).map((id) => <th key={id} scope="col" className="px-5 py-3 font-semibold">{PLANS[id].name}</th>)}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-line">
               {rows.map(([label, ...values]) => (
-                <tr key={label} className="border-b border-line last:border-0">
-                  <th scope="row" className="p-3 font-medium text-ink">{label}</th>
-                  {values.map((value, index) => <td key={index} className="p-3 text-ink-2">{value}</td>)}
+                <tr key={label}>
+                  <th scope="row" className="px-5 py-3.5 align-top font-medium text-ink">{label}</th>
+                  {values.map((value, index) => <td key={index} className="px-5 py-3.5 align-top text-ink-2">{value}</td>)}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </section>
-      <p className="mt-6 text-sm leading-6 text-ink-2">{t.pricing.disclaimer}</p>
+
+      <FaqSection
+        id="billing-faq"
+        title={m.pricingPage.faqTitle}
+        intro={m.pricingPage.faqIntro}
+        faqs={m.pricingPage.faqs}
+        more={{ before: m.common.moreAnswers, label: m.common.fullFaq, href: href("/faq") }}
+      />
+
+      <CtaBand title={m.pricingPage.ctaTitle} body={m.pricingPage.ctaBody} primary={{ href: href("/signup"), label: m.common.createAccount }} secondary={{ href: href("/features"), label: t.nav.allFeatures }} />
     </main>
   )
 }

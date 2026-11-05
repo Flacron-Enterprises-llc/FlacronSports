@@ -35,6 +35,25 @@
   --shadow-lg: 0 2px 4px rgb(10 26 51 / 0.04), 0 22px 48px -18px rgb(0 41 97 / 0.28);
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 
+  --fs-blue: #1e5bb8;
+
+  /* Marketing showcases (illustrative UI built from divs). */
+  --show-frame-border: rgb(10 26 51 / 0.12);
+  --show-chrome-bg: #f1f4f9;
+  --show-chrome-border: #dfe5ee;
+  --show-url-bg: #ffffff;
+  --show-url-text: #5c6b82;
+  --show-dot-1: #ff5f57;
+  --show-dot-2: #febc2e;
+  --show-dot-3: #28c840;
+  --show-shadow: 0 1px 2px rgb(10 26 51 / 0.06), 0 28px 64px -28px rgb(0 41 97 / 0.38), 0 0 0 1px rgb(255 255 255 / 0.6) inset;
+  --show-cursor-fill: #0a1a33;
+  --show-cursor-stroke: #ffffff;
+  --show-cursor-shadow: rgb(10 26 51 / 0.35);
+  --show-click: rgb(254 75 1 / 0.32);
+  --show-hl-bg: rgb(254 75 1 / 0.07);
+  --show-hl-bar: #fe4b01;
+
   --consent-on: #1a7f45;
   --consent-glass: color-mix(in oklab, var(--surface) 72%, transparent);
   --consent-glass-fallback: var(--surface-raised);
@@ -85,6 +104,24 @@
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-md: 0 1px 2px rgb(0 0 0 / 0.35), 0 8px 24px -8px rgb(0 0 0 / 0.55);
   --shadow-lg: 0 2px 4px rgb(0 0 0 / 0.3), 0 24px 56px -20px rgb(0 0 0 / 0.75);
+  --fs-blue: #5e8fe0;
+
+  --show-frame-border: rgb(255 255 255 / 0.09);
+  --show-chrome-bg: #0d1a2e;
+  --show-chrome-border: #1a2b45;
+  --show-url-bg: rgb(255 255 255 / 0.05);
+  --show-url-text: #8a9ab4;
+  --show-dot-1: #e0605a;
+  --show-dot-2: #d8a73a;
+  --show-dot-3: #45b05a;
+  --show-shadow: 0 0 0 1px rgb(255 255 255 / 0.02), 0 30px 80px -30px rgb(0 0 0 / 0.85), 0 1px 0 rgb(255 255 255 / 0.05) inset;
+  --show-cursor-fill: #ffffff;
+  --show-cursor-stroke: #050d1c;
+  --show-cursor-shadow: rgb(0 0 0 / 0.6);
+  --show-click: rgb(255 138 85 / 0.42);
+  --show-hl-bg: rgb(255 138 85 / 0.1);
+  --show-hl-bar: #ff8a55;
+
   --consent-on: #2f9e5f;
   --consent-glass: color-mix(in oklab, var(--surface) 70%, transparent);
   color-scheme: dark;
@@ -210,6 +247,90 @@ p { text-wrap: pretty; }
 .fs-prose ul { list-style: disc; margin: 0.6em 0; padding-left: 1.3em; }
 .fs-prose li { margin: 0.3em 0; }
 
+/* ------------------------------------------------------------- Marketing surfaces and motion */
+
+.fs-dots {
+  background-image: radial-gradient(rgb(10 26 51 / 0.09) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+[data-theme='dark'] .fs-dots { background-image: radial-gradient(rgb(255 255 255 / 0.06) 1px, transparent 1px); }
+
+/* Tailwind colour tokens here are bare var() values, so opacity modifiers do not apply to them. */
+.fs-tint-hot { background: color-mix(in oklab, var(--accent) 10%, transparent); }
+.fs-tint-good { background: color-mix(in oklab, var(--success) 12%, transparent); }
+.fs-tint-brand { background: color-mix(in oklab, var(--brand) 10%, transparent); }
+
+.fs-chip-good { color: var(--success); border-color: color-mix(in oklab, var(--success) 30%, transparent); background: color-mix(in oklab, var(--success) 8%, transparent); }
+.fs-chip-warn { color: var(--warning); border-color: color-mix(in oklab, var(--warning) 30%, transparent); background: color-mix(in oklab, var(--warning) 9%, transparent); }
+.fs-chip-live { color: var(--live); border-color: color-mix(in oklab, var(--live) 30%, transparent); background: color-mix(in oklab, var(--live) 8%, transparent); }
+.fs-chip-hot { color: var(--accent-text); border-color: color-mix(in oklab, var(--accent) 35%, transparent); background: color-mix(in oklab, var(--accent) 8%, transparent); }
+
+.fs-radar {
+  background: conic-gradient(from 0deg, rgb(254 75 1 / 0) 0deg, rgb(254 75 1 / 0) 300deg, rgb(254 75 1 / 0.28) 360deg);
+  animation: fs-spin 9s linear infinite;
+  border-radius: 9999px;
+}
+.fs-rings {
+  border-radius: 9999px;
+  background: radial-gradient(circle, transparent 0 22%, rgb(255 255 255 / 0.07) 22.2% 22.6%, transparent 22.8% 44%, rgb(255 255 255 / 0.07) 44.2% 44.6%, transparent 44.8% 66%, rgb(255 255 255 / 0.07) 66.2% 66.6%, transparent 66.8%);
+}
+@keyframes fs-spin { to { transform: rotate(360deg); } }
+
+/* The hidden state needs .js-reveal, which only running JS adds, so content stays visible without JS. */
+.js-reveal [data-reveal] {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 600ms var(--ease), transform 700ms var(--ease);
+  transition-delay: calc(var(--reveal-i, 0) * 70ms);
+}
+.js-reveal [data-reveal].is-visible { opacity: 1; transform: none; }
+
+@keyframes fs-fade { from { opacity: 0; } to { opacity: 1; } }
+.fs-fade { animation: fs-fade 300ms var(--ease) both; }
+
+@keyframes fs-pop { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+.fs-pop { animation: fs-pop 220ms var(--ease) both; }
+
+@keyframes fs-pulse-orange { 0%, 100% { box-shadow: 0 0 0 0 rgb(254 75 1 / 0.45); } 60% { box-shadow: 0 0 0 6px rgb(254 75 1 / 0); } }
+.fs-badge-dot { animation: fs-pulse-orange 2.4s ease-out infinite; }
+
+.fs-progress { transform-origin: 0 50%; transform: scaleX(var(--p, 0)); will-change: transform; }
+
+/* ------------------------------------------------------------- Marketing showcases */
+
+.fs-show { --rx: 0deg; --ry: 0deg; perspective: 1400px; }
+.fs-show-tilt { transform: rotateX(var(--rx)) rotateY(var(--ry)); transform-style: preserve-3d; transition: transform 500ms var(--ease); will-change: transform; }
+
+.js-reveal .fs-show:not(.is-in) .fs-st { opacity: 0; transform: translateY(10px); }
+.fs-st { transition: opacity 520ms var(--ease), transform 620ms var(--ease); transition-delay: calc(var(--i, 0) * 90ms + 150ms); }
+
+.js-reveal .fs-show:not(.is-in) .fs-grow-x { transform: scaleX(0); }
+.fs-grow-x { transform-origin: 0 50%; transition: transform 1000ms var(--ease); transition-delay: calc(var(--i, 0) * 80ms + 300ms); }
+
+.js-reveal .fs-show:not(.is-in) .fs-pop-in { opacity: 0; transform: scale(0.96) translateY(6px); }
+.fs-pop-in { transition: opacity 500ms var(--ease) 1400ms, transform 600ms var(--ease) 1400ms; }
+
+/* Simulated cursor; positions come from --x1..--y3 in % of the frame. */
+.fs-cursor { position: absolute; z-index: 5; left: var(--x1); top: var(--y1); width: 18px; height: 18px; pointer-events: none; opacity: 0; }
+.fs-show.is-in .fs-cursor { animation: fs-cursor 9s var(--ease) 1.2s infinite; }
+@keyframes fs-cursor {
+  0% { left: var(--x1); top: var(--y1); opacity: 0; }
+  6% { opacity: 1; }
+  28%, 36% { left: var(--x2); top: var(--y2); }
+  60%, 68% { left: var(--x3); top: var(--y3); }
+  92% { left: var(--x1); top: var(--y1); opacity: 1; }
+  100% { left: var(--x1); top: var(--y1); opacity: 0; }
+}
+.fs-cursor::after { content: ''; position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; border-radius: 9999px; background: var(--show-click); transform: scale(0); }
+.fs-show.is-in .fs-cursor::after { animation: fs-click 9s ease-out 1.2s infinite; }
+@keyframes fs-click { 0%, 30% { transform: scale(0); opacity: 0; } 33% { transform: scale(0.4); opacity: 1; } 40% { transform: scale(1.8); opacity: 0; } 62% { transform: scale(0); opacity: 0; } 65% { transform: scale(0.4); opacity: 1; } 72%, 100% { transform: scale(1.8); opacity: 0; } }
+
+.fs-show.is-in .fs-hl { animation: fs-hl 9s ease-in-out 1.2s infinite; }
+@keyframes fs-hl { 0%, 22% { background-color: transparent; } 30%, 40% { background-color: var(--show-hl-bg); box-shadow: inset 3px 0 0 var(--show-hl-bar); } 50%, 100% { background-color: transparent; box-shadow: none; } }
+
+.fs-float { animation: fs-float 7s ease-in-out infinite; }
+@keyframes fs-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -217,8 +338,18 @@ p { text-wrap: pretty; }
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+  .js-reveal [data-reveal] { opacity: 1; transform: none; }
+  .fs-radar { animation: none; }
+  .fs-progress { display: none; }
+  .fs-show-tilt { transform: none !important; }
+  .fs-cursor, .fs-cursor::after { display: none; }
+  .fs-show .fs-hl, .fs-float { animation: none !important; }
+  .js-reveal .fs-show:not(.is-in) .fs-st,
+  .js-reveal .fs-show:not(.is-in) .fs-pop-in { opacity: 1; transform: none; }
+  .js-reveal .fs-show:not(.is-in) .fs-grow-x { transform: none; }
 }
 
 @media print {
   .skip-link, .fs-consent { display: none !important; }
+  .fs-rise, [data-reveal] { animation: none !important; opacity: 1 !important; transform: none !important; }
 }

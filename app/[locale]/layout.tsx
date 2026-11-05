@@ -36,7 +36,7 @@ export function generateStaticParams() {
 }
 
 /** Applies the saved or system theme before first paint. */
-const THEME_SCRIPT = `(function(){var d=document.documentElement;try{var t=sessionStorage.getItem('fs-theme')||localStorage.getItem('fs-theme');if(t!=='light'&&t!=='dark'){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}d.dataset.theme=t}catch(e){}})()`
+const THEME_SCRIPT = `(function(){var d=document.documentElement;try{var t=sessionStorage.getItem('fs-theme')||localStorage.getItem('fs-theme');if(t!=='light'&&t!=='dark'){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}d.dataset.theme=t}catch(e){}if('IntersectionObserver' in window)d.classList.add('js-reveal')})()`
 
 export default async function RootLayout({ children, params }: { children: React.ReactNode; params: Promise<{ locale: string }> }) {
   const { locale } = await params

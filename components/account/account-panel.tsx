@@ -94,7 +94,7 @@ export function AccountPanel() {
           ) : (
             <Link href={href("/pricing")} className="rounded-md bg-orange px-4 py-2 text-sm font-semibold text-[#0a1a33] hover:bg-orange-hover">{t.account.choose}</Link>
           )}
-          <Link href={href("/settings")} className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-ink hover:bg-surface-muted">{t.settings.title}</Link>
+          <Link href={href("/app/settings")} className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-ink hover:bg-surface-muted">{t.settings.title}</Link>
           <button type="button" onClick={() => signOutUser().then(() => router.push(href("/")))} className="rounded-md px-4 py-2 text-sm font-semibold text-ink-2 hover:text-ink">{t.account.signOut}</button>
         </div>
       </section>

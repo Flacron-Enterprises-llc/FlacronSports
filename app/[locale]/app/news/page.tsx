@@ -23,7 +23,7 @@ export default async function NewsPage({ params, searchParams }: Props) {
       <PageHeader title={t.news.title} lead={t.news.lead} />
 
       {state === "unavailable" && <p role="alert" className="rounded-lg border border-line bg-surface p-3 text-sm text-bad">{t.reports.unavailable}</p>}
-      {state === "ok" && reports.length === 0 && <EmptyState title={t.news.empty} body={t.news.emptyBody} action={{ href: href("/scores"), label: t.news.cta }} />}
+      {state === "ok" && reports.length === 0 && <EmptyState title={t.news.empty} body={t.news.emptyBody} action={{ href: href("/app/scores"), label: t.news.cta }} />}
 
       {reports.length > 0 && (
         <>
@@ -41,11 +41,11 @@ export default async function NewsPage({ params, searchParams }: Props) {
               <li key={report.id} className="rounded-xl border border-line bg-surface p-4 shadow-[var(--shadow-sm)]">
                 <p className="text-xs font-semibold text-hot-text">{t.reports.label}</p>
                 <h2 className="mt-1 font-semibold text-ink">
-                  <Link href={href(`/news/${report.slug}`)} className="underline-offset-2 hover:underline">{report.title}</Link>
+                  <Link href={href(`/app/news/${report.slug}`)} className="underline-offset-2 hover:underline">{report.title}</Link>
                 </h2>
                 <p className="mt-1 text-sm text-ink-2">{report.competition}</p>
                 <p className="mt-3 border-t border-line pt-3 text-xs text-ink-3">
-                  {t.reports.source}: {report.sources.map((source) => source.provider).join(", ")}
+                  {t.reports.source}: {t.reports.verifiedData}
                   {report.publishedAt && <> · <LocalTime iso={report.publishedAt} mode="datetime" /></>}
                 </p>
               </li>

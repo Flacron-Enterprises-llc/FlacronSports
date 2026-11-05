@@ -45,8 +45,13 @@ const nextConfig = {
   },
   async redirects() {
     return [
-      { source: "/blog", destination: "/news", permanent: true },
-      { source: "/blog/:path*", destination: "/news", permanent: true },
+      { source: "/blog", destination: "/app/news", permanent: true },
+      { source: "/blog/:path*", destination: "/app/news", permanent: true },
+      { source: "/dashboard", destination: "/app/billing", permanent: true },
+      ...["scores", "watch", "news", "my-teams", "notifications", "assistant", "settings", "rooms", "match", "team", "standings"].flatMap((name) => [
+        { source: `/${name}`, destination: `/app/${name}`, permanent: true },
+        { source: `/${name}/:path*`, destination: `/app/${name}/:path*`, permanent: true },
+      ]),
     ]
   },
 }

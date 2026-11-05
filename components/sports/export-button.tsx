@@ -20,7 +20,7 @@ export function ExportButton({ matchId }: { matchId: string }) {
     const url = URL.createObjectURL(await response.blob())
     const link = document.createElement("a")
     link.href = url
-    link.download = `flacronsport-${matchId}.pdf`
+    link.download = "flacronsport-match-report.pdf"
     link.click()
     URL.revokeObjectURL(url)
     setState("idle")
@@ -33,7 +33,7 @@ export function ExportButton({ matchId }: { matchId: string }) {
       </button>
       {state === "no_credits" && (
         <p role="status" className="text-sm text-ink-2">
-          {t.match.exportNoCredits} <Link href={href("/assistant")} className="font-semibold text-hot-text underline">{t.match.exportBuy}</Link>
+          {t.match.exportNoCredits} <Link href={href("/app/assistant")} className="font-semibold text-hot-text underline">{t.match.exportBuy}</Link>
         </p>
       )}
       {state === "failed" && <p role="alert" className="text-sm text-bad">{t.account.failed}</p>}

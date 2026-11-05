@@ -88,7 +88,7 @@ export function AssistantPanel() {
             <ul className="mt-3 space-y-2">
               {answer.items.map((item) => (
                 <li key={item.matchId} className="rounded-lg border border-line p-3 text-sm">
-                  <Link href={href(`/match/${item.matchId}`)} className="font-semibold text-hot-text hover:underline">{item.title}</Link>
+                  <Link href={href(`/app/match/${item.matchId}`)} className="font-semibold text-hot-text hover:underline">{item.title}</Link>
                   {item.score && <span className="ml-2 font-semibold text-ink tabular">{item.score}</span>}
                   <p className="text-ink-2">{item.competition} · {t.status[item.status]}{item.startUTC && <> · <LocalTime iso={item.startUTC} mode="datetime" /></>}</p>
                 </li>

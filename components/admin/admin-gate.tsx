@@ -192,7 +192,7 @@ export function AdminGate() {
 
   if (!role) {
     if (access === "mfa") {
-      return <p role="status" className="text-ink-2">{t.admin.mfaRequired} <Link className="font-semibold text-hot-text underline" href={href("/settings/security")}>{t.security.title}</Link></p>
+      return <p role="status" className="text-ink-2">{t.admin.mfaRequired} <Link className="font-semibold text-hot-text underline" href={href("/app/settings/security")}>{t.security.title}</Link></p>
     }
     return <p role="status" className="text-ink-2">{access === "checking" ? t.admin.checking : t.admin.denied}</p>
   }

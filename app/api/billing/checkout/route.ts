@@ -46,8 +46,8 @@ export async function POST(request: Request) {
       line_items: [{ price, quantity: 1 }],
       metadata,
       subscription_data: { metadata },
-      success_url: `${origin}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/dashboard?checkout=canceled`,
+      success_url: `${origin}/app/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/app/billing?checkout=canceled`,
     })
 
     return NextResponse.json({ url: session.url })

@@ -32,7 +32,7 @@ export default async function ReportPage({ params }: Props) {
   }
   if (!report && !failed) notFound()
 
-  const back = <Link href={href("/news")} className="text-sm font-semibold text-hot-text hover:underline">{t.reports.back}</Link>
+  const back = <Link href={href("/app/news")} className="text-sm font-semibold text-hot-text hover:underline">{t.reports.back}</Link>
 
   if (!report) {
     return (
@@ -43,7 +43,7 @@ export default async function ReportPage({ params }: Props) {
     )
   }
 
-  const subject = encodeURIComponent(`${t.reports.reportError}: ${report.title} (${report.id})`)
+  const subject = encodeURIComponent(`${t.reports.reportError}: ${report.title}`)
 
   return (
     <main id="main" className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
@@ -65,10 +65,10 @@ export default async function ReportPage({ params }: Props) {
         <dl className="mt-4 grid gap-3 border-t border-line pt-4 text-sm sm:grid-cols-3">
           {report.publishedAt && <div><dt className="text-ink-3">{t.reports.published}</dt><dd className="text-ink"><LocalTime iso={report.publishedAt} mode="datetime" /></dd></div>}
           <div><dt className="text-ink-3">{t.reports.updated}</dt><dd className="text-ink"><LocalTime iso={report.updatedAt} mode="datetime" /></dd></div>
-          <div><dt className="text-ink-3">{t.reports.source}</dt><dd className="text-ink">{report.sources.map((source) => source.provider).join(", ")}</dd></div>
+          <div><dt className="text-ink-3">{t.reports.source}</dt><dd className="text-ink">{t.reports.verifiedData}</dd></div>
         </dl>
         <div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold">
-          <Link href={href(`/match/${report.matchId}`)} className="text-hot-text hover:underline">{t.reports.matchLink}</Link>
+          <Link href={href(`/app/match/${report.matchId}`)} className="text-hot-text hover:underline">{t.reports.matchLink}</Link>
           <a href={`mailto:${CORRECTIONS_EMAIL}?subject=${subject}`} className="text-hot-text hover:underline">{t.reports.reportError}</a>
         </div>
       </article>

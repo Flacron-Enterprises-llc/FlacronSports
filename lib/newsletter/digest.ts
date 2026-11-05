@@ -69,7 +69,7 @@ export function digestEmail(uid: string, prefs: Preferences, digest: Digest, to:
     subject: digest.subject,
     ...brandedEmail({
       heading: copy.heading, body: copy.intro, lines: digest.lines, cta: copy.cta,
-      url: `${siteUrl}${localePath(prefs.locale, "/scores")}`,
+      url: `${siteUrl}${localePath(prefs.locale, "/app/scores")}`,
       footnote: copy.footnote, siteUrl, lang: prefs.locale,
       footerLink: { label: copy.unsubscribe, url: unsubscribe },
     }),

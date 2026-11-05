@@ -35,7 +35,7 @@ export default async function ScoresPage({ params, searchParams }: Props) {
     const merged = { sport, status: search.status, date: search.date, q: q || undefined, ...overrides }
     for (const [key, value] of Object.entries(merged)) if (value && value !== "all") query.set(key, value)
     const text = query.toString()
-    return href(text ? `/scores?${text}` : "/scores")
+    return href(text ? `/app/scores?${text}` : "/app/scores")
   }
 
   const chip = (active: boolean) =>

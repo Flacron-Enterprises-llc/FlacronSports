@@ -42,11 +42,11 @@ export function AppTour() {
 
   const steps = useMemo<Step[]>(() => {
     const base: Step[] = [
-      { id: "scores", target: "/scores" },
-      { id: "watch", target: "/watch" },
-      { id: "teams", target: "/my-teams" },
+      { id: "scores", target: "/app/scores" },
+      { id: "watch", target: "/app/watch" },
+      { id: "teams", target: "/app/my-teams" },
     ]
-    return [...base, { id: plan === "free" ? "upgrade" : "billing", target: plan === "free" ? "/pricing" : "account" }, { id: "settings", target: "account" }]
+    return [...base, { id: plan === "free" ? "upgrade" : "billing", target: "/app/billing" }, { id: "settings", target: "/app/settings" }]
   }, [plan])
 
   useEffect(() => {
@@ -139,7 +139,7 @@ export function AppTour() {
             {index > 0 && <button type="button" onClick={() => setIndex(index - 1)} className="rounded-md border border-line px-3 py-1.5 text-sm font-semibold text-ink">{t.tour.back}</button>}
             <button
               type="button"
-              onClick={() => (last ? (finish(), step.id === "settings" && router.push(href("/settings"))) : setIndex(index + 1))}
+              onClick={() => (last ? (finish(), step.id === "settings" && router.push(href("/app/settings"))) : setIndex(index + 1))}
               className="rounded-md bg-navy px-3 py-1.5 text-sm font-semibold text-white hover:bg-navy-deep"
             >
               {last ? t.tour.finish : t.tour.next}

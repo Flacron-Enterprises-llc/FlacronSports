@@ -45,7 +45,7 @@ export function PaymentStatus() {
     <div role="status" aria-live="polite" className="mx-auto max-w-md rounded-2xl border border-line bg-surface p-8 text-center shadow-[var(--shadow-md)]">
       <h1 className="text-2xl font-bold text-ink">{title}</h1>
       <p className="mt-2 text-sm text-ink-2">{body}</p>
-      {state !== "confirming" && <Link href={href("/dashboard")} className="mt-5 inline-block font-semibold text-hot-text underline">{t.paid.go}</Link>}
+      {state !== "confirming" && <Link href={href("/app/billing")} className="mt-5 inline-block font-semibold text-hot-text underline">{t.paid.go}</Link>}
     </div>
   )
 }

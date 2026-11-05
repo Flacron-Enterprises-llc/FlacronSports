@@ -37,7 +37,9 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
     if (!verified) return router.push(href("/verify-email"))
     const pending = pendingPlan()
     if (pending) return startCheckout(pending)
-    router.push(href(mode === "signup" ? "/pricing" : "/dashboard"))
+    const next = params?.get("next")
+    const safeNext = next?.startsWith("/app") ? next : null
+    router.push(href(safeNext ?? (mode === "signup" ? "/pricing" : "/app")))
   }
 
   const submit = async (event: React.FormEvent) => {

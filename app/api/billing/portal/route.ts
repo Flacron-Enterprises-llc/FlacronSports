@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     const session = await getStripe().billingPortal.sessions.create({
       customer,
       configuration: process.env.STRIPE_PORTAL_CONFIGURATION || undefined,
-      return_url: `${origin}/dashboard`,
+      return_url: `${origin}/app/billing`,
     })
     return NextResponse.json({ url: session.url })
   } catch (error) {

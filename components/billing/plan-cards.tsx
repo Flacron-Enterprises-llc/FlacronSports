@@ -99,7 +99,7 @@ export function PlanCards() {
               {current === id ? (
                 <p className="rounded-md border border-line py-2 text-center text-sm font-semibold text-ink-2">{t.pricing.current}</p>
               ) : id === "free" ? (
-                <Link href={href(user ? "/dashboard" : "/signup")} className="rounded-md border border-line py-2 text-center text-sm font-semibold text-ink hover:bg-surface-muted">{t.pricing.free}</Link>
+                <Link href={href(user ? "/app/billing" : "/signup")} className="rounded-md border border-line py-2 text-center text-sm font-semibold text-ink hover:bg-surface-muted">{t.pricing.free}</Link>
               ) : user ? (
                 <button type="button" disabled={pending !== null} onClick={() => buy(id)} className="rounded-md bg-orange py-2 text-sm font-semibold text-[#0a1a33] hover:bg-orange-hover disabled:opacity-60">
                   {pending === id ? t.pricing.opening : `${t.pricing.choose} ${plan.name}`}

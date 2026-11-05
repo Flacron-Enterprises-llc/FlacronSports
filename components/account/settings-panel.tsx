@@ -68,7 +68,7 @@ export function SettingsPanel() {
         <h2 id="s-general" className="text-lg font-semibold text-ink">{t.settings.general}</h2>
         <label className={ROW}>
           {t.settings.language}
-          <select className="rounded-md border border-line bg-surface px-2 py-1" value={locale} onChange={(event) => { void save({ locale: event.target.value as "en" | "fr" }); router.push(event.target.value === "fr" ? "/fr/settings" : "/settings") }}>
+          <select className="rounded-md border border-line bg-surface px-2 py-1" value={locale} onChange={(event) => { void save({ locale: event.target.value as "en" | "fr" }); router.push(event.target.value === "fr" ? "/fr/app/settings" : "/app/settings") }}>
             <option value="en">English</option>
             <option value="fr">Français</option>
           </select>

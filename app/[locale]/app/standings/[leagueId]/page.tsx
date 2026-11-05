@@ -30,7 +30,7 @@ export default async function StandingsPage({ params }: Props) {
       <PageHeader title={table.league ?? copy.title} lead={table.season ? `${copy.season}: ${table.season}` : undefined} />
 
       {table.state === "unavailable" && <p role="alert" className="rounded-lg border border-line bg-surface p-3 text-sm text-bad">{copy.unavailable}</p>}
-      {table.state === "empty" && <EmptyState title={copy.empty} body={copy.emptyBody} action={{ href: href("/scores"), label: copy.browse }} />}
+      {table.state === "empty" && <EmptyState title={copy.empty} body={copy.emptyBody} action={{ href: href("/app/scores"), label: copy.browse }} />}
 
       {table.state === "ok" && (
         <div className="overflow-x-auto rounded-xl border border-line bg-surface">
@@ -61,7 +61,7 @@ export default async function StandingsPage({ params }: Props) {
       <div className="mt-4 space-y-1 text-xs leading-5 text-ink-3">
         {table.limited && table.state === "ok" && <p>{copy.limited}</p>}
         <p>
-          {t.feed.source}: {table.source} · {t.feed.updated}: <LocalTime iso={table.fetchedAt} mode="datetime" />
+          {t.feed.updated}: <LocalTime iso={table.fetchedAt} mode="datetime" />
           {table.state === "ok" && <> · {copy.sourceUpdated}: {table.sourceUpdatedAt ? <LocalTime iso={table.sourceUpdatedAt} mode="datetime" /> : copy.notSupplied}</>}
         </p>
       </div>

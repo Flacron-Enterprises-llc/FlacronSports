@@ -12,7 +12,7 @@ export default async function SettingsPage({ params }: LocaleParams) {
     <main id="main" className="mx-auto max-w-3xl px-4 sm:px-6">
       <PageHeader title={t.settings.title} />
       <SettingsPanel />
-      <p className="mt-6 text-sm"><Link href={href("/settings/security")} className="font-semibold text-hot-text hover:underline">{t.security.title}</Link></p>
+      <p className="mt-6 text-sm"><Link href={href("/app/settings/security")} className="font-semibold text-hot-text hover:underline">{t.security.title}</Link></p>
     </main>
   )
 }

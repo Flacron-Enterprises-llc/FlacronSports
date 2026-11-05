@@ -23,7 +23,7 @@ export default async function MatchPage({ params }: { params: Promise<{ locale: 
   }
   if (!event && !failed) notFound()
 
-  const back = <Link href={href("/scores")} className="text-sm font-semibold text-hot-text hover:underline">{t.match.back}</Link>
+  const back = <Link href={href("/app/scores")} className="text-sm font-semibold text-hot-text hover:underline">{t.match.back}</Link>
 
   if (!event) {
     return (
@@ -62,7 +62,6 @@ export default async function MatchPage({ params }: { params: Promise<{ locale: 
         <dl className="mt-6 grid gap-3 border-t border-line pt-4 text-sm sm:grid-cols-2">
           <div><dt className="text-ink-3">{t.match.kickoff}</dt><dd className="text-ink">{event.scheduledStartUTC ? <LocalTime iso={event.scheduledStartUTC} mode="datetime" /> : t.match.tbd}</dd></div>
           {event.venue && <div><dt className="text-ink-3">{t.match.venue}</dt><dd className="text-ink">{event.venue}</dd></div>}
-          <div><dt className="text-ink-3">{t.feed.source}</dt><dd className="text-ink">{event.provider.name}</dd></div>
         </dl>
         <ExportButton matchId={event.id} />
       </section>

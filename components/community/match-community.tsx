@@ -89,7 +89,7 @@ export function MatchCommunity({ matchId, predictable, home, away }: { matchId: 
       <h2 className="text-lg font-semibold text-ink">{t.community.title}</h2>
       <Predictions matchId={matchId} predictable={predictable} home={home} away={away} />
       <Leaderboard />
-      <Link href={href(`/rooms?match=${matchId}`)} className="block text-sm font-semibold text-hot-text hover:underline">{t.community.rooms}</Link>
+      <Link href={href(`/app/rooms?match=${matchId}`)} className="block text-sm font-semibold text-hot-text hover:underline">{t.community.rooms}</Link>
       <div>
         <h3 className="mb-2 font-semibold text-ink">{t.community.chat}</h3>
         <MessageList scope="match" scopeId={matchId} path={`/api/matches/${matchId}/chat`} />

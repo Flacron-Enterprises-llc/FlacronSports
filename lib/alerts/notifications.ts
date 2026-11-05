@@ -67,7 +67,7 @@ async function deliver(deps: AlertDeps, user: UserRow, event: SportEvent, type: 
   const { db, now, siteUrl } = deps
   const { uid, prefs } = user
   const content = buildAlert(event, type, prefs)
-  const path = `/match/${event.id}`
+  const path = `/app/match/${event.id}`
   const createdAt = now.toISOString()
   const record: NotificationRecord = {
     uid, eventId: event.id, type, ...content, path, locale: prefs.locale, createdAt,

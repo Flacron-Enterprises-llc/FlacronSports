@@ -1,5 +1,5 @@
 // Synthetic provider records for isolated tests only.
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { getDictionary } from "@/lib/i18n"
 import { COOKIE_CATEGORIES, getPolicy, POLICIES } from "@/lib/legal/content"
@@ -104,5 +104,24 @@ describe("localization and policies", () => {
     expect(source).toContain("fixed inset-x-0 bottom-0")
     expect(source).toContain("fs-glass")
     expect(source).toMatch(/\$\{BUTTON\} \$\{GHOST\}.*rejectNonEssential\("banner"\)/)
+  })
+})
+
+describe("users never see internal values", () => {
+  const walk = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const path = `${dir}/${entry.name}`
+      return entry.isDirectory() ? walk(path) : /\.tsx?$/.test(path) ? [path] : []
+    })
+
+  it("keeps vendor names out of pages, components and copy", () => {
+    const staffOnly = /admin/
+    const files = ["components", "app/[locale]"].flatMap(walk).filter((path) => !staffOnly.test(path))
+    const copy = JSON.stringify(getDictionary("en")) + JSON.stringify(getDictionary("fr"))
+    expect(copy).not.toMatch(/TheSportsDB|preview feed|API-Sports/)
+    for (const path of files) {
+      const source = readFileSync(path, "utf8")
+      expect(source, path).not.toMatch(/provider\.name|\{feed\.source\}|\{table\.source\}|source\.provider/)
+    }
   })
 })

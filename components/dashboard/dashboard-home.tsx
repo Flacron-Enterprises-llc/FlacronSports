@@ -5,6 +5,7 @@ import { Check, Circle } from "lucide-react"
 import { usePreferences } from "@/components/account/prefs-provider"
 import { EventCard, FeedNotice } from "@/components/sports/event-card"
 import type { Dictionary } from "@/lib/i18n"
+import { useLocale } from "@/lib/use-locale"
 import type { EventFeed, SportEvent } from "@/lib/sports/types"
 
 function Section({ title, events, t, href, all }: { title: string; events: SportEvent[]; t: Dictionary; href: (path: string) => string; all?: string }) {
@@ -22,7 +23,8 @@ function Section({ title, events, t, href, all }: { title: string; events: Sport
   )
 }
 
-export function DashboardHome({ feed, t, href }: { feed: EventFeed; t: Dictionary; href: (path: string) => string }) {
+export function DashboardHome({ feed }: { feed: EventFeed }) {
+  const { t, href } = useLocale()
   const { prefs } = usePreferences()
   const mine = feed.events.filter((event) => event.participants.some((participant) => prefs.favorites.includes(participant.name)))
   const live = feed.events.filter((event) => event.status === "live")

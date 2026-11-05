@@ -5,6 +5,11 @@ import { NextResponse, type NextRequest } from "next/server"
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl
 
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? ""
+  if (host.startsWith("www.")) {
+    return NextResponse.redirect(`https://${host.slice(4)}${pathname}${search}`, 308)
+  }
+
   if (pathname === "/fr" || pathname.startsWith("/fr/")) {
     const response = NextResponse.next()
     response.headers.set("Link", alternates(request, pathname.slice(3) || "/", "fr"))

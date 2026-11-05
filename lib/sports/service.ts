@@ -157,17 +157,17 @@ export async function getEvents(options: { date?: string; sport?: SportId; refre
 }
 
 /** A rate-limited lookup can still be answered from a daily feed already in memory. */
-async function lookupRaw(providerId: string): Promise<RawLookup | undefined> {
+async function lookupRaw(providerId: string): Promise<RawEvent | undefined> {
   const inMemory = () => {
     for (const entry of memory.values()) {
-      const found = (entry.data as { events?: RawLookup[] | null }).events?.find((event) => event.idEvent === providerId)
+      const found = (entry.data as { events?: RawEvent[] | null }).events?.find((event) => event.idEvent === providerId)
       if (found) return found
     }
     return undefined
   }
   const known = inMemory()
   if (known) return known
-  return (await fetchJson<{ events: RawLookup[] | null }>(`lookupevent.php?id=${providerId}`)).events?.[0]
+  return (await fetchJson<{ events: RawEvent[] | null }>(`lookupevent.php?id=${providerId}`)).events?.[0]
 }
 
 export async function getEvent(id: string): Promise<SportEvent | null> {

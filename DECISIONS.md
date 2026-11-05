@@ -1,0 +1,20 @@
+# Decisions
+
+Owner direction takes priority over older code. Each entry records why.
+
+| # | Date | Decision | Reason |
+|---|---|---|---|
+| D-001 | 2026-11-05 | Old pages and theme are not a baseline. The UI was rebuilt from the Flacron Intel design language and the spec. | Owner instruction. |
+| D-002 | 2026-11-05 | Tokens copied in value from Flacron Intel (`packages/design-tokens/tokens.json`): navy `#002961`, orange `#FE4B01`, Sora and Inter (SIL OFL, licences in `fonts/`). Tailwind stays on v3. | Same brand family. A v4 migration adds risk without user benefit. |
+| D-003 | 2026-11-05 | Logo assets are extracted from the developer PDF: full logo, FS mark, reversed mark, PWA icons. | Repo `logo.png` was black and orange text, which is not the specified logo. Vector source would be better. |
+| D-004 | 2026-11-05 | The owner's "bottom full-width glassy" request is the cookie consent bar, matching the frosted strip in Flacron Intel and EnergyVerse. Legal links also sit in the footer band. | The legal checklist requires consent controls, and the reference code uses this pattern. Confirm with owner. |
+| D-005 | 2026-11-05 | Legal text is published word for word in English. French pages state it is English only. | A self-made translation of legal terms could change their meaning. Needs a reviewed translation. |
+| D-006 | 2026-11-05 | Email is Amazon SES only via SESv2 and the ECS task role. SendGrid, Resend and ConvertKit are removed. | Owner spec. The earlier `.env.example` wrongly listed SendGrid from old code. |
+| D-007 | 2026-11-05 | The old content pipeline (blog, automation, Gemini, newsletter, image service) is removed, and old articles are hidden. Nothing was deleted from Firestore. | It was Vercel-bound and not source-grounded, used a dead data key, and could invent content. Grounded publishing is rebuilt to spec. |
+| D-008 | 2026-11-05 | Firestore remains the store for billing and entitlements, pending AWS review. | Already the live store, and the handoff warns against a split-brain store. The final choice needs the live AWS and Firebase audit. |
+| D-009 | 2026-11-05 | Entitlement comes only from the verified webhook. Each event re-reads the subscription from Stripe. | Replays and out-of-order events converge, and the browser cannot grant access. |
+| D-010 | 2026-11-05 | Grace: 3 days after a failed renewal. A delayed renewal webhook gets 3 days of leeway, then access reverts to Free. | Spec asks for server-side cutoffs but sets no number. Owner can change this in `lib/billing/entitlements.ts`. |
+| D-011 | 2026-11-05 | TheSportsDB test key `123` runs as a labelled limited preview. Only football and basketball are enabled. | The old key `3` is disabled by the provider. The test tier is a few events per query with no commercial rights confirmed. |
+| D-012 | 2026-11-05 | Team badges are not shown. | Spec allows permitted badges only, and rights are unconfirmed. |
+| D-013 | 2026-11-05 | Live Stripe keys and live events are refused unless `STRIPE_LIVE_MODE_APPROVED=true`. | Owner requires test mode until explicit approval. |
+| D-014 | 2026-11-05 | Work stays on branch `audit/p0-remediation`, not `main`. | The live site appears to deploy from this repo on Render, and old premium users need a migration first. |

@@ -1,37 +1,35 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAdminDb } from '@/lib/firebase-admin';
+import type { NextApiRequest, NextApiResponse } from "next"
+import { z } from "zod"
+import { ApiError, authenticate } from "@/lib/api-auth"
+import { getAdminDb } from "@/lib/firebase-admin"
+
+const settingsSchema = z.object({
+  leagues: z.array(z.string().max(60)).max(50),
+  region: z.string().min(1).max(60),
+  language: z.string().min(1).max(10),
+  newsletterEnabled: z.boolean().optional().default(false),
+})
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  const { uid, leagues, region, language, newsletterEnabled, userEmail } = req.body;
-
-  if (!uid || !leagues || !region || !language || !userEmail) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" })
 
   try {
-    const db = getAdminDb();
-    
-    // Store user email in users collection
-    await db.collection('users').doc(uid).set({
-      email: userEmail,
-      updatedAt: new Date().toISOString(),
-    }, { merge: true });
+    const user = await authenticate(req.headers.authorization)
+    if (!user.email) throw new ApiError(400, "no_email", "This account has no email address")
 
-    // Store dashboard settings in a separate collection
-    await db.collection('dashboard_settings').doc(userEmail).set({
-      leagues,
-      region,
-      language,
-      newsletterEnabled,
-      updatedAt: new Date().toISOString(),
-    });
+    const parsed = settingsSchema.safeParse(req.body)
+    if (!parsed.success) throw new ApiError(400, "invalid_request", "Missing required fields")
 
-    return res.status(200).json({ success: true });
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message || 'Failed to save settings' });
+    const db = getAdminDb()
+    if (!db) throw new ApiError(503, "storage_unavailable", "Settings are temporarily unavailable")
+
+    const updatedAt = new Date().toISOString()
+    await db.collection("users").doc(user.uid).set({ email: user.email, updatedAt }, { merge: true })
+    await db.collection("dashboard_settings").doc(user.email).set({ ...parsed.data, updatedAt })
+
+    return res.status(200).json({ success: true })
+  } catch (error) {
+    if (error instanceof ApiError) return res.status(error.status).json({ error: error.message })
+    return res.status(500).json({ error: "Failed to save settings" })
   }
-} 
+}

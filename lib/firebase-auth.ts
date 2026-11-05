@@ -7,6 +7,9 @@ import {
   GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  reload,
   User
 } from 'firebase/auth';
 
@@ -84,6 +87,7 @@ export const signUpWithEmail = async (email: string, password: string) => {
   try {
     const authInstance = getFirebaseAuth();
     const userCredential = await createUserWithEmailAndPassword(authInstance, email, password);
+    await sendEmailVerification(userCredential.user);
     return { user: userCredential.user, error: null };
   } catch (error: any) {
     return { user: null, error: error.message };
@@ -129,3 +133,19 @@ export const getCurrentUser = () => {
 export function getAuthInstance() {
   return getFirebaseAuth();
 } 
+
+export const resendVerification = async () => {
+  const user = getAuthInstance().currentUser;
+  if (user) await sendEmailVerification(user);
+};
+
+/** Refreshes the signed-in user so a just-completed verification is seen. */
+export const refreshVerification = async (): Promise<boolean> => {
+  const user = getAuthInstance().currentUser;
+  if (!user) return false;
+  await reload(user);
+  if (user.emailVerified) await user.getIdToken(true);
+  return user.emailVerified;
+};
+
+export const requestPasswordReset = (email: string) => sendPasswordResetEmail(getAuthInstance(), email);

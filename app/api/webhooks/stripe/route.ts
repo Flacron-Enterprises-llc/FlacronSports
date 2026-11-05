@@ -1,90 +1,40 @@
-import { headers } from "next/headers"
 import { NextResponse } from "next/server"
-import Stripe from "stripe"
-import { API_CONFIG } from "@/lib/api-config"
+import type Stripe from "stripe"
+import { firestoreBillingStore, ownsInvoice } from "@/lib/billing/firestore-store"
+import { getStripe, liveModeApproved } from "@/lib/billing/stripe-client"
+import { processStripeEvent } from "@/lib/billing/webhook-core"
 
-// Mark this route as dynamic to prevent static analysis during build
-export const dynamic = 'force-dynamic'
-export const runtime = 'nodejs'
-
-// Lazy initialization of Stripe to avoid build-time errors
-function getStripe() {
-  const secretKey = API_CONFIG.payments.stripe.secretKey;
-  if (!secretKey) {
-    throw new Error('Stripe secret key not configured');
-  }
-  return new Stripe(secretKey, {
-    apiVersion: "2025-05-28.basil",
-  });
-}
+export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
 
 export async function POST(request: Request) {
-  const stripe = getStripe()
-  const body = await request.text()
-  const headersList = await headers()
-  const signature = headersList.get("stripe-signature")
+  const secret = process.env.STRIPE_WEBHOOK_SECRET
+  if (!secret) return NextResponse.json({ error: "Webhook is not configured" }, { status: 503 })
 
-  if (!signature) {
-    return NextResponse.json(
-      { error: "Missing stripe-signature header" },
-      { status: 400 }
-    )
+  const signature = request.headers.get("stripe-signature")
+  if (!signature) return NextResponse.json({ error: "Missing stripe-signature header" }, { status: 400 })
+
+  const stripe = getStripe()
+  const payload = await request.text() // must stay raw: signature covers the exact bytes
+
+  let event: Stripe.Event
+  try {
+    event = stripe.webhooks.constructEvent(payload, signature, secret)
+  } catch {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 400 })
   }
 
   try {
-    const event = stripe.webhooks.constructEvent(
-      body,
-      signature,
-      API_CONFIG.payments.stripe.webhookSecret
-    )
-
-    // Handle the event
-    switch (event.type) {
-      case "customer.subscription.created":
-        const subscription = event.data.object as Stripe.Subscription
-        // Handle subscription creation
-        // Update user's subscription status in your database
-        console.log("Subscription created:", subscription.id)
-        break
-
-      case "customer.subscription.updated":
-        const updatedSubscription = event.data.object as Stripe.Subscription
-        // Handle subscription update
-        // Update user's subscription status in your database
-        console.log("Subscription updated:", updatedSubscription.id)
-        break
-
-      case "customer.subscription.deleted":
-        const deletedSubscription = event.data.object as Stripe.Subscription
-        // Handle subscription deletion
-        // Update user's subscription status in your database
-        console.log("Subscription deleted:", deletedSubscription.id)
-        break
-
-      case "invoice.payment_succeeded":
-        const invoice = event.data.object as Stripe.Invoice
-        // Handle successful payment
-        // Update user's payment status in your database
-        console.log("Payment succeeded:", invoice.id)
-        break
-
-      case "invoice.payment_failed":
-        const failedInvoice = event.data.object as Stripe.Invoice
-        // Handle failed payment
-        // Notify user and update payment status in your database
-        console.log("Payment failed:", failedInvoice.id)
-        break
-
-      default:
-        console.log(`Unhandled event type: ${event.type}`)
-    }
-
-    return NextResponse.json({ received: true })
-  } catch (err) {
-    console.error("Webhook error:", err)
-    return NextResponse.json(
-      { error: "Webhook handler failed" },
-      { status: 400 }
-    )
+    const outcome = await processStripeEvent(event, {
+      store: firestoreBillingStore,
+      retrieveSubscription: (id) => stripe.subscriptions.retrieve(id),
+      ownsInvoice,
+      allowLivemode: liveModeApproved(),
+    })
+    return NextResponse.json({ received: true, outcome })
+  } catch (error) {
+    // A non-2xx response makes Stripe retry; the event was not claimed, so the retry is safe.
+    console.error("Stripe webhook failed", event.id, error instanceof Error ? error.message : "unknown")
+    return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 })
   }
-} 
+}

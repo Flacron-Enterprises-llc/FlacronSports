@@ -1,16 +1,30 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-    darkMode: ["class"],
+    darkMode: ["selector", '[data-theme="dark"]'],
     content: [
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
+        "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
-    "*.{js,ts,jsx,tsx,mdx}"
   ],
   theme: {
   	extend: {
+  		fontFamily: {
+  			display: ['var(--font-sora)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+  			sans: ['var(--font-inter)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+  		},
   		colors: {
+  			bg: 'var(--bg)',
+  			surface: { DEFAULT: 'var(--surface)', muted: 'var(--surface-muted)', raised: 'var(--surface-raised)' },
+  			line: { DEFAULT: 'var(--line)', strong: 'var(--line-strong)' },
+  			ink: { DEFAULT: 'var(--ink)', 2: 'var(--ink-2)', 3: 'var(--ink-3)' },
+  			brand: { DEFAULT: 'var(--brand)', on: 'var(--on-brand)' },
+  			navy: { DEFAULT: 'var(--fs-navy)', deep: 'var(--fs-navy-deep)' },
+  			orange: { DEFAULT: 'var(--fs-orange)', hover: 'var(--fs-orange-hover)' },
+  			hot: { DEFAULT: 'var(--accent)', text: 'var(--accent-text)', on: 'var(--on-accent)' },
+  			live: 'var(--live)',
+  			good: 'var(--success)',
+  			warn: 'var(--warning)',
+  			bad: 'var(--danger)',
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			card: {
@@ -33,10 +47,7 @@ const config: Config = {
   				DEFAULT: 'hsl(var(--muted))',
   				foreground: 'hsl(var(--muted-foreground))'
   			},
-  			accent: {
-  				DEFAULT: 'hsl(var(--accent))',
-  				foreground: 'hsl(var(--accent-foreground))'
-  			},
+  			accent: { DEFAULT: 'var(--surface-muted)', foreground: 'var(--ink)' },
   			destructive: {
   				DEFAULT: 'hsl(var(--destructive))',
   				foreground: 'hsl(var(--destructive-foreground))'

@@ -2,140 +2,223 @@
 @tailwind components;
 @tailwind utilities;
 
-/* FLACRONSPORT Color System */
+/* FlacronSport tokens. Values follow the shared Flacron design language
+   (navy #002961, orange #FE4B01); Tailwind names live in tailwind.config.ts. */
 :root {
-  --color-primary: #FF7F00;
-  --color-black: #111111;
-  --color-white: #FFFFFF;
-  --color-gray-light: #F4F4F4;
-  --color-gray-mid: #A8A8A8;
-  --color-gray-dark: #2E2E2E;
-  --color-success: #28A745;
-  --color-warning: #FFC107;
-  --color-error: #DC3545;
-  --color-info: #17A2B8;
-  --color-background: #FFFFFF;
-  --color-card: #FFFFFF;
-  --color-text: #2E2E2E;
-  --color-muted: #A8A8A8;
-  --color-border: #F4F4F4;
+  --fs-navy: #002961;
+  --fs-navy-deep: #001a3f;
+  --fs-orange: #fe4b01;
+  --fs-orange-hover: #e54300;
+
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface-muted: #eef2f7;
+  --surface-raised: #ffffff;
+  --line: #d6dde7;
+  --line-strong: #b4c0d0;
+  --ink: #0a1a33;
+  --ink-2: #3a4b66;
+  --ink-3: #5c6b82;
+  --brand: #002961;
+  --on-brand: #ffffff;
+  --accent: #fe4b01;
+  --accent-text: #c23a00;
+  --on-accent: #0a1a33;
+  --focus: #fe4b01;
+  --success: #1a7f45;
+  --warning: #9a6200;
+  --danger: #b4232c;
+  --live: #c8102e;
+
+  --shadow-sm: 0 1px 2px rgb(10 26 51 / 0.06);
+  --shadow-md: 0 1px 2px rgb(10 26 51 / 0.05), 0 6px 18px -6px rgb(10 26 51 / 0.12);
+  --shadow-lg: 0 2px 4px rgb(10 26 51 / 0.04), 0 22px 48px -18px rgb(0 41 97 / 0.28);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --consent-on: #1a7f45;
+  --consent-glass: color-mix(in oklab, var(--surface) 72%, transparent);
+  --consent-glass-fallback: var(--surface-raised);
+  color-scheme: light;
+
+  /* shadcn/ui primitives, expressed in the same palette */
+  --background: 216 33% 97%;
+  --foreground: 216 67% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 216 67% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 216 67% 12%;
+  --primary: 215 100% 19%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 214 32% 95%;
+  --secondary-foreground: 216 67% 12%;
+  --muted: 214 32% 95%;
+  --muted-foreground: 216 17% 43%;
+  --accent-hsl: 18 99% 50%;
+  --destructive: 357 66% 42%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214 25% 87%;
+  --input: 214 25% 87%;
+  --ring: 18 99% 50%;
+  --radius: 0.625rem;
 }
+
 [data-theme='dark'] {
-  --color-background: #181818;
-  --color-card: #232323;
-  --color-text: #F4F4F4;
-  --color-muted: #A8A8A8;
-  --color-border: #2E2E2E;
+  --bg: #050d1c;
+  --surface: #0b1729;
+  --surface-muted: #112038;
+  --surface-raised: #0f1d33;
+  --line: #1e3150;
+  --line-strong: #2c4469;
+  --ink: #f3f6fb;
+  --ink-2: #bac6d9;
+  --ink-3: #8a9ab4;
+  --brand: #8fb2ec;
+  --on-brand: #001a3f;
+  --accent: #fe6a2a;
+  --accent-text: #ff8a55;
+  --on-accent: #0a1a33;
+  --focus: #ff8a55;
+  --success: #4acb82;
+  --warning: #f0b44c;
+  --danger: #f17a82;
+  --live: #ff6b7f;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 1px 2px rgb(0 0 0 / 0.35), 0 8px 24px -8px rgb(0 0 0 / 0.55);
+  --shadow-lg: 0 2px 4px rgb(0 0 0 / 0.3), 0 24px 56px -20px rgb(0 0 0 / 0.75);
+  --consent-on: #2f9e5f;
+  --consent-glass: color-mix(in oklab, var(--surface) 70%, transparent);
+  color-scheme: dark;
+
+  --background: 219 70% 7%;
+  --foreground: 216 50% 97%;
+  --card: 215 58% 10%;
+  --card-foreground: 216 50% 97%;
+  --popover: 215 55% 13%;
+  --popover-foreground: 216 50% 97%;
+  --primary: 217 69% 74%;
+  --primary-foreground: 215 100% 12%;
+  --secondary: 215 53% 14%;
+  --secondary-foreground: 216 50% 97%;
+  --muted: 215 53% 14%;
+  --muted-foreground: 216 20% 62%;
+  --destructive: 356 80% 71%;
+  --destructive-foreground: 219 70% 7%;
+  --border: 215 45% 21%;
+  --input: 215 45% 21%;
+  --ring: 18 100% 67%;
 }
 
+html {
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-text-size-adjust: 100%;
+  scroll-padding-top: 88px;
+}
 body {
-  font-family: 'Inter', 'Montserrat', 'Roboto', 'Open Sans', Arial, sans-serif;
-  background: var(--color-background);
-  color: var(--color-text);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  text-rendering: optimizeLegibility;
 }
-h1, h2, h3, h4, h5, h6 {
-  color: var(--color-black);
-  font-weight: 700;
-  text-transform: uppercase;
+h1, h2, h3, h4 {
+  font-family: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.022em;
+  text-wrap: balance;
 }
-.text-muted {
-  color: var(--color-muted);
-  font-style: italic;
+p { text-wrap: pretty; }
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
-.text-highlight {
-  color: var(--color-primary);
-  font-weight: 600;
-  text-transform: uppercase;
+::selection { background: rgb(254 75 1 / 0.22); }
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Navy stadium band: deep navy, a faint pitch grid and one floodlight beam. */
+.fs-band {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(60% 80% at 85% 0%, rgb(30 91 184 / 0.35), transparent 60%),
+    radial-gradient(40% 50% at 10% 100%, rgb(254 75 1 / 0.14), transparent 70%),
+    var(--fs-navy-deep);
+  color: #fff;
 }
-.card {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  box-shadow: 0 2px 8px rgba(17,17,17,0.04);
+.fs-grid {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, #000 30%, transparent 85%);
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
-}
-
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-  .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+/* Glass surfaces fall back to solid colour wherever backdrop blur is missing. */
+.fs-glass { background: var(--consent-glass-fallback); }
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .fs-glass {
+    background: var(--consent-glass);
+    -webkit-backdrop-filter: blur(14px) saturate(1.5);
+    backdrop-filter: blur(14px) saturate(1.5);
   }
 }
 
-@layer base {
-  * {
-    @apply border-border;
+@keyframes fs-consent-in { from { opacity: 0; transform: translateY(100%); } to { opacity: 1; transform: none; } }
+.fs-consent { animation: fs-consent-in 420ms var(--ease) both; }
+
+@keyframes fs-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.fs-rise { animation: fs-rise 640ms var(--ease) both; animation-delay: calc(var(--i, 0) * 80ms); }
+
+@keyframes fs-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgb(200 16 46 / 0.45); } 60% { box-shadow: 0 0 0 6px rgb(200 16 46 / 0); } }
+.fs-live-dot { animation: fs-pulse 2.4s ease-out infinite; }
+
+.fs-skeleton { position: relative; overflow: hidden; background: var(--surface-muted); border-radius: 6px; }
+.fs-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+  animation: fs-shimmer 1.4s infinite;
+}
+[data-theme='dark'] .fs-skeleton::after { background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.06), transparent); }
+@keyframes fs-shimmer { to { transform: translateX(100%); } }
+
+.fs-link {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 0% 1.5px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  transition: background-size 280ms var(--ease), color 160ms;
+  padding-bottom: 1px;
+}
+.fs-link:hover, .fs-link:focus-visible { background-size: 100% 1.5px; }
+
+.skip-link { position: absolute; left: -9999px; top: 8px; z-index: 100; }
+.skip-link:focus {
+  left: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 8px 12px;
+  border-radius: 6px;
+  box-shadow: var(--shadow-md);
+}
+
+.fs-prose { color: var(--ink-2); font-size: 15px; line-height: 1.75; }
+.fs-prose h2 { color: var(--ink); font-size: 1.5rem; font-weight: 600; margin: 2.2em 0 0.5em; }
+.fs-prose h3 { color: var(--ink); font-size: 1.05rem; font-weight: 600; margin: 1.8em 0 0.3em; }
+.fs-prose p { margin: 0.6em 0; }
+.fs-prose ul { list-style: disc; margin: 0.6em 0; padding-left: 1.3em; }
+.fs-prose li { margin: 0.3em 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
+}
+
+@media print {
+  .skip-link, .fs-consent { display: none !important; }
 }

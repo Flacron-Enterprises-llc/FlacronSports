@@ -56,6 +56,13 @@ describe("provider feed", () => {
     expect(feed.events).toEqual([])
   })
 
+  it("answers a rate-limited lookup from the daily feed in memory", async () => {
+    vi.stubGlobal("fetch", async () => ok({ events: [event("7")] }))
+    await getEvents({ date: "2026-11-05", sport: "football" })
+    vi.stubGlobal("fetch", async () => limited())
+    expect((await getEvent("tsdb-7"))?.id).toBe("tsdb-7")
+  })
+
   it("turns a failed match lookup into a 503", async () => {
     vi.stubGlobal("fetch", async () => limited())
     await expect(getEvent("tsdb-1")).rejects.toBeInstanceOf(ApiError)

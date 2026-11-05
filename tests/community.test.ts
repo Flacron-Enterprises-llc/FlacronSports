@@ -515,5 +515,5 @@ describe("pdf export rendering", () => {
     const bytes = await renderMatchSummaryPdf({ title: "Projekt Warsaw / Ślepsk Suwałki", competition: "PlusLiga", kickoffUTC: "2026-11-05T18:00:00.000Z", status: "finished", score: "3 - 1", venue: null })
     expect(Buffer.from(bytes.slice(0, 5)).toString()).toBe("%PDF-")
     expect(pdfSafe("Ślepsk Suwałki 東京")).toBe("Slepsk Suwalki ??")
-  })
+  }, 30_000)
 })

@@ -98,11 +98,26 @@ export async function getEvents(options: { date?: string; sport?: SportId } = {}
   return { ...base, state: complete ? "ok" : "stale", events }
 }
 
+type RawLookup = RawEvent & { strSport?: string }
+
+/** A rate-limited lookup can still be answered from a daily feed already in memory. */
+async function lookupRaw(providerId: string): Promise<RawLookup | undefined> {
+  try {
+    const data = await fetchJson<{ events: RawLookup[] | null }>(`lookupevent.php?id=${providerId}`)
+    return data.events?.[0]
+  } catch (error) {
+    for (const entry of memory.values()) {
+      const found = (entry.data as { events?: RawLookup[] | null }).events?.find((event) => event.idEvent === providerId)
+      if (found) return found
+    }
+    throw error
+  }
+}
+
 export async function getEvent(id: string): Promise<SportEvent | null> {
   const match = id.match(/^tsdb-(\d+)$/)
   if (!match) return null
-  const data = await fetchJson<{ events: RawEvent[] | null }>(`lookupevent.php?id=${match[1]}`)
-  const raw = data.events?.[0] as (RawEvent & { strSport?: string }) | undefined
+  const raw = await lookupRaw(match[1])
   if (!raw) return null
   const sport = enabledSports().find((candidate) => candidate.providerKey === raw.strSport)
   return sport ? normalizeEvent(raw, sport.id) : null

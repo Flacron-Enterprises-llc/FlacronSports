@@ -118,6 +118,12 @@ describe("webhook idempotency and ordering", () => {
     expect(m.ledger).toHaveLength(1)
   })
 
+  it("reads the subscription from older invoice payloads too", async () => {
+    const m = memoryStore()
+    const e = event("invoice.payment_failed", { id: "in_2", subscription: "sub_1" })
+    expect(await processStripeEvent(e, deps(m.store, subscription()))).toBe("applied")
+  })
+
   it("ignores an older event that arrives late", () => {
     const newer = { lastEventCreated: 2000, stripeSubscriptionId: "sub_1", status: "canceled" } as EntitlementRecord
     const older = { lastEventCreated: 1000, stripeSubscriptionId: "sub_1", status: "active" } as EntitlementRecord
@@ -130,13 +136,13 @@ describe("webhook idempotency and ordering", () => {
     expect(shouldReplaceEntitlement(live, ended)).toBe(false)
   })
 
-  it("records a refund only for an invoice this app owns", async () => {
-    const charge = { id: "ch_1", metadata: {}, amount_refunded: 699, currency: "usd", invoice: "in_1" }
+  it("records a refund only for a customer this app owns", async () => {
+    const charge = { id: "ch_1", metadata: {}, amount_refunded: 699, currency: "usd", customer: "cus_1" }
     const owned = memoryStore()
-    const a = await processStripeEvent(event("charge.refunded", charge), { ...deps(owned.store, subscription()), ownsInvoice: async () => true })
+    const a = await processStripeEvent(event("charge.refunded", charge), { ...deps(owned.store, subscription()), ownsCustomer: async () => true })
     expect(a).toBe("applied")
     const foreign = memoryStore()
-    const b = await processStripeEvent(event("charge.refunded", charge), { ...deps(foreign.store, subscription()), ownsInvoice: async () => false })
+    const b = await processStripeEvent(event("charge.refunded", charge), { ...deps(foreign.store, subscription()), ownsCustomer: async () => false })
     expect(b).toBe("quarantined")
     expect(foreign.ledger).toHaveLength(0)
   })

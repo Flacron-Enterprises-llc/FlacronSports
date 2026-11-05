@@ -44,7 +44,7 @@ export interface WebhookDeps {
   store: BillingStore
   retrieveSubscription(id: string): Promise<Stripe.Subscription>
   /** Resolves ownership for objects that carry no app metadata, such as refunded charges. */
-  ownsInvoice?(invoiceId: string): Promise<boolean>
+  ownsCustomer?(customerId: string): Promise<boolean>
   allowLivemode?: boolean
   env?: Record<string, string | undefined>
 }
@@ -57,9 +57,10 @@ function idOf(value: string | { id: string } | null | undefined): string | null 
 }
 
 function subscriptionIdFromInvoice(invoice: Stripe.Invoice): string | null {
-  // API 2025-03-31 and later moved this under parent.subscription_details.
-  const details = invoice.parent?.subscription_details
-  return details ? idOf(details.subscription) : null
+  // API 2025-03-31 and later moved this under parent.subscription_details. The
+  // account limits test endpoints to three API versions, so accept both shapes.
+  const legacy = (invoice as Stripe.Invoice & { subscription?: string | { id: string } | null }).subscription
+  return idOf(invoice.parent?.subscription_details?.subscription ?? legacy)
 }
 
 export function projectSubscription(
@@ -151,9 +152,9 @@ export async function processStripeEvent(event: Stripe.Event, deps: WebhookDeps)
     if (metadataApp && metadataApp !== APP_ID) {
       return finish({ quarantine: { reason: "other_application", objectId: charge.id } }, "quarantined")
     }
-    // Subscription charges carry no metadata; ownership comes from our own ledger.
-    const invoiceId = idOf((charge as Stripe.Charge & { invoice?: string | { id: string } | null }).invoice)
-    const owned = metadataApp === APP_ID || (invoiceId && deps.ownsInvoice ? await deps.ownsInvoice(invoiceId) : false)
+    // Subscription charges carry no metadata, so ownership comes from our customer table.
+    const customerId = idOf(charge.customer)
+    const owned = metadataApp === APP_ID || (customerId && deps.ownsCustomer ? await deps.ownsCustomer(customerId) : false)
     if (!owned) {
       return finish({ quarantine: { reason: "missing_app_id", objectId: charge.id } }, "quarantined")
     }
@@ -165,7 +166,7 @@ export async function processStripeEvent(event: Stripe.Event, deps: WebhookDeps)
           data: {
             application_id: APP_ID,
             stripeChargeId: charge.id,
-            stripeInvoiceId: invoiceId,
+            stripeCustomerId: customerId,
             amountRefunded: charge.amount_refunded,
             currency: charge.currency,
             livemode: event.livemode,

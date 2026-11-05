@@ -37,6 +37,12 @@ const nextConfig = {
       },
     ]
   },
+  // On Amplify the browser keeps calling same-origin /api, which forwards to ECS.
+  // Unset in the ECS image, where the same routes run directly.
+  async rewrites() {
+    const origin = process.env.API_ORIGIN
+    return origin ? { beforeFiles: [{ source: "/api/:path*", destination: `${origin}/api/:path*` }] } : []
+  },
   async redirects() {
     return [
       { source: "/blog", destination: "/news", permanent: true },

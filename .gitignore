@@ -35,3 +35,7 @@ next-env.d.ts
 
 # firebase admin
 *firebase-adminsdk*.json
+
+# deployment bundle
+.amplify-hosting/
+amplify.zip

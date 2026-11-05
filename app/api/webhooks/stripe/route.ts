@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import type Stripe from "stripe"
-import { firestoreBillingStore, ownsInvoice } from "@/lib/billing/firestore-store"
+import { firestoreBillingStore, ownsCustomer } from "@/lib/billing/firestore-store"
 import { getStripe, liveModeApproved } from "@/lib/billing/stripe-client"
 import { processStripeEvent } from "@/lib/billing/webhook-core"
 
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     const outcome = await processStripeEvent(event, {
       store: firestoreBillingStore,
       retrieveSubscription: (id) => stripe.subscriptions.retrieve(id),
-      ownsInvoice,
+      ownsCustomer,
       allowLivemode: liveModeApproved(),
     })
     return NextResponse.json({ received: true, outcome })

@@ -61,9 +61,14 @@ export const firestoreBillingStore: BillingStore = {
   },
 }
 
-export async function ownsInvoice(invoiceId: string): Promise<boolean> {
-  const doc = await db().collection(BILLING_COLLECTIONS.payments).doc(invoiceId).get()
-  return doc.exists && doc.data()?.application_id === APP_ID
+export async function ownsCustomer(customerId: string): Promise<boolean> {
+  const found = await db()
+    .collection(BILLING_COLLECTIONS.customers)
+    .where("stripeCustomerId", "==", customerId)
+    .where("application_id", "==", APP_ID)
+    .limit(1)
+    .get()
+  return !found.empty
 }
 
 export async function getEntitlementRecord(uid: string): Promise<EntitlementRecord | null> {

@@ -1,0 +1,140 @@
+name: Deploy backend
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: flacron-sport
+  ECS_CLUSTER: flacron-sport
+  ECS_SERVICE: flacron-sport-api
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push image
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+        run: |
+          docker build --build-arg GIT_COMMIT_SHA=${{ github.sha }} -t "$IMAGE" .
+          docker push "$IMAGE"
+      - name: Roll out to ECS
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+        run: |
+          current=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+            --query 'services[0].taskDefinition' --output text)
+          aws ecs describe-task-definition --task-definition "$current" --query taskDefinition > task.json
+          jq --arg image "$IMAGE" '
+            .containerDefinitions[0].image = $image
+            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
+          ' task.json > next-task.json
+          next=$(aws ecs register-task-definition --cli-input-json file://next-task.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" \
+            --task-definition "$next" --desired-count 1 > /dev/null
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
+          running=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+            --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' --output text)
+          if [ "$running" != "$next" ]; then
+            echo "Deployment rolled back to $running" >&2
+            exit 1
+          fi
+      - name: Smoke test the deployed SHA
+        env:
+          API_ENDPOINT: ${{ vars.API_ENDPOINT }}
+        run: |
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            commit=$(curl -fsS "$API_ENDPOINT/api/health" | jq -r .commit || true)
+            [ "$commit" = "$GITHUB_SHA" ] && exit 0
+            sleep 15
+          done
+          echo "Expected $GITHUB_SHA, got $commit" >&2
+          exit 1
+
+  deploy-frontend:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - run: npm ci
+      - name: Build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          API_ORIGIN: ${{ vars.API_ENDPOINT }}
+          APP_BASE_URL: ${{ vars.APP_BASE_URL }}
+          NEXT_PUBLIC_BILLING_MODE: test
+          GIT_COMMIT_SHA: ${{ github.sha }}
+        run: npm run build
+      - name: Package
+        run: |
+          node scripts/package-amplify.mjs
+          (cd .amplify-hosting && zip -qry ../amplify.zip .)
+      - name: Deploy to Amplify
+        env:
+          APP_ID: ${{ vars.AMPLIFY_APP_ID }}
+        run: |
+          deployment=$(aws amplify create-deployment --app-id "$APP_ID" --branch-name main --output json)
+          job=$(echo "$deployment" | jq -r .jobId)
+          url=$(echo "$deployment" | jq -r .zipUploadUrl)
+          curl -fsS -X PUT --upload-file amplify.zip "$url"
+          aws amplify start-deployment --app-id "$APP_ID" --branch-name main --job-id "$job" > /dev/null
+          for attempt in $(seq 1 60); do
+            status=$(aws amplify get-job --app-id "$APP_ID" --branch-name main --job-id "$job" \
+              --query 'job.summary.status' --output text)
+            case "$status" in
+              SUCCEED) exit 0 ;;
+              FAILED|CANCELLED) echo "Amplify job $job: $status" >&2; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "Amplify job $job timed out" >&2
+          exit 1
+      - name: Smoke test the site
+        env:
+          APP_BASE_URL: ${{ vars.APP_BASE_URL }}
+        run: |
+          curl -fsS -o /dev/null "$APP_BASE_URL/"
+          curl -fsS -o /dev/null "$APP_BASE_URL/pricing"
+          test "$(curl -fsS "$APP_BASE_URL/api/health" | jq -r .commit)" = "$GITHUB_SHA"

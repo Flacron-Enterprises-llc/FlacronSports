@@ -1,5 +1,6 @@
 import { SiteFooter } from "@/components/site/footer"
 import { MobileTabs, SiteHeader } from "@/components/site/header"
+import { AppTour } from "@/components/tour/app-tour"
 import { pageContext } from "@/lib/page-context"
 
 export default async function SiteLayout({ children, params }: { children: React.ReactNode; params: Promise<{ locale: string }> }) {
@@ -10,6 +11,7 @@ export default async function SiteLayout({ children, params }: { children: React
       {children}
       <SiteFooter t={t} href={href} />
       <MobileTabs />
+      <AppTour />
     </>
   )
 }

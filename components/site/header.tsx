@@ -45,6 +45,7 @@ export function SiteHeader() {
             return (
               <Link
                 key={to}
+                data-tour={to}
                 href={href(to)}
                 aria-current={active ? "page" : undefined}
                 className={`rounded-md px-3 py-2 text-sm font-medium transition-colors hover:text-ink ${active ? "text-ink" : "text-ink-2"}`}
@@ -60,7 +61,7 @@ export function SiteHeader() {
           </Link>
           <ThemeToggle />
           {user ? (
-            <Link href={href("/dashboard")} className="ml-1 rounded-md bg-navy px-3.5 py-2 text-sm font-semibold text-white hover:bg-navy-deep">
+            <Link data-tour="account" href={href("/dashboard")} className="ml-1 rounded-md bg-navy px-3.5 py-2 text-sm font-semibold text-white hover:bg-navy-deep">
               {t.nav.account}
             </Link>
           ) : (
@@ -97,7 +98,7 @@ export function MobileTabs() {
           const active = to === "/" ? path === "/" : path.startsWith(to)
           return (
             <li key={to}>
-              <Link href={href(to)} aria-current={active ? "page" : undefined} className={`flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${active ? "text-hot-text" : "text-ink-2"}`}>
+              <Link data-tour={to} href={href(to)} aria-current={active ? "page" : undefined} className={`flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${active ? "text-hot-text" : "text-ink-2"}`}>
                 <Icon aria-hidden className="size-5" />
                 {label}
               </Link>

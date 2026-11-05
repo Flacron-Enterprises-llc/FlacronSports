@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { StatusLabel } from "@/components/sports/event-card"
-import { FavoriteStar, LocalTime } from "@/components/sports/parts"
+import { FavoriteStar, LocalTime, MatchScore } from "@/components/sports/parts"
 import { pageContext } from "@/lib/page-context"
 import { getEvent } from "@/lib/sports/service"
 import type { SportEvent } from "@/lib/sports/types"
@@ -51,9 +51,9 @@ export default async function MatchPage({ params }: { params: Promise<{ locale: 
         <h1 className="mt-4 text-2xl font-bold text-ink">{home.name} / {away.name}</h1>
         <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <p className="flex items-center gap-1 font-semibold text-ink"><FavoriteStar team={home.name} />{home.name}</p>
-          <p className="tabular font-display text-3xl font-bold text-ink">
-            {event.score.kind === "team" ? `${event.score.home} - ${event.score.away}` : <span className="text-sm font-medium text-ink-3">{t.match.noScore}</span>}
-          </p>
+          <div className="text-center">
+            {event.score.kind === "team" ? <MatchScore home={event.score.home} away={event.score.away} label={`${home.name} / ${away.name}`} /> : <span className="text-sm font-medium text-ink-3">{t.match.noScore}</span>}
+          </div>
           <p className="flex items-center justify-end gap-1 text-right font-semibold text-ink">{away.name}<FavoriteStar team={away.name} /></p>
         </div>
         <dl className="mt-6 grid gap-3 border-t border-line pt-4 text-sm sm:grid-cols-2">

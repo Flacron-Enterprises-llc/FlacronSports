@@ -4,6 +4,8 @@ import { notFound } from "next/navigation"
 import { Toaster } from "@/components/ui/sonner"
 import { ConsentProvider } from "@/components/consent/consent-provider"
 import { CookieConsent } from "@/components/consent/consent-ui"
+import { PreferencesProvider } from "@/components/account/prefs-provider"
+import { ServiceWorker } from "@/components/site/service-worker"
 import { isLocale, LOCALES } from "@/lib/i18n"
 import "../globals.css"
 
@@ -34,7 +36,7 @@ export function generateStaticParams() {
 }
 
 /** Applies the saved or system theme before first paint. */
-const THEME_SCRIPT = `(function(){var d=document.documentElement;try{var t=localStorage.getItem('fs-theme');if(t!=='light'&&t!=='dark'){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}d.dataset.theme=t}catch(e){}})()`
+const THEME_SCRIPT = `(function(){var d=document.documentElement;try{var t=sessionStorage.getItem('fs-theme')||localStorage.getItem('fs-theme');if(t!=='light'&&t!=='dark'){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}d.dataset.theme=t}catch(e){}})()`
 
 export default async function RootLayout({ children, params }: { children: React.ReactNode; params: Promise<{ locale: string }> }) {
   const { locale } = await params
@@ -48,9 +50,10 @@ export default async function RootLayout({ children, params }: { children: React
       <body className="min-h-dvh antialiased">
         <a href="#main" className="skip-link">Skip to content</a>
         <ConsentProvider>
-          {children}
+          <PreferencesProvider>{children}</PreferencesProvider>
           <CookieConsent />
           <Toaster />
+          <ServiceWorker />
         </ConsentProvider>
       </body>
     </html>

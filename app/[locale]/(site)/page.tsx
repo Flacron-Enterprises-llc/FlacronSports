@@ -1,12 +1,12 @@
 import Link from "next/link"
-import { Eye, Languages, ShieldCheck, Star } from "lucide-react"
+import { Eye, EyeOff, ShieldCheck, Star } from "lucide-react"
 import { EventCard, FeedNotice } from "@/components/sports/event-card"
 import { EmptyState } from "@/components/site/states"
 import { pageContext, type LocaleParams } from "@/lib/page-context"
 import { getEvents } from "@/lib/sports/service"
 import { SPORTS } from "@/lib/sports/types"
 
-const ICONS = [ShieldCheck, Eye, Star, Languages]
+const ICONS = [ShieldCheck, Eye, Star, EyeOff]
 
 export default async function HomePage({ params }: LocaleParams) {
   const { locale, t, href } = await pageContext(params)

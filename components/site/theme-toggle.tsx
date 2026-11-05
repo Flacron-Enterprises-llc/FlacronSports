@@ -1,6 +1,7 @@
 "use client"
 
 import { Moon, Sun } from "lucide-react"
+import { functionalStore } from "@/lib/storage-consent"
 import { useLocale } from "@/lib/use-locale"
 
 export function ThemeToggle() {
@@ -9,7 +10,7 @@ export function ThemeToggle() {
     const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark"
     document.documentElement.dataset.theme = next
     try {
-      localStorage.setItem("fs-theme", next)
+      functionalStore()?.setItem("fs-theme", next)
     } catch {
       /* storage unavailable */
     }

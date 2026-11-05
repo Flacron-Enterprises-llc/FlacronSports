@@ -8,7 +8,8 @@ import {
   signOut,
   onAuthStateChanged,
   sendEmailVerification,
-  sendPasswordResetEmail,
+  applyActionCode,
+  confirmPasswordReset,
   reload,
   User
 } from 'firebase/auth';
@@ -87,7 +88,7 @@ export const signUpWithEmail = async (email: string, password: string) => {
   try {
     const authInstance = getFirebaseAuth();
     const userCredential = await createUserWithEmailAndPassword(authInstance, email, password);
-    await sendEmailVerification(userCredential.user);
+    await sendVerification(userCredential.user);
     return { user: userCredential.user, error: null };
   } catch (error: any) {
     return { user: null, error: error.message };
@@ -134,10 +135,21 @@ export function getAuthInstance() {
   return getFirebaseAuth();
 } 
 
+/** Branded SES email on our own domain, with Firebase's own email as the fallback. */
+async function sendVerification(user: User) {
+  const token = await user.getIdToken();
+  const response = await fetch("/api/auth/send-verification", { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => null);
+  const data = response?.ok ? await response.json() : null;
+  if (!data?.sent) await sendEmailVerification(user);
+}
+
 export const resendVerification = async () => {
   const user = getAuthInstance().currentUser;
-  if (user) await sendEmailVerification(user);
+  if (user) await sendVerification(user);
 };
+
+export const applyEmailCode = (code: string) => applyActionCode(getAuthInstance(), code);
+export const confirmReset = (code: string, password: string) => confirmPasswordReset(getAuthInstance(), code, password);
 
 /** Refreshes the signed-in user so a just-completed verification is seen. */
 export const refreshVerification = async (): Promise<boolean> => {
@@ -148,4 +160,5 @@ export const refreshVerification = async (): Promise<boolean> => {
   return user.emailVerified;
 };
 
-export const requestPasswordReset = (email: string) => sendPasswordResetEmail(getAuthInstance(), email);
+export const requestPasswordReset = (email: string) =>
+  fetch("/api/auth/send-reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });

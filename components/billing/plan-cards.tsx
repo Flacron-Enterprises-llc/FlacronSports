@@ -42,8 +42,8 @@ export function PlanCards() {
 
   const benefits: Record<PlanId, string[]> = {
     free: locale === "fr"
-      ? ["Scores et calendriers", "5 favoris", "Anglais et français"]
-      : ["Scores and schedules", "5 favorites", "English and French"],
+      ? ["Scores et calendriers", "5 favoris", "Protection anti-spoiler"]
+      : ["Scores and schedules", "5 favorites", "Spoiler protection"],
     plus: locale === "fr"
       ? ["Scores et calendriers", "Favoris illimités", "Sans publicité FlacronSport"]
       : ["Scores and schedules", "Unlimited favorites", "No FlacronSport display ads"],

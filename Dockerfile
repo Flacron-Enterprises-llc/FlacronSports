@@ -21,4 +21,5 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 USER nextjs
 EXPOSE 3000
-CMD ["node", "server.js"]
+# ECS sets HOSTNAME to the task address, so Next would not listen on localhost for health checks.
+CMD ["sh", "-c", "HOSTNAME=0.0.0.0 exec node server.js"]

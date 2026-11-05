@@ -12,7 +12,7 @@ const CSP = [
   "frame-src https://*.firebaseapp.com",
   "object-src 'none'",
   "base-uri 'self'",
-  "form-action 'self'",
+  "form-action 'self' https://checkout.stripe.com https://billing.stripe.com",
   "frame-ancestors 'none'",
 ].join("; ")
 

@@ -1,7 +1,7 @@
 import Link from "next/link"
 import type { Dictionary } from "@/lib/i18n"
 import type { EventFeed, EventStatus, SportEvent } from "@/lib/sports/types"
-import { FavoriteStar, LocalTime } from "./parts"
+import { FavoriteStar, LocalTime, ScoreValue } from "./parts"
 
 const TONE: Record<EventStatus, string> = {
   live: "text-live",
@@ -40,7 +40,7 @@ export function EventCard({ event, t, href }: { event: SportEvent; t: Dictionary
               <FavoriteStar team={team.name} />
               <span className="truncate font-medium text-ink">{team.name}</span>
             </span>
-            <span className="tabular font-display text-lg font-semibold text-ink">{value ?? ""}</span>
+            <ScoreValue value={value} label={team.name} />
           </li>
         ))}
       </ul>

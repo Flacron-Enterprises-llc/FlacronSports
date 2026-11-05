@@ -1,3 +1,4 @@
+import type { Transaction } from "firebase-admin/firestore"
 import { getAdminDb } from "@/lib/firebase-admin"
 import { computeAccess, type EffectiveAccess, type EntitlementRecord } from "./entitlements"
 import { APP_ID } from "./plans"
@@ -22,7 +23,7 @@ export const firestoreBillingStore: BillingStore = {
     const firestore = db()
     const processedRef = firestore.collection(BILLING_COLLECTIONS.processedEvents).doc(event.id)
 
-    return firestore.runTransaction(async (tx) => {
+    return firestore.runTransaction(async (tx: Transaction) => {
       // Firestore transactions require every read before the first write.
       const processed = await tx.get(processedRef)
       if (processed.exists) return { duplicate: true }

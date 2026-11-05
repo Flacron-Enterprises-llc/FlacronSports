@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { authFetch } from "@/lib/auth-fetch"
 import type { EffectiveAccess } from "@/lib/billing/entitlements"
-import { PLANS } from "@/lib/billing/plans"
+import { PLANS, type BillingInterval, type PaidPlanId } from "@/lib/billing/plans"
 import { signOutUser } from "@/lib/firebase-auth"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { useLocale } from "@/lib/use-locale"
@@ -61,6 +61,15 @@ export function AccountPanel() {
     else setMessage(t.account.failed)
   }
 
+  const changePlan = async (plan: PaidPlanId, interval: BillingInterval) => {
+    if (!window.confirm(t.account.confirmChange)) return
+    setBusy(true)
+    const response = await authFetch("/api/billing/change-plan", { method: "POST", body: JSON.stringify({ plan, interval }) }).catch(() => null)
+    setMessage(response?.ok ? t.account.changed : t.account.failed)
+    setBusy(false)
+    await load().catch(() => undefined)
+  }
+
   const paid = access && access.plan !== "free"
 
   return (
@@ -85,9 +94,27 @@ export function AccountPanel() {
           ) : (
             <Link href={href("/pricing")} className="rounded-md bg-orange px-4 py-2 text-sm font-semibold text-[#0a1a33] hover:bg-orange-hover">{t.account.choose}</Link>
           )}
+          <Link href={href("/settings")} className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-ink hover:bg-surface-muted">{t.settings.title}</Link>
           <button type="button" onClick={() => signOutUser().then(() => router.push(href("/")))} className="rounded-md px-4 py-2 text-sm font-semibold text-ink-2 hover:text-ink">{t.account.signOut}</button>
         </div>
       </section>
+      {paid && access.state !== "past_due" && (
+        <section aria-labelledby="change-plan" className="rounded-2xl border border-line bg-surface p-6">
+          <h2 id="change-plan" className="text-lg font-semibold text-ink">{t.account.changePlan}</h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(["plus", "premium"] as const).flatMap((plan) =>
+              (["monthly", "annual"] as const).map((interval) => {
+                const current = access.plan === plan && access.interval === interval
+                return (
+                  <button key={plan + interval} type="button" disabled={busy || current} onClick={() => changePlan(plan, interval)} className="rounded-md border border-line px-3 py-2 text-sm font-semibold text-ink hover:bg-surface-muted disabled:opacity-50">
+                    {PLANS[plan].name} · {t.pricing[interval]}
+                  </button>
+                )
+              }),
+            )}
+          </div>
+        </section>
+      )}
     </div>
   )
 }

@@ -40,6 +40,7 @@ export async function POST(request: Request) {
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
+      adaptive_pricing: { enabled: false },
       customer,
       client_reference_id: user.uid,
       line_items: [{ price, quantity: 1 }],

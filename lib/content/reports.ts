@@ -215,7 +215,19 @@ export interface ReportList {
 }
 
 /** Reads only `reports`. The legacy `articles` collection is never touched. */
+/** Set on Amplify, which holds no database credentials. Unset on ECS, which answers these calls. */
+async function fromBackend<T>(path: string): Promise<T | null> {
+  const origin = process.env.API_ORIGIN
+  if (!origin) return null
+  const response = await fetch(`${origin}${path}`, { next: { revalidate: 60 } })
+  if (response.status === 404) return { report: null } as T
+  if (!response.ok) throw new Error(`Backend responded ${response.status}`)
+  return response.json() as Promise<T>
+}
+
 export async function listPublishedReports(locale: Locale, limit = 100): Promise<ReportList> {
+  const remote = await fromBackend<ReportList>(`/api/reports?locale=${locale}`).catch(() => ({ state: "unavailable", reports: [] }) as ReportList)
+  if (remote) return remote
   const db = getAdminDb()
   if (!db) return { state: "unavailable", reports: [] }
   try {
@@ -236,6 +248,8 @@ export async function listPublishedReports(locale: Locale, limit = 100): Promise
 
 /** Null means no public report. A storage failure throws so the page can say so. */
 export async function getPublishedReport(slug: string, locale: Locale): Promise<Report | null> {
+  const remote = await fromBackend<{ report: Report | null }>(`/api/reports/${encodeURIComponent(slug)}?locale=${locale}`)
+  if (remote) return remote.report
   if (!/^[a-z0-9-]{1,80}$/.test(slug)) return null
   const db = getAdminDb()
   if (!db) throw new Error("Storage unavailable")

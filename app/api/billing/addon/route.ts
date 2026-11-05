@@ -44,6 +44,7 @@ export async function POST(request: Request) {
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
+      adaptive_pricing: { enabled: false },
       customer,
       client_reference_id: user.uid,
       // Cards settle at checkout; delayed methods would complete the session unpaid.

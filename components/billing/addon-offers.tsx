@@ -1,16 +1,24 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { authFetch } from "@/lib/auth-fetch"
 import { ADDONS, type AddonSku } from "@/lib/billing/addons"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { useLocale } from "@/lib/use-locale"
 
-export function AddonOffers({ skus }: { skus: AddonSku[] }) {
+export function AddonOffers() {
   const { locale, t } = useLocale()
+  const [skus, setSkus] = useState<AddonSku[]>([])
   const user = useAuthUser()
   const [pending, setPending] = useState<AddonSku | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch("/api/billing/addons")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => setSkus(data?.skus ?? []))
+      .catch(() => setSkus([]))
+  }, [])
 
   if (skus.length === 0) return null
 

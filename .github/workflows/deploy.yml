@@ -90,37 +90,25 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: "22"
-          cache: npm
+          fetch-depth: 0
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - run: npm ci
-      - name: Build
-        env:
-          NEXT_TELEMETRY_DISABLED: "1"
-          API_ORIGIN: ${{ vars.API_ENDPOINT }}
-          APP_BASE_URL: ${{ vars.APP_BASE_URL }}
-          NEXT_PUBLIC_BILLING_MODE: test
-          GIT_COMMIT_SHA: ${{ github.sha }}
-        run: npm run build
-      - name: Package
+      # The org disables deploy keys, so Amplify builds from a CodeCommit mirror.
+      - name: Mirror to CodeCommit
         run: |
-          node scripts/package-amplify.mjs
-          (cd .amplify-hosting && zip -qry ../amplify.zip .)
-      - name: Deploy to Amplify
+          git config --global credential.helper '!aws codecommit credential-helper $@'
+          git config --global credential.UseHttpPath true
+          git push --force "https://git-codecommit.$AWS_REGION.amazonaws.com/v1/repos/flacron-sport" "HEAD:refs/heads/main"
+      - name: Build and release on Amplify
         env:
           APP_ID: ${{ vars.AMPLIFY_APP_ID }}
         run: |
-          deployment=$(aws amplify create-deployment --app-id "$APP_ID" --branch-name main --output json)
-          job=$(echo "$deployment" | jq -r .jobId)
-          url=$(echo "$deployment" | jq -r .zipUploadUrl)
-          curl -fsS -X PUT --upload-file amplify.zip "$url"
-          aws amplify start-deployment --app-id "$APP_ID" --branch-name main --job-id "$job" > /dev/null
-          for attempt in $(seq 1 60); do
+          job=$(aws amplify start-job --app-id "$APP_ID" --branch-name main --job-type RELEASE \
+            --commit-id "$GITHUB_SHA" --commit-message "$GITHUB_SHA" --query 'jobSummary.jobId' --output text)
+          for attempt in $(seq 1 120); do
             status=$(aws amplify get-job --app-id "$APP_ID" --branch-name main --job-id "$job" \
               --query 'job.summary.status' --output text)
             case "$status" in

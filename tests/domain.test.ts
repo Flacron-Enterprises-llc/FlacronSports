@@ -29,9 +29,9 @@ describe("sports normalization", () => {
   it("honours the postponed flag", () => {
     expect(normalizeStatus({ idEvent: "1", strStatus: "NS", strPostponed: "yes" })).toBe("postponed")
   })
-  it("defines all 11 sport categories and enables only football and basketball", () => {
+  it("defines all 11 sport categories and enables only the verified team sports", () => {
     expect(SPORTS).toHaveLength(11)
-    expect(SPORTS.filter((sport) => sport.enabled).map((sport) => sport.id)).toEqual(["football", "basketball"])
+    expect(SPORTS.filter((sport) => sport.enabled).map((sport) => sport.id)).toEqual(["football", "basketball", "american-football", "baseball", "ice-hockey", "rugby", "volleyball"])
   })
 })
 

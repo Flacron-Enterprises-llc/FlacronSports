@@ -52,10 +52,11 @@ export function normalizeScore(raw: RawEvent, status: EventStatus): EventScore {
   return home === null || away === null ? { kind: "none" } : { kind: "team", home, away }
 }
 
-function toUtc(timestamp: string | null | undefined): string | null {
+export function toUtc(timestamp: string | null | undefined): string | null {
   if (!timestamp) return null
-  const hasZone = /(Z|[+-]\d{2}:?\d{2})$/.test(timestamp)
-  const date = new Date(hasZone ? timestamp : `${timestamp}Z`)
+  const iso = timestamp.trim().replace(" ", "T")
+  const hasZone = /(Z|[+-]\d{2}:?\d{2})$/.test(iso)
+  const date = new Date(hasZone ? iso : `${iso}Z`)
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 

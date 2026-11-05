@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, Newspaper, PlayCircle, Star, Trophy } from "lucide-react"
+import { Bell, Home, Newspaper, PlayCircle, Star, Trophy } from "lucide-react"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { localePath } from "@/lib/i18n"
 import { useLocale } from "@/lib/use-locale"
@@ -32,6 +32,7 @@ export function SiteHeader() {
     ["/watch", t.nav.watch],
     ["/news", t.nav.news],
     ["/my-teams", t.nav.myTeams],
+    ["/assistant", t.nav.assistant],
     ["/pricing", t.nav.pricing],
   ] as const
 
@@ -61,9 +62,14 @@ export function SiteHeader() {
           </Link>
           <ThemeToggle />
           {user ? (
-            <Link data-tour="account" href={href("/dashboard")} className="ml-1 rounded-md bg-navy px-3.5 py-2 text-sm font-semibold text-white hover:bg-navy-deep">
-              {t.nav.account}
-            </Link>
+            <>
+              <Link href={href("/notifications")} aria-label={t.notifications.title} className="inline-flex size-9 items-center justify-center rounded-md text-ink-2 hover:text-ink">
+                <Bell aria-hidden className="size-5" />
+              </Link>
+              <Link data-tour="account" href={href("/dashboard")} className="ml-1 rounded-md bg-navy px-3.5 py-2 text-sm font-semibold text-white hover:bg-navy-deep">
+                {t.nav.account}
+              </Link>
+            </>
           ) : (
             <>
               <Link href={href("/signin")} className="hidden rounded-md px-3 py-2 text-sm font-medium text-ink-2 hover:text-ink sm:block">

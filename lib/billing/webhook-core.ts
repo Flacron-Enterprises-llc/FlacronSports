@@ -6,6 +6,7 @@
 // price from this app's own catalog.
 
 import type Stripe from "stripe"
+import { addonForPriceId, buildPurchase, type BillingPurchase } from "./addons"
 import type { EntitlementRecord, StripeSubscriptionStatus } from "./entitlements"
 import { APP_ID, planForPriceId } from "./plans"
 
@@ -15,6 +16,7 @@ export type QuarantineReason =
   | "missing_app_id"
   | "missing_firebase_uid"
   | "unknown_price"
+  | "missing_payment"
 
 export interface LedgerEntry {
   collection: "billing_payments" | "billing_refunds"
@@ -26,6 +28,10 @@ export interface EventMutation {
   entitlement?: EntitlementRecord
   ledger?: LedgerEntry
   quarantine?: { reason: QuarantineReason; objectId: string | null }
+  /** Written only if billing_purchases has no document for this session yet. */
+  purchase?: BillingPurchase
+  /** Applied to the purchase paid by this payment, if there is one. */
+  purchaseRefund?: { paymentId: string; full: boolean; refundedAtUTC: string }
 }
 
 export interface CommitResult {
@@ -43,6 +49,8 @@ export interface BillingStore {
 export interface WebhookDeps {
   store: BillingStore
   retrieveSubscription(id: string): Promise<Stripe.Subscription>
+  /** Must expand line_items and payment_intent: Stripe leaves line items out of the event payload. */
+  retrieveCheckoutSession(id: string): Promise<Stripe.Checkout.Session>
   /** Resolves ownership for objects that carry no app metadata, such as refunded charges. */
   ownsCustomer?(customerId: string): Promise<boolean>
   allowLivemode?: boolean
@@ -133,6 +141,48 @@ function paymentLedger(event: Stripe.Event, record: EntitlementRecord): LedgerEn
   }
 }
 
+/** Grants from the verified session, never from the browser or from metadata alone. */
+async function projectPurchase(
+  object: Stripe.Checkout.Session,
+  event: Stripe.Event,
+  deps: WebhookDeps,
+): Promise<{ purchase: BillingPurchase; ledger: LedgerEntry } | { quarantine: QuarantineReason }> {
+  const appId = object.metadata?.app_id
+  if (!appId) return { quarantine: "missing_app_id" }
+  if (appId !== APP_ID) return { quarantine: "other_application" }
+  const uid = object.metadata?.firebase_uid
+  if (!uid) return { quarantine: "missing_firebase_uid" }
+
+  const session = await deps.retrieveCheckoutSession(object.id)
+  const lines = session.line_items?.data ?? []
+  const addon = lines.length === 1 && lines[0].quantity === 1 ? addonForPriceId(lines[0].price?.id, deps.env) : null
+  if (!addon || object.metadata?.sku !== addon.sku) return { quarantine: "unknown_price" }
+
+  const verifiedPaymentId = idOf(session.payment_intent)
+  if (!verifiedPaymentId) return { quarantine: "missing_payment" }
+  const intent = typeof session.payment_intent === "string" ? null : session.payment_intent
+  const stripeChargeId = idOf(intent?.latest_charge)
+
+  return {
+    purchase: buildPurchase({ purchaseId: session.id, verifiedPaymentId, stripeChargeId, addon, uid, paidAtSeconds: event.created, livemode: event.livemode }),
+    ledger: {
+      collection: "billing_payments",
+      id: session.id,
+      data: {
+        application_id: APP_ID,
+        kind: "addon",
+        uid,
+        sku: addon.sku,
+        stripePaymentIntentId: verifiedPaymentId,
+        amountPaid: session.amount_total,
+        currency: session.currency,
+        livemode: event.livemode,
+        paidAt: event.created,
+      },
+    },
+  }
+}
+
 export async function processStripeEvent(event: Stripe.Event, deps: WebhookDeps): Promise<WebhookOutcome> {
   const meta = { id: event.id, type: event.type, created: event.created }
 
@@ -152,14 +202,19 @@ export async function processStripeEvent(event: Stripe.Event, deps: WebhookDeps)
     if (metadataApp && metadataApp !== APP_ID) {
       return finish({ quarantine: { reason: "other_application", objectId: charge.id } }, "quarantined")
     }
-    // Subscription charges carry no metadata, so ownership comes from our customer table.
+    // Add-on charges inherit metadata from payment_intent_data. Subscription charges
+    // carry none, so their ownership comes from our customer table.
     const customerId = idOf(charge.customer)
     const owned = metadataApp === APP_ID || (customerId && deps.ownsCustomer ? await deps.ownsCustomer(customerId) : false)
     if (!owned) {
       return finish({ quarantine: { reason: "missing_app_id", objectId: charge.id } }, "quarantined")
     }
+    const paymentId = idOf(charge.payment_intent)
+    const full = charge.refunded === true || (charge.amount > 0 && charge.amount_refunded >= charge.amount)
+    const refundedAtUTC = new Date(event.created * 1000).toISOString()
     return finish(
       {
+        purchaseRefund: paymentId ? { paymentId, full, refundedAtUTC } : undefined,
         ledger: {
           collection: "billing_refunds",
           id: charge.id,
@@ -167,7 +222,9 @@ export async function processStripeEvent(event: Stripe.Event, deps: WebhookDeps)
             application_id: APP_ID,
             stripeChargeId: charge.id,
             stripeCustomerId: customerId,
+            stripePaymentIntentId: paymentId,
             amountRefunded: charge.amount_refunded,
+            fullyRefunded: full,
             currency: charge.currency,
             livemode: event.livemode,
             refundedAt: event.created,
@@ -176,6 +233,18 @@ export async function processStripeEvent(event: Stripe.Event, deps: WebhookDeps)
       },
       "applied",
     )
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session
+    if (session.mode === "payment") {
+      if (session.payment_status !== "paid") return finish({}, "ignored")
+      const projected = await projectPurchase(session, event, deps)
+      if ("quarantine" in projected) {
+        return finish({ quarantine: { reason: projected.quarantine, objectId: session.id } }, "quarantined")
+      }
+      return finish(projected, "applied")
+    }
   }
 
   const subscriptionId = subscriptionIdFor(event)

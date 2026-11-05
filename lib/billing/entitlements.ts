@@ -1,3 +1,4 @@
+import { purchaseLive, type BillingPurchase } from "./addons"
 import type { BillingInterval, PaidPlanId, PlanId } from "./plans"
 
 /** Days of access kept after a failed renewal while Stripe retries the payment. */
@@ -39,6 +40,7 @@ export interface EffectiveAccess {
   interval: BillingInterval | null
   currentPeriodEnd: number | null
   cancelAtPeriodEnd: boolean
+  dayPassExpiresAtUTC?: string
 }
 
 const FREE: EffectiveAccess = {
@@ -81,4 +83,17 @@ export function computeAccess(
     default:
       return expired
   }
+}
+
+/**
+ * Premium benefits for a live day pass. Subscription fields stay empty because a
+ * pass has no renewal, cancellation or billing schedule of its own.
+ */
+export function withDayPass(
+  access: EffectiveAccess,
+  pass: Pick<BillingPurchase, "sku" | "status" | "expiresAtUTC"> | null | undefined,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): EffectiveAccess {
+  if (access.plan === "premium" || pass?.sku !== "day_pass" || !purchaseLive(pass, nowSeconds * 1000)) return access
+  return { ...FREE, plan: "premium", state: "active", dayPassExpiresAtUTC: pass.expiresAtUTC }
 }

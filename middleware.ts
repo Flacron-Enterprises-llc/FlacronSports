@@ -35,4 +35,5 @@ function alternates(request: NextRequest, path: string, locale: "en" | "fr"): st
   ].join(", ")
 }
 
-export const config = { matcher: ["/((?!api|_next|brand|manifest.webmanifest|robots.txt|sitemap.xml|sw.js|.*\\..*).*)"] }
+// Team names can contain dots ("St. Louis Blues"), which the file rule below would skip.
+export const config = { matcher: ["/team/:name", "/((?!api|_next|brand|manifest.webmanifest|robots.txt|sitemap.xml|sw.js|.*\\..*).*)"] }

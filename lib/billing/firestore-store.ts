@@ -1,6 +1,7 @@
 import type { Transaction } from "firebase-admin/firestore"
 import { getAdminDb } from "@/lib/firebase-admin"
-import { computeAccess, type EffectiveAccess, type EntitlementRecord } from "./entitlements"
+import { activeDayPass, applyPurchaseRefund, resolvePurchaseGrant, type BillingPurchase } from "./addons"
+import { computeAccess, withDayPass, type EffectiveAccess, type EntitlementRecord } from "./entitlements"
 import { APP_ID } from "./plans"
 import { shouldReplaceEntitlement, type BillingStore } from "./webhook-core"
 
@@ -10,6 +11,8 @@ export const BILLING_COLLECTIONS = {
   processedEvents: "processed_stripe_events",
   quarantine: "billing_quarantine",
   payments: "billing_payments",
+  refunds: "billing_refunds",
+  purchases: "billing_purchases",
 } as const
 
 function db() {
@@ -33,11 +36,38 @@ export const firestoreBillingStore: BillingStore = {
         : null
       const existing = entitlementRef ? await tx.get(entitlementRef) : null
 
+      const purchases = firestore.collection(BILLING_COLLECTIONS.purchases)
+      const { purchase, purchaseRefund } = mutation
+      const purchaseRef = purchase ? purchases.doc(purchase.purchaseId) : null
+      const storedPurchase = purchaseRef ? await tx.get(purchaseRef) : null
+      // Reading the refund ledger here closes the race with a refund delivered first.
+      const earlierRefund = purchase?.stripeChargeId
+        ? await tx.get(firestore.collection(BILLING_COLLECTIONS.refunds).doc(purchase.stripeChargeId))
+        : null
+      const otherDayPasses = purchase?.sku === "day_pass"
+        ? await tx.get(purchases.where("uid", "==", purchase.uid).where("sku", "==", "day_pass"))
+        : null
+      const refundTarget = purchaseRefund
+        ? await tx.get(purchases.where("verifiedPaymentId", "==", purchaseRefund.paymentId).limit(1))
+        : null
+
       if (mutation.entitlement && entitlementRef) {
         const current = existing?.exists ? (existing.data() as EntitlementRecord) : null
         if (shouldReplaceEntitlement(current, mutation.entitlement)) {
           tx.set(entitlementRef, mutation.entitlement)
         }
+      }
+      if (purchase && purchaseRef) {
+        const refund = earlierRefund?.exists ? earlierRefund.data() : null
+        const granted = resolvePurchaseGrant(storedPurchase?.exists ? (storedPurchase.data() as BillingPurchase) : null, purchase, {
+          refund: refund ? { full: refund.fullyRefunded === true, refundedAtUTC: new Date(refund.refundedAt * 1000).toISOString() } : null,
+          otherDayPasses: otherDayPasses?.docs.map((doc) => doc.data() as BillingPurchase),
+        })
+        if (granted) tx.set(purchaseRef, granted)
+      }
+      if (purchaseRefund && refundTarget && !refundTarget.empty) {
+        const doc = refundTarget.docs[0]
+        tx.set(doc.ref, applyPurchaseRefund(doc.data() as BillingPurchase, purchaseRefund))
       }
       if (mutation.ledger) {
         tx.set(firestore.collection(mutation.ledger.collection).doc(mutation.ledger.id), mutation.ledger.data, {
@@ -77,13 +107,29 @@ export async function getEntitlementRecord(uid: string): Promise<EntitlementReco
   return doc.exists ? (doc.data() as EntitlementRecord) : null
 }
 
-/** Server-side access check. Anything unreadable resolves to Free, never to paid. */
-export async function getEffectiveAccess(uid: string): Promise<EffectiveAccess> {
+/** Subscription only. Allowances and billing screens must not treat a day pass as a plan. */
+export async function getSubscriptionAccess(uid: string): Promise<EffectiveAccess> {
   try {
     return computeAccess(await getEntitlementRecord(uid))
   } catch (error) {
     console.error("Entitlement lookup failed", error instanceof Error ? error.message : "unknown")
     return computeAccess(null)
+  }
+}
+
+export async function getUserPurchases(uid: string): Promise<BillingPurchase[]> {
+  const found = await db().collection(BILLING_COLLECTIONS.purchases).where("uid", "==", uid).get()
+  return found.docs.map((doc) => doc.data() as BillingPurchase)
+}
+
+/** Benefit check, day pass included. Anything unreadable resolves downward, never to paid. */
+export async function getEffectiveAccess(uid: string): Promise<EffectiveAccess> {
+  const subscription = await getSubscriptionAccess(uid)
+  try {
+    return withDayPass(subscription, activeDayPass(await getUserPurchases(uid), Date.now()))
+  } catch (error) {
+    console.error("Day pass lookup failed", error instanceof Error ? error.message : "unknown")
+    return subscription
   }
 }
 

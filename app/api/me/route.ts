@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { userMessageRecords } from "@/lib/alerts/notifications"
 import { ApiError, apiErrorResponse, requireUser } from "@/lib/api-auth"
 import { audit } from "@/lib/audit"
 import { getEntitlementRecord } from "@/lib/billing/firestore-store"
@@ -21,6 +22,10 @@ export async function DELETE(request: Request) {
       await getStripe().subscriptions.cancel(record.stripeSubscriptionId)
     }
 
+    const { alerts, sends } = await userMessageRecords(db, user.uid)
+    await Promise.all([...alerts, ...sends].map((doc) => doc.ref.delete()))
+    const predictions = await db.collection("predictions").where("uid", "==", user.uid).get()
+    await Promise.all(predictions.docs.map((doc) => doc.ref.delete()))
     await db.collection("user_preferences").doc(user.uid).delete()
     await db.collection("users").doc(user.uid).delete()
     if (user.email) await db.collection("dashboard_settings").doc(user.email).delete()

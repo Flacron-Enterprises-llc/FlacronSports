@@ -72,6 +72,25 @@ export async function requireAdmin(request: Request): Promise<AuthedUser> {
   return user
 }
 
+export type StaffRole = "moderator" | "editor" | "admin"
+
+/** Admins hold every staff permission. All privileged roles need a second factor. */
+export function assertRole(user: AuthedUser, ...roles: StaffRole[]): StaffRole {
+  const role = user.token.role as StaffRole | undefined
+  if (role !== "admin" && !(role && roles.includes(role))) {
+    throw new ApiError(403, "forbidden", "You do not have access to this area")
+  }
+  if (!user.token.firebase?.sign_in_second_factor) {
+    throw new ApiError(403, "mfa_required", "Multi-factor sign-in is required for staff accounts")
+  }
+  return role
+}
+
+export async function requireRole(request: Request, ...roles: StaffRole[]): Promise<AuthedUser & { role: StaffRole }> {
+  const user = await requireUser(request)
+  return { ...user, role: assertRole(user, ...roles) }
+}
+
 function safeEqual(a: string, b: string): boolean {
   const left = Buffer.from(a)
   const right = Buffer.from(b)

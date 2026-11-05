@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { pendingPlan, rememberPlan, startCheckout } from "@/lib/billing-client"
 import { isBillingInterval, isPaidPlan, PLANS } from "@/lib/billing/plans"
 import { requestPasswordReset, signInWithEmail, signInWithGoogle, signUpWithEmail } from "@/lib/firebase-auth"
+import { completeTotpSignIn, startSecondFactor, type SecondFactorChallenge } from "@/lib/mfa"
 import { useLocale } from "@/lib/use-locale"
 
 const FIELD = "mt-1 w-full rounded-md border border-line bg-surface px-3 py-2 text-ink focus:border-line-strong"
@@ -21,6 +22,8 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [planName, setPlanName] = useState<string | null>(null)
+  const [challenge, setChallenge] = useState<SecondFactorChallenge | null>(null)
+  const [code, setCode] = useState("")
 
   useEffect(() => {
     const plan = params?.get("plan")
@@ -43,17 +46,36 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
     if (mode === "signup" && password !== confirm) return setError(t.auth.mismatch)
     setBusy(true)
     const result = mode === "signup" ? await signUpWithEmail(email, password) : await signInWithEmail(email, password)
-    if (result.user) await proceed(result.user.emailVerified).catch(() => setError(t.auth.failed))
-    else setError(t.auth.failed)
+    await settle(result)
+    setBusy(false)
+  }
+
+  const settle = async (result: { user: { emailVerified: boolean } | null; cause?: unknown }) => {
+    if (result.user) return proceed(result.user.emailVerified).catch(() => setError(t.auth.failed))
+    const pending = startSecondFactor(result.cause)
+    if (pending === "unsupported") return setError(t.security.unsupportedFactor)
+    if (pending) return setChallenge(pending)
+    setError(t.auth.failed)
+  }
+
+  const verify = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!challenge) return
+    setError(null)
+    setBusy(true)
+    try {
+      const user = await completeTotpSignIn(challenge, code)
+      await proceed(user.emailVerified)
+    } catch {
+      setError(t.security.badCode)
+    }
     setBusy(false)
   }
 
   const google = async () => {
     setError(null)
     setBusy(true)
-    const result = await signInWithGoogle()
-    if (result.user) await proceed(result.user.emailVerified).catch(() => setError(t.auth.failed))
-    else setError(t.auth.failed)
+    await settle(await signInWithGoogle())
     setBusy(false)
   }
 
@@ -62,6 +84,23 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
     setError(null)
     await requestPasswordReset(email).catch(() => undefined)
     setNotice(t.auth.resetSent)
+  }
+
+  if (challenge) {
+    return (
+      <main id="main" className="mx-auto w-full max-w-md px-4 py-14">
+        <form onSubmit={verify} className="rounded-2xl border border-line bg-surface p-7 shadow-[var(--shadow-md)]">
+          <h1 className="text-2xl font-bold text-ink">{t.security.challengeTitle}</h1>
+          <p className="mt-2 text-sm text-ink-2">{t.security.challengeBody}</p>
+          <label className="mt-6 block text-sm font-medium text-ink">
+            {t.security.code}
+            <input className={FIELD} inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
+          </label>
+          {error && <p role="alert" className="mt-3 text-sm text-bad">{error}</p>}
+          <button type="submit" disabled={busy} className="mt-4 w-full rounded-md bg-navy py-2.5 text-sm font-semibold text-white hover:bg-navy-deep disabled:opacity-60">{t.security.verify}</button>
+        </form>
+      </main>
+    )
   }
 
   return (

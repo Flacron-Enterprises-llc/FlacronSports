@@ -23,14 +23,18 @@ export function StatusLabel({ status, t }: { status: EventStatus; t: Dictionary 
   )
 }
 
-export function EventCard({ event, t, href }: { event: SportEvent; t: Dictionary; href: (path: string) => string }) {
+export function EventCard({ event, t, href, timeMode = "time" }: { event: SportEvent; t: Dictionary; href: (path: string) => string; timeMode?: "time" | "datetime" }) {
   const [home, away] = event.participants
   const score = event.score.kind === "team" ? event.score : null
 
   return (
     <article className="rounded-xl border border-line bg-surface p-4 shadow-[var(--shadow-sm)] transition-shadow hover:shadow-[var(--shadow-md)]">
       <div className="flex items-center justify-between gap-3">
-        <p className="min-w-0 truncate text-xs font-medium text-ink-3">{event.competition.name}</p>
+        {event.competition.id ? (
+          <Link href={href(`/standings/${event.competition.id}`)} className="min-w-0 truncate text-xs font-medium text-ink-3 underline-offset-2 hover:text-ink hover:underline">{event.competition.name}</Link>
+        ) : (
+          <p className="min-w-0 truncate text-xs font-medium text-ink-3">{event.competition.name}</p>
+        )}
         <StatusLabel status={event.status} t={t} />
       </div>
       <ul className="mt-3 space-y-1.5">
@@ -38,14 +42,18 @@ export function EventCard({ event, t, href }: { event: SportEvent; t: Dictionary
           <li key={team.role} className="flex items-center justify-between gap-2">
             <span className="flex min-w-0 items-center gap-1">
               <FavoriteStar team={team.name} />
-              <span className="truncate font-medium text-ink">{team.name}</span>
+              {team.name === "TBD" ? (
+                <span className="truncate font-medium text-ink">{team.name}</span>
+              ) : (
+                <Link href={href(`/team/${encodeURIComponent(team.name)}?sport=${event.sportId}`)} className="truncate font-medium text-ink underline-offset-2 hover:underline">{team.name}</Link>
+              )}
             </span>
             <ScoreValue value={value} label={team.name} />
           </li>
         ))}
       </ul>
       <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-xs text-ink-2">
-        {event.scheduledStartUTC ? <LocalTime iso={event.scheduledStartUTC} /> : <span>{t.match.tbd}</span>}
+        {event.scheduledStartUTC ? <LocalTime iso={event.scheduledStartUTC} mode={timeMode} /> : <span>{t.match.tbd}</span>}
         <Link href={href(`/match/${event.id}`)} className="font-semibold text-hot-text underline-offset-2 hover:underline">
           {t.match.overview}<span className="sr-only">: {home.name} / {away.name}</span>
         </Link>

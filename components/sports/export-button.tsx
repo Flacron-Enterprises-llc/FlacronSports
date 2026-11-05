@@ -1,0 +1,42 @@
+"use client"
+
+import { useState } from "react"
+import Link from "next/link"
+import { authFetch } from "@/lib/auth-fetch"
+import { useAuthUser } from "@/lib/hooks/useAuthUser"
+import { useLocale } from "@/lib/use-locale"
+
+export function ExportButton({ matchId }: { matchId: string }) {
+  const { t, href } = useLocale()
+  const user = useAuthUser()
+  const [state, setState] = useState<"idle" | "working" | "no_credits" | "failed">("idle")
+
+  if (!user) return null
+
+  const download = async () => {
+    setState("working")
+    const response = await authFetch("/api/exports", { method: "POST", body: JSON.stringify({ matchId }) }).catch(() => null)
+    if (!response?.ok) return setState(response?.status === 403 ? "no_credits" : "failed")
+    const url = URL.createObjectURL(await response.blob())
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `flacronsport-${matchId}.pdf`
+    link.click()
+    URL.revokeObjectURL(url)
+    setState("idle")
+  }
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4">
+      <button type="button" disabled={state === "working"} onClick={download} className="rounded-md border border-line px-3 py-2 text-sm font-semibold text-ink hover:bg-surface-muted disabled:opacity-60">
+        {t.match.exportPdf}
+      </button>
+      {state === "no_credits" && (
+        <p role="status" className="text-sm text-ink-2">
+          {t.match.exportNoCredits} <Link href={href("/assistant")} className="font-semibold text-hot-text underline">{t.match.exportBuy}</Link>
+        </p>
+      )}
+      {state === "failed" && <p role="alert" className="text-sm text-bad">{t.account.failed}</p>}
+    </div>
+  )
+}

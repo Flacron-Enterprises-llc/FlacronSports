@@ -36,6 +36,14 @@ Parameters:
     Type: String
   PortalConfiguration:
     Type: String
+  PriceAssistant100:
+    Type: String
+  PriceDayPass:
+    Type: String
+  PriceRoomPass:
+    Type: String
+  PriceExportPack:
+    Type: String
   EmailIdentity:
     Type: String
     Default: flacronsport.com
@@ -184,12 +192,17 @@ Resources:
           Environment:
             - { Name: APP_BASE_URL, Value: !Ref AppBaseUrl }
             - { Name: SES_REGION, Value: !Ref AWS::Region }
+            - { Name: JOBS_ENABLED, Value: "true" }
             - { Name: EMAIL_FROM, Value: !Sub "FlacronSport <noreply@${EmailIdentity}>" }
             - { Name: STRIPE_PRICE_PLUS_MONTHLY, Value: !Ref PricePlusMonthly }
             - { Name: STRIPE_PRICE_PLUS_ANNUAL, Value: !Ref PricePlusAnnual }
             - { Name: STRIPE_PRICE_PREMIUM_MONTHLY, Value: !Ref PricePremiumMonthly }
             - { Name: STRIPE_PRICE_PREMIUM_ANNUAL, Value: !Ref PricePremiumAnnual }
             - { Name: STRIPE_PORTAL_CONFIGURATION, Value: !Ref PortalConfiguration }
+            - { Name: STRIPE_PRICE_ASSISTANT_100, Value: !Ref PriceAssistant100 }
+            - { Name: STRIPE_PRICE_DAY_PASS, Value: !Ref PriceDayPass }
+            - { Name: STRIPE_PRICE_ROOM_PASS, Value: !Ref PriceRoomPass }
+            - { Name: STRIPE_PRICE_EXPORT_PACK, Value: !Ref PriceExportPack }
           Secrets:
             - { Name: STRIPE_SECRET_KEY, ValueFrom: !Ref StripeSecretArn }
             - { Name: STRIPE_WEBHOOK_SECRET, ValueFrom: !Ref StripeWebhookSecretArn }
@@ -286,6 +299,61 @@ Resources:
         ThrottlingBurstLimit: 200
         ThrottlingRateLimit: 100
 
+  JobsConnection:
+    Type: AWS::Events::Connection
+    Properties:
+      Name: flacron-sport-jobs
+      Description: Bearer secret for the jobs tick
+      AuthorizationType: API_KEY
+      AuthParameters:
+        ApiKeyAuthParameters:
+          ApiKeyName: Authorization
+          ApiKeyValue: !Sub "Bearer {{resolve:secretsmanager:${CronSecretArn}}}"
+
+  JobsApiDestination:
+    Type: AWS::Events::ApiDestination
+    Properties:
+      Name: flacron-sport-jobs-tick
+      ConnectionArn: !GetAtt JobsConnection.Arn
+      InvocationEndpoint: !Sub ${HttpApi.ApiEndpoint}/api/jobs/tick
+      HttpMethod: POST
+      InvocationRateLimitPerSecond: 1
+
+  JobsRuleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: flacron-sport-jobs-rule
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: events.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: invoke-jobs-tick
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: events:InvokeApiDestination
+                Resource: !GetAtt JobsApiDestination.Arn
+
+  # API destinations time out at 5 seconds and retry on timeout. A tick can run
+  # longer and keeps running on the task, so retries would only stack up work.
+  JobsRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: flacron-sport-jobs-tick
+      ScheduleExpression: rate(15 minutes)
+      State: ENABLED
+      Targets:
+        - Id: jobs-tick
+          Arn: !GetAtt JobsApiDestination.Arn
+          RoleArn: !GetAtt JobsRuleRole.Arn
+          RetryPolicy:
+            MaximumRetryAttempts: 0
+            MaximumEventAgeInSeconds: 60
+
   Alerts:
     Type: AWS::SNS::Topic
     Properties:
@@ -348,6 +416,31 @@ Resources:
           Subscribers:
             - { SubscriptionType: EMAIL, Address: !Ref BudgetEmail }
 
+  AmplifyServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: flacron-sport-amplify
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: amplify.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: build-from-mirror
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: codecommit:GitPull
+                Resource: !Sub arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:flacron-sport
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/amplify/*
+
   GithubDeployRole:
     Type: AWS::IAM::Role
     Properties:
@@ -394,11 +487,14 @@ Resources:
                 Resource: "*"
               - Effect: Allow
                 Action:
-                  - amplify:CreateDeployment
-                  - amplify:StartDeployment
+                  - amplify:StartJob
                   - amplify:GetJob
-                  - amplify:GetBranch
-                Resource: !Sub arn:aws:amplify:${AWS::Region}:${AWS::AccountId}:apps/${AmplifyAppId}*
+                Resource: !Sub arn:aws:amplify:${AWS::Region}:${AWS::AccountId}:apps/${AmplifyAppId}/*
+              - Effect: Allow
+                Action:
+                  - codecommit:GitPull
+                  - codecommit:GitPush
+                Resource: !Sub arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:flacron-sport
               - Effect: Allow
                 Action: iam:PassRole
                 Resource:
@@ -412,3 +508,5 @@ Outputs:
     Value: !GetAtt Repository.RepositoryUri
   DeployRoleArn:
     Value: !GetAtt GithubDeployRole.Arn
+  AmplifyServiceRoleArn:
+    Value: !GetAtt AmplifyServiceRole.Arn

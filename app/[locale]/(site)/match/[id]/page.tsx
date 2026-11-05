@@ -1,7 +1,10 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
+import { MatchCommunity } from "@/components/community/match-community"
 import { StatusLabel } from "@/components/sports/event-card"
+import { ExportButton } from "@/components/sports/export-button"
 import { FavoriteStar, LocalTime, MatchScore } from "@/components/sports/parts"
+import { supportsScorePrediction } from "@/lib/community/predictions"
 import { pageContext } from "@/lib/page-context"
 import { getEvent } from "@/lib/sports/service"
 import type { SportEvent } from "@/lib/sports/types"
@@ -61,7 +64,17 @@ export default async function MatchPage({ params }: { params: Promise<{ locale: 
           {event.venue && <div><dt className="text-ink-3">{t.match.venue}</dt><dd className="text-ink">{event.venue}</dd></div>}
           <div><dt className="text-ink-3">{t.feed.source}</dt><dd className="text-ink">{event.provider.name}</dd></div>
         </dl>
+        <ExportButton matchId={event.id} />
       </section>
+
+      {process.env.COMMUNITY_ENABLED === "true" && (
+        <MatchCommunity
+          matchId={event.id}
+          predictable={supportsScorePrediction(event) && event.status === "scheduled" && Boolean(event.scheduledStartUTC) && Date.now() < Date.parse(event.scheduledStartUTC as string)}
+          home={home.name}
+          away={away.name}
+        />
+      )}
     </main>
   )
 }

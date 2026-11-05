@@ -1,4 +1,4 @@
-import { normalizeEvent, PROVIDER_NAME, type RawEvent } from "./thesportsdb"
+import { normalizeEvent, PROVIDER_NAME, toUtc, type RawEvent } from "./thesportsdb"
 import { SPORTS, type EventFeed, type SportDefinition, type SportEvent, type SportId } from "./types"
 
 const BASE = "https://www.thesportsdb.com/api/v1/json"
@@ -64,4 +64,126 @@ export async function getEvent(id: string): Promise<SportEvent | null> {
   if (!raw) return null
   const sport = enabledSports().find((candidate) => candidate.providerKey === raw.strSport)
   return sport ? normalizeEvent(raw, sport.id) : null
+}
+
+interface RawTeam {
+  idTeam: string
+  strTeam: string
+  strSport?: string | null
+}
+
+export interface TeamFixtures {
+  team: { id: string; name: string; sportId: SportId } | null
+  upcoming: SportEvent[]
+  recent: SportEvent[]
+  feed: Omit<EventFeed, "events">
+}
+
+function chooseTeam(teams: RawTeam[], name: string, sport?: SportId) {
+  const wanted = name.toLowerCase()
+  const candidates = teams.flatMap((team) => {
+    const definition = enabledSports().find((item) => item.providerKey === team.strSport)
+    return definition && team.strTeam.toLowerCase() === wanted ? [{ id: team.idTeam, name: team.strTeam, sportId: definition.id }] : []
+  })
+  return candidates.find((team) => team.sportId === sport) ?? candidates[0] ?? null
+}
+
+/** A name the provider does not know gives team: null, which is not the same as a failed lookup. */
+export async function getTeamFixtures(name: string, sport?: SportId): Promise<TeamFixtures> {
+  const base = { source: PROVIDER_NAME, fetchedAt: new Date().toISOString(), limited: apiKey().limited }
+  const empty = { upcoming: [], recent: [] }
+
+  let team: TeamFixtures["team"]
+  try {
+    const found = await fetchJson<{ teams: RawTeam[] | null }>(`searchteams.php?${new URLSearchParams({ t: name })}`)
+    team = chooseTeam(found.teams ?? [], name, sport)
+  } catch {
+    return { team: null, ...empty, feed: { ...base, state: "unavailable" } }
+  }
+  if (!team) return { team: null, ...empty, feed: { ...base, state: "ok" } }
+
+  const { id, sportId } = team
+  const [next, last] = await Promise.allSettled([
+    fetchJson<{ events: RawEvent[] | null }>(`eventsnext.php?id=${id}`),
+    fetchJson<{ results: RawEvent[] | null }>(`eventslast.php?id=${id}`),
+  ])
+  const failures = [next, last].filter((result) => result.status === "rejected").length
+  const events = (rows: RawEvent[] | null | undefined) => (rows ?? []).map((raw) => normalizeEvent(raw, sportId))
+  return {
+    team,
+    upcoming: next.status === "fulfilled" ? events(next.value.events) : [],
+    recent: last.status === "fulfilled" ? events(last.value.results) : [],
+    feed: { ...base, state: failures === 2 ? "unavailable" : failures === 1 ? "stale" : "ok" },
+  }
+}
+
+export interface StandingRow {
+  rank: number | null
+  team: string
+  played: number | null
+  won: number | null
+  drawn: number | null
+  lost: number | null
+  scoredFor: number | null
+  scoredAgainst: number | null
+  difference: number | null
+  points: number | null
+  form: string | null
+}
+
+export interface Standings {
+  state: "ok" | "empty" | "unavailable"
+  league: string | null
+  season: string | null
+  rows: StandingRow[]
+  source: string
+  fetchedAt: string
+  /** The provider's own update time for the table, when it supplies one. */
+  sourceUpdatedAt: string | null
+  limited: boolean
+}
+
+type RawStanding = Record<string, string | number | null | undefined>
+
+/** Null, not zero, for a missing value. Goal difference can be negative. */
+function count(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+export function normalizeStandings(table: RawStanding[]): Pick<Standings, "league" | "season" | "rows" | "sourceUpdatedAt"> {
+  const first = table[0]
+  const text = (value: string | number | null | undefined) => (value === null || value === undefined || value === "" ? null : String(value))
+  const updated = table.map((row) => toUtc(text(row.dateUpdated))).filter((value): value is string => Boolean(value)).sort().at(-1)
+  return {
+    league: text(first?.strLeague),
+    season: text(first?.strSeason),
+    sourceUpdatedAt: updated ?? null,
+    rows: table.map((row) => ({
+      rank: count(row.intRank),
+      team: text(row.strTeam) ?? "TBD",
+      played: count(row.intPlayed),
+      won: count(row.intWin),
+      drawn: count(row.intDraw),
+      lost: count(row.intLoss),
+      scoredFor: count(row.intGoalsFor),
+      scoredAgainst: count(row.intGoalsAgainst),
+      difference: count(row.intGoalDifference),
+      points: count(row.intPoints),
+      form: text(row.strForm),
+    })),
+  }
+}
+
+export async function getStandings(leagueId: string): Promise<Standings> {
+  const base = { source: PROVIDER_NAME, fetchedAt: new Date().toISOString(), limited: apiKey().limited }
+  const none = { league: null, season: null, rows: [], sourceUpdatedAt: null }
+  try {
+    const data = await fetchJson<{ table: RawStanding[] | null }>(`lookuptable.php?${new URLSearchParams({ l: leagueId })}`)
+    if (!data.table?.length) return { ...base, ...none, state: "empty" }
+    return { ...base, ...normalizeStandings(data.table), state: "ok" }
+  } catch {
+    return { ...base, ...none, state: "unavailable" }
+  }
 }

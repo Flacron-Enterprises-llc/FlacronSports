@@ -6,6 +6,8 @@ export interface OutboundEmail {
   subject: string
   html: string
   text: string
+  /** Extra MIME headers, used for List-Unsubscribe on bulk mail. */
+  headers?: { name: string; value: string }[]
 }
 
 let client: SESv2Client | null = null
@@ -29,6 +31,7 @@ export async function sendEmail(email: OutboundEmail): Promise<boolean> {
         Simple: {
           Subject: { Data: email.subject, Charset: "UTF-8" },
           Body: { Html: { Data: email.html, Charset: "UTF-8" }, Text: { Data: email.text, Charset: "UTF-8" } },
+          ...(email.headers?.length ? { Headers: email.headers.map(({ name, value }) => ({ Name: name, Value: value })) } : {}),
         },
       },
       EmailTags: [{ Name: "app_id", Value: APP_ID }],
@@ -47,19 +50,27 @@ export function brandedEmail(options: {
   url: string
   footnote: string
   siteUrl: string
+  /** Rendered one per paragraph after the body, for digests. */
+  lines?: string[]
+  footerLink?: { label: string; url: string }
+  lang?: string
 }): { html: string; text: string } {
-  const { heading, body, cta, url, footnote, siteUrl } = options
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"></head>
+  const { heading, body, cta, url, footnote, siteUrl, lines = [], footerLink, lang = "en" } = options
+  const list = lines.map((line) => `<p style="margin:0 0 8px;font-size:15px;line-height:1.5;color:#3a4b66">${escapeHtml(line)}</p>`).join("")
+  const footer = footerLink ? ` <a href="${escapeHtml(footerLink.url)}" style="color:#5c6b82">${escapeHtml(footerLink.label)}</a>` : ""
+  const html = `<!doctype html><html lang="${escapeHtml(lang)}"><head><meta charset="utf-8"></head>
 <body style="margin:0;background:#f5f7fa;font-family:Inter,Segoe UI,Arial,sans-serif;color:#0a1a33">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f7fa;padding:32px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden">
 <tr><td style="background:#001a3f;padding:22px 28px"><img src="${escapeHtml(siteUrl)}/brand/fs-mark-reversed.png" alt="FlacronSport" height="28"></td></tr>
 <tr><td style="height:4px;background:#fe4b01;line-height:4px;font-size:0">&nbsp;</td></tr>
 <tr><td style="padding:32px 28px 8px"><h1 style="margin:0 0 12px;font-size:22px;line-height:1.3;color:#0a1a33">${escapeHtml(heading)}</h1>
-<p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#3a4b66">${escapeHtml(body)}</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#3a4b66">${escapeHtml(body)}</p>${list}
 <a href="${escapeHtml(url)}" style="display:inline-block;background:#fe4b01;color:#0a1a33;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:6px">${escapeHtml(cta)}</a></td></tr>
-<tr><td style="padding:20px 28px 28px;font-size:12px;line-height:1.6;color:#5c6b82">${escapeHtml(footnote)}</td></tr>
+<tr><td style="padding:20px 28px 28px;font-size:12px;line-height:1.6;color:#5c6b82">${escapeHtml(footnote)}${footer}</td></tr>
 </table></td></tr></table></body></html>`
-  const text = `${heading}\n\n${body}\n\n${cta}: ${url}\n\n${footnote}\n\nFlacronSport, a product of Flacron Enterprises LLC`
+  const extra = lines.length ? `${lines.join("\n")}\n\n` : ""
+  const unsubscribe = footerLink ? `\n${footerLink.label}: ${footerLink.url}` : ""
+  const text = `${heading}\n\n${body}\n\n${extra}${cta}: ${url}\n\n${footnote}${unsubscribe}\n\nFlacronSport, a product of Flacron Enterprises LLC`
   return { html, text }
 }

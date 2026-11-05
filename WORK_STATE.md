@@ -1,30 +1,26 @@
 # Work state
 
-Last updated 2026-11-05. Branch `audit/p0-remediation`, based on `main` at `3453021`. Nothing is deployed.
+Last updated 2026-11-05. Deployment branch `main`. Live site: https://main.d27ncpia4c3b8i.amplifyapp.com
+Backend: https://43sqn0qz7a.execute-api.us-east-1.amazonaws.com (account 482881544977, us-east-1, stack `flacron-sport`).
 
 ## Resume here
 
-1. Confirm branch and SHA, then run `npm run typecheck`, `npm test` and `npm run build`.
+1. Confirm `main` and `/api/health` report the same SHA, then run `npm run typecheck`, `npm test`, `npm run build`.
 2. Read `REQUIREMENTS_STATUS.md` for gaps and `DECISIONS.md` before changing direction.
-3. Old pages are not a baseline. Design follows Flacron Intel, scope follows the spec.
+3. Design follows Flacron Intel, scope follows the spec. Old code is not a baseline.
 
-## Next tasks, in order
+## Deploying
 
-1. Build spoiler mode (WATCH-04), then add it back to marketing and the Free plan list.
-2. Profile settings: language, time zone, notifications, privacy, account deletion.
-3. Connect favorites to the account with server-side limits.
-4. Interactive role-based tour with Replay App Tour (UX-07).
-5. Upgrade and downgrade, rate limits, audit log, MFA enrolment, service worker, hreflang.
-6. Own-domain verification email through SES.
-7. Grounded publishing, consent-based newsletter, alerts.
-8. Add a repeatable browser test suite to the repo.
-9. With AWS access: live baseline, then Amplify, ECS, DNS, SES and OIDC CI/CD.
-10. With a Stripe restricted key: create the catalog, run the sandbox matrix.
+Push to `main`: tests, ECS image, smoke test, CodeCommit mirror, Amplify release, smoke test.
+Stack updates must pass the running image as `ImageTag` and `DesiredCount=1`, or the service moves to a tag that does not exist.
 
 ## Owner actions
 
-See the blockers list in the latest handoff report. The urgent one is rotating the exposed RapidAPI and API-Sports keys.
+Hostinger DNS (site, SES DKIM), GitHub Support purge of PR #1, commercial sports feed, video license, community decisions, counsel review.
 
-## Release gate
+## Next tasks
 
-Before merging to `main`: confirm whether Render auto-deploys it, and migrate any existing premium users. Old subscribers have no `billing_entitlements` record and would fall to Free.
+1. Drive the hosted Stripe page and the signed-in UI in a browser, in both languages.
+2. Run add-ons, allowance, assistant and jobs against the live stack.
+3. Rescheduled-event alert correction, score-freshness alarm, restore drill, contrast audit.
+4. Firestore rules deployment and a repeatable browser test suite.

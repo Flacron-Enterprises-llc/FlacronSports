@@ -79,7 +79,7 @@ export const signInWithEmail = async (email: string, password: string) => {
     const userCredential = await signInWithEmailAndPassword(authInstance, email, password);
     return { user: userCredential.user, error: null };
   } catch (error: any) {
-    return { user: null, error: error.message };
+    return { user: null, error: error.message, cause: error };
   }
 };
 
@@ -103,7 +103,7 @@ export const signInWithGoogle = async () => {
     const result = await signInWithPopup(authInstance, provider);
     return { user: result.user, error: null };
   } catch (error: any) {
-    return { user: null, error: error.message };
+    return { user: null, error: error.message, cause: error };
   }
 };
 

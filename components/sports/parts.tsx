@@ -83,6 +83,21 @@ export function ScoreValue({ value, label }: { value: number | undefined; label:
   return <span className="tabular font-display text-lg font-semibold text-ink">{value}</span>
 }
 
+/** For generated text that states a result. Same reveal rule as the score itself. */
+export function SpoilerGuard({ label, children }: { label: string; children: React.ReactNode }) {
+  const { prefs } = usePreferences()
+  const [revealed, setRevealed] = useState(false)
+
+  if (prefs.spoilerMode && !revealed) {
+    return (
+      <button type="button" onClick={() => setRevealed(true)} className="rounded-md bg-surface-muted px-3 py-2 text-sm font-semibold text-ink-2 hover:text-ink">
+        {label}
+      </button>
+    )
+  }
+  return <>{children}</>
+}
+
 export function MatchScore({ home, away, label }: { home: number; away: number; label: string }) {
   const { prefs } = usePreferences()
   const { t } = useLocale()

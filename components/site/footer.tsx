@@ -9,7 +9,7 @@ const COMPANY_URL = "https://www.flacronenterprises.com"
 
 export function SiteFooter({ t, href }: { t: Dictionary; href: (path: string) => string }) {
   const columns = [
-    { title: t.footer.product, links: [["/scores", t.nav.scores], ["/watch", t.nav.watch], ["/news", t.nav.news], ["/my-teams", t.nav.myTeams], ["/pricing", t.nav.pricing]] },
+    { title: t.footer.product, links: [["/scores", t.nav.scores], ["/watch", t.nav.watch], ["/news", t.nav.news], ["/my-teams", t.nav.myTeams], ["/assistant", t.nav.assistant], ["/pricing", t.nav.pricing]] },
     { title: t.footer.company, links: [["/about", t.footer.about], ["/contact", t.footer.contact]] },
   ]
 

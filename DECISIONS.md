@@ -17,4 +17,13 @@ Owner direction takes priority over older code. Each entry records why.
 | D-011 | 2026-11-05 | TheSportsDB test key `123` runs as a labelled limited preview. Only football and basketball are enabled. | The old key `3` is disabled by the provider. The test tier is a few events per query with no commercial rights confirmed. |
 | D-012 | 2026-11-05 | Team badges are not shown. | Spec allows permitted badges only, and rights are unconfirmed. |
 | D-013 | 2026-11-05 | Live Stripe keys and live events are refused unless `STRIPE_LIVE_MODE_APPROVED=true`. | Owner requires test mode until explicit approval. |
-| D-014 | 2026-11-05 | Work stays on branch `audit/p0-remediation`, not `main`. | The live site appears to deploy from this repo on Render, and old premium users need a migration first. |
+| D-014 | 2026-11-05 | Superseded: `main` is the deployment branch. | Owner said Render is not used and everything runs on AWS. |
+| D-015 | 2026-11-05 | Git history was rewritten and force pushed to remove 8 secrets, with a local backup bundle taken first. The public Firebase web key stayed. | Owner instruction, overriding the handoff's no-force-push rule. |
+| D-016 | 2026-11-05 | The exposed Firebase service-account key was replaced and disabled, not deleted. | It was public for 17 months. Disabling can be reversed if something still needs it. |
+| D-017 | 2026-11-05 | API Gateway with a VPC Link instead of an ALB. | HTTPS without a custom domain and no hourly ALB charge. |
+| D-018 | 2026-11-05 | Amplify builds from a CodeCommit mirror pushed by CI. | The org disables deploy keys, and Amplify manual deployments do not run SSR. Switch to a direct GitHub connection if the org allows it. |
+| D-019 | 2026-11-05 | The Stripe webhook uses API version `2025-03-31.basil`. | The test account allows only three versions, and other apps' endpoints must not change. |
+| D-020 | 2026-11-05 | Firestore is confirmed as the data store. | Live project already holds users and data; a new database would add cost and split the data. |
+| D-021 | 2026-11-05 | Assistant and reports are deterministic, with no model. | No approved model key exists for this app, and other apps' keys must not be reused. |
+| D-022 | 2026-11-05 | Community stays behind `COMMUNITY_ENABLED`, off. | The legal checklist needs guidelines, a retention schedule and a minors decision first. |
+| D-023 | 2026-11-05 | Allowances reset on the UTC calendar month. Prediction points: exact score 5, correct outcome 2. Base rooms last until kickoff plus 24 hours. | The spec sets no number. Owner can change these. |

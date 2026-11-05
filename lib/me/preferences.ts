@@ -17,6 +17,7 @@ export const preferencesSchema = z.object({
     types: z.array(z.enum(ALERT_TYPES)).max(ALERT_TYPES.length),
     quietStart: z.number().int().min(0).max(23).nullable(),
     quietEnd: z.number().int().min(0).max(23).nullable(),
+    email: z.boolean().default(false),
   }),
   newsletter: z.object({ optedIn: z.boolean(), consentedAt: z.string().nullable() }),
   tourVersion: z.number().int().min(0),
@@ -30,7 +31,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   spoilerMode: false,
   lowData: false,
   favorites: [],
-  alerts: { muted: false, types: ["start", "final"], quietStart: null, quietEnd: null },
+  alerts: { muted: false, types: ["start", "final"], quietStart: null, quietEnd: null, email: false },
   newsletter: { optedIn: false, consentedAt: null },
   tourVersion: 0,
 }

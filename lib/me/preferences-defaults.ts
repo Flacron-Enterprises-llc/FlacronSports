@@ -7,7 +7,7 @@ export interface Preferences {
   spoilerMode: boolean
   lowData: boolean
   favorites: string[]
-  alerts: { muted: boolean; types: AlertType[]; quietStart: number | null; quietEnd: number | null }
+  alerts: { muted: boolean; types: AlertType[]; quietStart: number | null; quietEnd: number | null; email: boolean }
   newsletter: { optedIn: boolean; consentedAt: string | null }
   tourVersion: number
 }
@@ -18,7 +18,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   spoilerMode: false,
   lowData: false,
   favorites: [],
-  alerts: { muted: false, types: ["start", "final"], quietStart: null, quietEnd: null },
+  alerts: { muted: false, types: ["start", "final"], quietStart: null, quietEnd: null, email: false },
   newsletter: { optedIn: false, consentedAt: null },
   tourVersion: 0,
 }

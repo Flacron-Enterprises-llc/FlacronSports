@@ -99,6 +99,10 @@ export function SettingsPanel() {
               {t.settings.mute}
               <input type="checkbox" className="size-5" checked={prefs.alerts.muted} onChange={(event) => save({ alerts: { ...prefs.alerts, muted: event.target.checked } })} />
             </label>
+            <label className={ROW}>
+              <span>{t.alerts.emailToggle}<span className="block text-xs text-ink-2">{t.alerts.emailToggleHelp}</span></span>
+              <input type="checkbox" className="size-5" checked={prefs.alerts.email === true} onChange={(event) => save({ alerts: { ...prefs.alerts, email: event.target.checked } })} />
+            </label>
             <fieldset>
               <legend className="mt-2 text-sm font-medium text-ink">{t.settings.alertTypes}</legend>
               {ALERTS.map((type) => (

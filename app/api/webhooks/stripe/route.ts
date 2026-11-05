@@ -28,6 +28,7 @@ export async function POST(request: Request) {
     const outcome = await processStripeEvent(event, {
       store: firestoreBillingStore,
       retrieveSubscription: (id) => stripe.subscriptions.retrieve(id),
+      retrieveCheckoutSession: (id) => stripe.checkout.sessions.retrieve(id, { expand: ["line_items", "payment_intent.latest_charge"] }),
       ownsCustomer,
       allowLivemode: liveModeApproved(),
     })

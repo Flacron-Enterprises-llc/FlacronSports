@@ -18,7 +18,7 @@ export type SportId =
 export interface SportDefinition {
   id: SportId
   name: { en: string; fr: string }
-  /** Enabled only after coverage validation. Football and basketball come first. */
+  /** Enabled only after the provider returned real two-team fixtures. Individual sports stay off until the schema fits them. */
   enabled: boolean
   providerKey?: string
 }
@@ -26,13 +26,13 @@ export interface SportDefinition {
 export const SPORTS: SportDefinition[] = [
   { id: "football", name: { en: "Football", fr: "Football" }, enabled: true, providerKey: "Soccer" },
   { id: "basketball", name: { en: "Basketball", fr: "Basketball" }, enabled: true, providerKey: "Basketball" },
-  { id: "american-football", name: { en: "American football", fr: "Football américain" }, enabled: false },
-  { id: "baseball", name: { en: "Baseball", fr: "Baseball" }, enabled: false },
-  { id: "ice-hockey", name: { en: "Ice hockey", fr: "Hockey sur glace" }, enabled: false },
+  { id: "american-football", name: { en: "American football", fr: "Football américain" }, enabled: true, providerKey: "American Football" },
+  { id: "baseball", name: { en: "Baseball", fr: "Baseball" }, enabled: true, providerKey: "Baseball" },
+  { id: "ice-hockey", name: { en: "Ice hockey", fr: "Hockey sur glace" }, enabled: true, providerKey: "Ice Hockey" },
   { id: "tennis", name: { en: "Tennis", fr: "Tennis" }, enabled: false },
   { id: "cricket", name: { en: "Cricket", fr: "Cricket" }, enabled: false },
-  { id: "rugby", name: { en: "Rugby", fr: "Rugby" }, enabled: false },
-  { id: "volleyball", name: { en: "Volleyball", fr: "Volley-ball" }, enabled: false },
+  { id: "rugby", name: { en: "Rugby", fr: "Rugby" }, enabled: true, providerKey: "Rugby" },
+  { id: "volleyball", name: { en: "Volleyball", fr: "Volley-ball" }, enabled: true, providerKey: "Volleyball" },
   { id: "combat-sports", name: { en: "Combat sports", fr: "Sports de combat" }, enabled: false },
   { id: "motorsport", name: { en: "Motorsport", fr: "Sport automobile" }, enabled: false },
 ]

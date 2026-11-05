@@ -63,6 +63,26 @@ Local production build (`next start`), no provider credentials configured.
 
 ## Not tested
 
-Real Firebase sign-up, email verification and MFA. Real Stripe sandbox checkout, webhook delivery and cancel flow. Firestore transaction behaviour against a real database. SES sending. Screen readers, Safari, iOS and Android devices. Any AWS, deployment or production check. The live site itself: this network resets connections to both `flacronsport.com` and `render.com`, so its status is unknown.
+Superseded by the live evidence below.
 
 The browser checks were run from a throwaway script and are not yet a repeatable test in this repo.
+
+## Live evidence on AWS (2026-11-05, commit 1d7ce3a)
+
+| Check | Result |
+|---|---|
+| Unit tests, typecheck, production build | PASS, 276 tests |
+| GitHub push to AWS | PASS: tests, ECS, smoke by SHA, CodeCommit, Amplify, smoke by SHA. Circuit breaker rollback observed on an earlier bad image |
+| Domain | PASS: apex over HTTPS on CloudFront, `www` 308 to apex |
+| API suite on the live stack | PASS, 22 of 22: real token, forged token 401, unverified checkout 403, sandbox subscription, webhook entitlement, duplicate blocked, cancel, undo, upgrade, portal, forged webhook 400, Free limit, deletion |
+| Browser journey on flacronsport.com | PASS, 21 of 21: UI sign-in, reports, tour and replay, spoiler mode, hosted Stripe card payment in USD, webhook activation, paid add-on, PDF download, one credit consumed, French |
+| Signed-in crawl | PASS: 21 routes render with no crash. `/app/admin` 403 is expected for a non-admin |
+| Marketing | PASS: no overflow at 320 to 1440px, no product links, progress bar 0 to 1 on the header edge, 7 social links, guest redirected to sign-in |
+| SES | Accepted through the live route to Amazon's simulator (`sent: true`). Real inbox delivery not observed |
+| Secret history | PASS: 8 secrets removed from all branches, confirmed by scanning a fresh mirror. PR #1 ref needs GitHub Support |
+
+Browser run note: the local router still cached the old Render address, so Chrome was pinned to a CloudFront address for this hostname. Public resolvers return the correct records.
+
+## Still not tested
+
+Screen readers, Safari, iOS and Android devices, load test, backup restore drill, failed renewal, downgrade, MFA enrolment, community features, and a real inbox.

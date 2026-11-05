@@ -1,3 +1,4 @@
+import { ApiError } from "@/lib/api-auth"
 import { normalizeEvent, PROVIDER_NAME, toUtc, type RawEvent } from "./thesportsdb"
 import { SPORTS, type EventFeed, type SportDefinition, type SportEvent, type SportId } from "./types"
 
@@ -12,20 +13,57 @@ function apiKey(): { key: string; limited: boolean } {
   return key ? { key, limited: false } : { key: "123", limited: true }
 }
 
-async function fetchJson<T>(path: string): Promise<T> {
-  const { key } = apiKey()
-  const response = await fetch(`${BASE}/${key}/${path}`, {
-    next: { revalidate: REVALIDATE_SECONDS },
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  })
-  if (!response.ok) throw new Error(`Provider responded ${response.status}`)
-  return response.json() as Promise<T>
+const FRESH_MS = REVALIDATE_SECONDS * 1000
+const STALE_LIMIT_MS = 6 * 3_600_000
+
+const memory = new Map<string, { data: unknown; at: number }>()
+const inFlight = new Map<string, Promise<unknown>>()
+
+export function clearFeedCache(): void {
+  memory.clear()
+  inFlight.clear()
 }
 
-async function eventsForSport(sport: SportDefinition, date: string): Promise<SportEvent[]> {
+async function request<T>(path: string): Promise<T> {
+  const running = inFlight.get(path)
+  if (running) return running as Promise<T>
+
+  const task = (async () => {
+    const response = await fetch(`${BASE}/${apiKey().key}/${path}`, {
+      next: { revalidate: REVALIDATE_SECONDS },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    if (!response.ok) throw new Error(`Provider responded ${response.status}`)
+    return response.json() as Promise<T>
+  })().finally(() => inFlight.delete(path))
+
+  inFlight.set(path, task)
+  return task
+}
+
+/** The test tier rate limits hard, so the last good answer is kept and reported as stale. */
+async function load<T>(path: string): Promise<{ data: T; stale: boolean }> {
+  const cached = memory.get(path)
+  const now = Date.now()
+  if (cached && now - cached.at < FRESH_MS) return { data: cached.data as T, stale: false }
+  try {
+    const data = await request<T>(path)
+    memory.set(path, { data, at: now })
+    return { data, stale: false }
+  } catch {
+    if (cached && now - cached.at < STALE_LIMIT_MS) return { data: cached.data as T, stale: true }
+    throw new ApiError(503, "provider_unavailable", "Sports data is temporarily unavailable")
+  }
+}
+
+async function fetchJson<T>(path: string): Promise<T> {
+  return (await load<T>(path)).data
+}
+
+async function eventsForSport(sport: SportDefinition, date: string): Promise<{ events: SportEvent[]; stale: boolean }> {
   const query = new URLSearchParams({ d: date, s: sport.providerKey as string })
-  const data = await fetchJson<{ events: RawEvent[] | null }>(`eventsday.php?${query}`)
-  return (data.events ?? []).map((raw) => normalizeEvent(raw, sport.id))
+  const { data, stale } = await load<{ events: RawEvent[] | null }>(`eventsday.php?${query}`)
+  return { events: (data.events ?? []).map((raw) => normalizeEvent(raw, sport.id)), stale }
 }
 
 export function enabledSports(): SportDefinition[] {
@@ -42,18 +80,22 @@ export async function getEvents(options: { date?: string; sport?: SportId } = {}
   const fetchedAt = new Date().toISOString()
   const base = { source: PROVIDER_NAME, fetchedAt, limited: apiKey().limited }
 
-  const results = await Promise.allSettled(sports.map((sport) => eventsForSport(sport, date)))
-  const succeeded = results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []))
+  // One at a time: seven sports at once is what trips the provider's rate limit.
+  const succeeded: Awaited<ReturnType<typeof eventsForSport>>[] = []
+  for (const sport of sports) {
+    await eventsForSport(sport, date).then((result) => succeeded.push(result)).catch(() => undefined)
+  }
 
   if (sports.length > 0 && succeeded.length === 0) return { ...base, state: "unavailable", events: [] }
 
   const seen = new Set<string>()
   const events = succeeded
-    .flat()
+    .flatMap((result) => result.events)
     .filter((event) => !seen.has(event.id) && seen.add(event.id))
     .sort((a, b) => (a.scheduledStartUTC ?? "").localeCompare(b.scheduledStartUTC ?? ""))
 
-  return { ...base, state: succeeded.length < sports.length ? "stale" : "ok", events }
+  const complete = succeeded.length === sports.length && succeeded.every((result) => !result.stale)
+  return { ...base, state: complete ? "ok" : "stale", events }
 }
 
 export async function getEvent(id: string): Promise<SportEvent | null> {

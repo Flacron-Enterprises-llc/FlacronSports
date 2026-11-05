@@ -410,7 +410,7 @@ Resources:
     Type: AWS::Logs::MetricFilter
     Properties:
       LogGroupName: !Ref LogGroup
-      FilterPattern: '"Job" "failed"'
+      FilterPattern: '?"Job reports failed" ?"Job alerts failed" ?"Job newsletter failed" ?"Job predictions failed"'
       MetricTransformations:
         - { MetricName: JobFailures, MetricNamespace: FlacronSport, MetricValue: "1", DefaultValue: 0 }
 

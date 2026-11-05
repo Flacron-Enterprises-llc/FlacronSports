@@ -55,8 +55,8 @@ export async function runTick(now: Date = new Date()) {
   if (!db) throw new ApiError(503, "storage_unavailable", "Storage is not available")
 
   // Yesterday too: a late kickoff finishes after midnight UTC, under the previous date.
-  const yesterday = await getEvents({ date: utcDate(new Date(now.getTime() - DAY)) })
-  const today = await getEvents({ date: utcDate(now) })
+  const yesterday = await getEvents({ date: utcDate(new Date(now.getTime() - DAY)), refresh: true })
+  const today = await getEvents({ date: utcDate(now), refresh: true })
   const seen = new Set<string>()
   const events: SportEvent[] = [...yesterday.events, ...today.events].filter((event) => !seen.has(event.id) && seen.add(event.id))
   const siteUrl = process.env.APP_BASE_URL || "https://flacronsport.com"

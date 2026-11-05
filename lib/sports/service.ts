@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto"
 import { ApiError } from "@/lib/api-auth"
+import { getAdminDb } from "@/lib/firebase-admin"
 import { isCovered, normalizeEvent, PROVIDER_NAME, toUtc, type RawEvent } from "./thesportsdb"
 import { SPORTS, type EventFeed, type SportDefinition, type SportEvent, type SportId } from "./types"
 
@@ -6,6 +8,8 @@ const BASE = "https://www.thesportsdb.com/api/v1/json"
 const TIMEOUT_MS = 6000
 const BACKEND_TIMEOUT_MS = 20_000
 const CALL_SPACING_MS = 400
+const REFRESH_SPACING_MS = 2500
+const SNAPSHOT_FRESH_MS = 45 * 60_000
 const REVALIDATE_SECONDS = 120
 
 // "123" is the provider's public test key: a handful of events per query and no
@@ -43,17 +47,53 @@ async function request<T>(path: string): Promise<T> {
   return task
 }
 
-/** The test tier rate limits hard, so the last good answer is kept and reported as stale. */
-async function load<T>(path: string): Promise<{ data: T; stale: boolean }> {
+interface Snapshot {
+  data: unknown
+  at: number
+}
+
+const snapshotDoc = (path: string) =>
+  getAdminDb()?.collection("feed_snapshots").doc(createHash("sha1").update(path).digest("hex"))
+
+async function readSnapshot(path: string): Promise<Snapshot | null> {
+  try {
+    const doc = await snapshotDoc(path)?.get()
+    if (!doc?.exists) return null
+    const { body, at } = doc.data() as { body: string; at: number }
+    return { data: JSON.parse(body), at }
+  } catch {
+    return null
+  }
+}
+
+async function writeSnapshot(path: string, data: unknown, at: number): Promise<void> {
+  await snapshotDoc(path)?.set({ body: JSON.stringify(data), at }).catch(() => undefined)
+}
+
+/**
+ * Visitors read the stored snapshot, and the scheduled job is what calls the
+ * provider, so traffic cannot trip its rate limit. On any failure the last good
+ * answer is kept and reported as stale, including after a restart.
+ */
+async function load<T>(path: string, refresh = false): Promise<{ data: T; stale: boolean }> {
   const cached = memory.get(path)
   const now = Date.now()
-  if (cached && now - cached.at < FRESH_MS) return { data: cached.data as T, stale: false }
+  if (!refresh && cached && now - cached.at < FRESH_MS) return { data: cached.data as T, stale: false }
+
+  const snapshot = refresh ? null : await readSnapshot(path)
+  if (snapshot && now - snapshot.at < SNAPSHOT_FRESH_MS) {
+    memory.set(path, { data: snapshot.data, at: now })
+    return { data: snapshot.data as T, stale: false }
+  }
+
   try {
     const data = await request<T>(path)
     memory.set(path, { data, at: now })
+    await writeSnapshot(path, data, now)
     return { data, stale: false }
   } catch {
-    if (cached && now - cached.at < STALE_LIMIT_MS) return { data: cached.data as T, stale: true }
+    const fallback = cached && now - cached.at < STALE_LIMIT_MS ? cached : (snapshot ?? (await readSnapshot(path)))
+    if (fallback && now - fallback.at < STALE_LIMIT_MS) return { data: fallback.data as T, stale: true }
     throw new ApiError(503, "provider_unavailable", "Sports data is temporarily unavailable")
   }
 }
@@ -62,9 +102,9 @@ async function fetchJson<T>(path: string): Promise<T> {
   return (await load<T>(path)).data
 }
 
-async function eventsForSport(sport: SportDefinition, date: string): Promise<{ events: SportEvent[]; stale: boolean }> {
+async function eventsForSport(sport: SportDefinition, date: string, refresh = false): Promise<{ events: SportEvent[]; stale: boolean }> {
   const query = new URLSearchParams({ d: date, s: sport.providerKey as string })
-  const { data, stale } = await load<{ events: RawEvent[] | null }>(`eventsday.php?${query}`)
+  const { data, stale } = await load<{ events: RawEvent[] | null }>(`eventsday.php?${query}`, refresh)
   // The sport is rechecked per record, so a stray row can never be filed under the wrong sport.
   const rows = (data.events ?? []).filter((raw) => (!raw.strSport || raw.strSport === sport.providerKey) && isCovered(raw, sport.id))
   return { events: rows.map((raw) => normalizeEvent(raw, sport.id)), stale }
@@ -88,10 +128,10 @@ async function fromBackend<T>(path: string): Promise<T | null> {
   return response.json() as Promise<T>
 }
 
-export async function getEvents(options: { date?: string; sport?: SportId } = {}): Promise<EventFeed> {
+export async function getEvents(options: { date?: string; sport?: SportId; refresh?: boolean } = {}): Promise<EventFeed> {
   const date = options.date ?? utcDate()
   const query = new URLSearchParams({ date, pageSize: "500", ...(options.sport ? { sport: options.sport } : {}) })
-  const remote = await fromBackend<EventFeed>(`/api/matches?${query}`).catch(() => null)
+  const remote = options.refresh ? null : await fromBackend<EventFeed>(`/api/matches?${query}`).catch(() => null)
   if (remote) return remote
   const sports = enabledSports().filter((sport) => !options.sport || sport.id === options.sport)
   const fetchedAt = new Date().toISOString()
@@ -100,8 +140,8 @@ export async function getEvents(options: { date?: string; sport?: SportId } = {}
   // One at a time: every sport at once is what trips the provider's rate limit.
   const succeeded: Awaited<ReturnType<typeof eventsForSport>>[] = []
   for (const sport of sports) {
-    await eventsForSport(sport, date).then((result) => succeeded.push(result)).catch(() => undefined)
-    if (process.env.NODE_ENV === "production") await new Promise((resolve) => setTimeout(resolve, CALL_SPACING_MS))
+    await eventsForSport(sport, date, options.refresh).then((result) => succeeded.push(result)).catch(() => undefined)
+    if (process.env.NODE_ENV === "production") await new Promise((resolve) => setTimeout(resolve, options.refresh ? REFRESH_SPACING_MS : CALL_SPACING_MS))
   }
 
   if (sports.length > 0 && succeeded.length === 0) return { ...base, state: "unavailable", events: [] }
@@ -117,17 +157,17 @@ export async function getEvents(options: { date?: string; sport?: SportId } = {}
 }
 
 /** A rate-limited lookup can still be answered from a daily feed already in memory. */
-async function lookupRaw(providerId: string): Promise<RawEvent | undefined> {
-  try {
-    const data = await fetchJson<{ events: RawEvent[] | null }>(`lookupevent.php?id=${providerId}`)
-    return data.events?.[0]
-  } catch (error) {
+async function lookupRaw(providerId: string): Promise<RawLookup | undefined> {
+  const inMemory = () => {
     for (const entry of memory.values()) {
-      const found = (entry.data as { events?: RawEvent[] | null }).events?.find((event) => event.idEvent === providerId)
+      const found = (entry.data as { events?: RawLookup[] | null }).events?.find((event) => event.idEvent === providerId)
       if (found) return found
     }
-    throw error
+    return undefined
   }
+  const known = inMemory()
+  if (known) return known
+  return (await fetchJson<{ events: RawLookup[] | null }>(`lookupevent.php?id=${providerId}`)).events?.[0]
 }
 
 export async function getEvent(id: string): Promise<SportEvent | null> {

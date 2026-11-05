@@ -4,7 +4,8 @@
 import { randomBytes } from "node:crypto"
 import { ApiError } from "@/lib/api-auth"
 import type { DocDb, DocTx } from "@/lib/doc-db"
-import { assertId, MATCH_ID, MESSAGE_ID, ROOM_ID } from "./content"
+import { assertId, MATCH_ID, MESSAGE_ID, opaqueRef, ROOM_ID } from "./content"
+import { requireAccepted } from "./gate"
 
 export const DEFAULT_SLOW_MODE_SECONDS = 5
 export const PAGE_SIZE = 30
@@ -13,6 +14,12 @@ const MAX_BLOCKS = 500
 export interface ChatRoomState {
   locked?: boolean
   slowModeSeconds?: number
+  notice?: { text: string; by: string; pinnedAtUTC: string } | null
+}
+
+interface BlockList {
+  blocked: string[]
+  names?: Record<string, string>
 }
 
 export interface StoredMessage {
@@ -23,6 +30,9 @@ export interface StoredMessage {
   createdAtUTC: string
   removed: boolean
   removedReason?: string
+  reactionCounts?: Record<string, number>
+  /** Set when the author deleted their account: uid is empty and text may be too. */
+  formerMember?: boolean
 }
 
 export interface Sanction {
@@ -51,19 +61,23 @@ export function assertNotSanctioned(sanction: Sanction | null, now: Date, action
 
 export const readSanction = (tx: Pick<DocTx, "get">, uid: string) => tx.get<Sanction>(`community_sanctions/${uid}`)
 
+export const reactionPath = (scopeId: string, messageId: string, uid: string) => `message_reactions/${scopeId}_${messageId}_${uid}`
+export const matchParticipantPath = (matchId: string, uid: string) => `match_chat_participants/${matchId}_${uid}`
+
 export async function postMatchMessage(
   db: DocDb,
   input: { matchId: string; uid: string; displayName: string; text: string },
   now: Date,
 ): Promise<{ id: string }> {
   const { matchId, uid, displayName, text } = input
-  const participantPath = `${chatPath(matchId)}/participants/${uid}`
+  const participantPath = matchParticipantPath(matchId, uid)
 
   return db.transaction(async (tx) => {
     const room = await tx.get<ChatRoomState>(chatPath(matchId))
     const sanction = await readSanction(tx, uid)
     const participant = await tx.get<{ lastPostMs: number }>(participantPath)
 
+    await requireAccepted(tx, uid)
     if (room?.locked) throw new ApiError(423, "room_locked", "This chat is locked")
     assertNotSanctioned(sanction, now, "post")
     const slowModeMs = (room?.slowModeSeconds ?? DEFAULT_SLOW_MODE_SECONDS) * 1000
@@ -74,19 +88,22 @@ export async function postMatchMessage(
     const id = newMessageId(now)
     const message: StoredMessage = { sortKey: id, uid, displayName, text, createdAtUTC: now.toISOString(), removed: false }
     tx.set(`${messagesPath("match", matchId)}/${id}`, message)
-    tx.set(participantPath, { lastPostMs: now.getTime() })
+    tx.set(participantPath, { uid, matchId, lastPostMs: now.getTime() })
     return { id }
   })
 }
 
-export function toPublicMessage(id: string, message: StoredMessage, viewerUid: string | null) {
+export function toPublicMessage(id: string, message: StoredMessage, viewerUid: string | null, myReaction: string | null = null) {
   return {
     id,
     displayName: message.displayName,
-    text: message.removed ? "" : message.text,
+    text: message.removed || message.formerMember ? "" : message.text,
     createdAtUTC: message.createdAtUTC,
     removed: message.removed,
+    formerMember: message.formerMember === true,
     mine: viewerUid === message.uid,
+    reactions: Object.fromEntries(Object.entries(message.reactionCounts ?? {}).filter(([, count]) => count > 0)),
+    myReaction,
   }
 }
 
@@ -101,9 +118,13 @@ export async function listMessages(
     limit: PAGE_SIZE,
     startAfter: cursor ?? undefined,
   })
-  const blocked = viewerUid ? (await db.get<{ blocked: string[] }>(`user_blocks/${viewerUid}`))?.blocked ?? [] : []
+  const blocked = viewerUid ? (await db.get<BlockList>(`user_blocks/${viewerUid}`))?.blocked ?? [] : []
+  const mine = viewerUid
+    ? await db.query<{ messageId: string; reaction: string }>("message_reactions", { where: [["uid", viewerUid], ["scopeId", scopeId]] })
+    : []
+  const myReactions = new Map(mine.map((row) => [row.messageId, row.reaction]))
   return {
-    messages: rows.filter((row) => !blocked.includes(row.uid)).map((row) => toPublicMessage(row.id, row, viewerUid)),
+    messages: rows.filter((row) => !blocked.includes(row.uid)).map((row) => toPublicMessage(row.id, row, viewerUid, myReactions.get(row.id) ?? null)),
     nextCursor: rows.length === PAGE_SIZE ? rows[rows.length - 1].id : null,
   }
 }
@@ -112,7 +133,7 @@ function scopePattern(scope: ReportScope) {
   return scope === "match" ? MATCH_ID : ROOM_ID
 }
 
-async function assertScopeAccess(db: Pick<DocDb, "get">, scope: ReportScope, scopeId: string, uid: string) {
+export async function assertScopeAccess(db: Pick<DocDb, "get">, scope: ReportScope, scopeId: string, uid: string) {
   if (scope !== "room") return
   const member = await db.get<{ status: string }>(`room_members/${scopeId}_${uid}`)
   if (member?.status !== "active") throw new ApiError(404, "not_found", "Not found")
@@ -122,7 +143,7 @@ async function findMessage(db: Pick<DocDb, "get">, scope: ReportScope, scopeId: 
   assertId(scopeId, scopePattern(scope))
   assertId(messageId, MESSAGE_ID)
   const message = await db.get<StoredMessage>(`${messagesPath(scope, scopeId)}/${messageId}`)
-  if (!message) throw new ApiError(404, "not_found", "Not found")
+  if (!message || message.formerMember) throw new ApiError(404, "not_found", "Not found")
   return message
 }
 
@@ -137,6 +158,7 @@ export async function reportMessage(
   const message = await findMessage(db, scope, scopeId, messageId)
   const id = `${messageId}_${reporterUid}`
   await db.transaction(async (tx) => {
+    await requireAccepted(tx, reporterUid)
     if (await tx.get(`community_reports/${id}`)) return
     tx.set(`community_reports/${id}`, {
       scope, scopeId, messageId, reporterUid, reason,
@@ -159,9 +181,30 @@ export async function blockAuthor(
   if (message.uid === uid) throw new ApiError(400, "invalid_request", "You cannot block yourself")
 
   await db.transaction(async (tx) => {
-    const blocked = (await tx.get<{ blocked: string[] }>(`user_blocks/${uid}`))?.blocked ?? []
+    await requireAccepted(tx, uid)
+    const list = await tx.get<BlockList>(`user_blocks/${uid}`)
+    const blocked = list?.blocked ?? []
     if (blocked.includes(message.uid)) return
     if (blocked.length >= MAX_BLOCKS) throw new ApiError(409, "block_limit", "Your block list is full")
-    tx.set(`user_blocks/${uid}`, { blocked: [...blocked, message.uid] })
+    tx.set(`user_blocks/${uid}`, { blocked: [...blocked, message.uid], names: { ...list?.names, [message.uid]: message.displayName } })
+  })
+}
+
+const blockRef = (viewerUid: string, blockedUid: string) => opaqueRef(`block:${viewerUid}`, blockedUid)
+
+export async function listBlocked(db: Pick<DocDb, "get">, uid: string) {
+  const list = await db.get<BlockList>(`user_blocks/${uid}`)
+  return (list?.blocked ?? []).map((blockedUid) => ({ ref: blockRef(uid, blockedUid), displayName: list?.names?.[blockedUid] ?? "Fan" }))
+}
+
+export async function unblockAuthor(db: DocDb, input: { uid: string; ref: string }): Promise<void> {
+  const { uid, ref } = input
+  await db.transaction(async (tx) => {
+    await requireAccepted(tx, uid)
+    const list = await tx.get<BlockList>(`user_blocks/${uid}`)
+    const target = list?.blocked.find((blockedUid) => blockRef(uid, blockedUid) === ref)
+    if (!list || !target) throw new ApiError(404, "not_found", "Not found")
+    const { [target]: _removed, ...names } = list.names ?? {}
+    tx.set(`user_blocks/${uid}`, { blocked: list.blocked.filter((blockedUid) => blockedUid !== target), names })
   })
 }

@@ -4,6 +4,7 @@ import type { UserRow } from "@/lib/alerts/notifications"
 import { brandedEmail, type OutboundEmail } from "@/lib/email-service"
 import { getDictionary, localePath, type Locale } from "@/lib/i18n"
 import type { Preferences } from "@/lib/me/preferences-defaults"
+import { eventTitle, isDuel, resultLine } from "@/lib/sports/presentation"
 import type { SportEvent } from "@/lib/sports/types"
 import { unsubscribeToken } from "./token"
 
@@ -36,22 +37,28 @@ export interface Digest {
 
 /** Only rows the feed verified. Spoiler mode drops scores. Nothing to report gives null. */
 export function buildDigest(prefs: Preferences, events: SportEvent[], now: Date): Digest | null {
-  const { newsletter: copy } = getDictionary(prefs.locale)
+  const dictionary = getDictionary(prefs.locale)
+  const { newsletter: copy } = dictionary
   const pool = prefs.favorites.length ? events.filter((event) => followsEvent(prefs.favorites, event)) : events
   const today = localClock(now, prefs.timeZone).date
 
   const results = pool.flatMap((event) => {
+    const result = resultLine(event, dictionary)
+    if (event.status !== "finished" || !result) return []
+    const name = eventTitle(event)
+    if (event.score.kind !== "team") return [fill(prefs.spoilerMode ? copy.eventResultHidden : copy.eventResultLine, { event: name, result })]
     const [home, away] = event.participants.map((participant) => participant.name)
-    if (event.status !== "finished" || event.score.kind !== "team") return []
     return prefs.spoilerMode
       ? [fill(copy.resultHidden, { home, away })]
       : [fill(copy.resultLine, { home, away, homeScore: String(event.score.home), awayScore: String(event.score.away) })]
   })
   const fixtures = pool.flatMap((event) => {
     const iso = event.scheduledStartUTC
-    if (event.status !== "scheduled" || !iso || localClock(new Date(iso), prefs.timeZone).date !== today) return []
+    if (event.status !== "scheduled" || !iso || event.dateOnly || localClock(new Date(iso), prefs.timeZone).date !== today) return []
+    const time = clockTime(iso, prefs.locale, prefs.timeZone)
+    if (!isDuel(event)) return [fill(copy.eventFixtureLine, { event: eventTitle(event), competition: event.competition.name, time })]
     const [home, away] = event.participants.map((participant) => participant.name)
-    return [fill(copy.fixtureLine, { home, away, competition: event.competition.name, time: clockTime(iso, prefs.locale, prefs.timeZone) })]
+    return [fill(copy.fixtureLine, { home, away, competition: event.competition.name, time })]
   })
 
   const section = (heading: string, rows: string[]) => (rows.length ? [heading, ...rows.slice(0, MAX_ROWS)] : [])

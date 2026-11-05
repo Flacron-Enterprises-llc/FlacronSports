@@ -1,5 +1,6 @@
 import { getDictionary, type Locale } from "@/lib/i18n"
 import type { AlertType, Preferences } from "@/lib/me/preferences-defaults"
+import { eventTitle, hasResult, isDuel, resultLine } from "@/lib/sports/presentation"
 import type { SportEvent } from "@/lib/sports/types"
 
 export type DueAlert = Extract<AlertType, "start" | "final">
@@ -37,8 +38,9 @@ export function dueAlerts(event: SportEvent, now: Date): DueAlert[] {
   const due: DueAlert[] = []
   const kickoff = event.scheduledStartUTC ? Date.parse(event.scheduledStartUTC) : Number.NaN
   const inWindow = now.getTime() >= kickoff - START_LEAD && now.getTime() <= kickoff + START_GRACE
-  if ((event.status === "scheduled" || event.status === "live") && inWindow) due.push("start")
-  if (event.status === "finished" && event.score.kind === "team") due.push("final")
+  // A date-only event has no real start, so midnight must not announce one.
+  if ((event.status === "scheduled" || event.status === "live") && inWindow && !event.dateOnly) due.push("start")
+  if (event.status === "finished" && hasResult(event)) due.push("final")
   return due
 }
 
@@ -78,18 +80,23 @@ export interface AlertContent {
 
 /** With spoiler mode on the score never reaches the stored record or the email. */
 export function buildAlert(event: SportEvent, type: DueAlert, prefs: Preferences): AlertContent {
-  const { alerts: copy } = getDictionary(prefs.locale)
-  const [home, away] = event.participants.map((participant) => participant.name)
-  const values = { home, away, competition: event.competition.name }
+  const dictionary = getDictionary(prefs.locale)
+  const { alerts: copy } = dictionary
+  const duel = isDuel(event)
+  const [home = "", away = ""] = duel ? event.participants.map((participant) => participant.name) : []
+  const values = { home, away, event: eventTitle(event), competition: event.competition.name }
 
   if (type === "start") {
     const time = event.scheduledStartUTC ? kickoffTime(event.scheduledStartUTC, prefs.locale, prefs.timeZone) : ""
-    const body = fill(copy.startBody, { ...values, time })
-    return { title: fill(copy.startTitle, values), body, spoilerFreeBody: body }
+    const body = fill(duel ? copy.startBody : copy.eventStartBody, { ...values, time })
+    return { title: fill(duel ? copy.startTitle : copy.eventStartTitle, values), body, spoilerFreeBody: body }
   }
 
-  const spoilerFreeBody = fill(copy.finalSpoilerFree, values)
-  const score = event.score.kind === "team" ? event.score : null
-  const body = score && !prefs.spoilerMode ? fill(copy.finalBody, { ...values, homeScore: String(score.home), awayScore: String(score.away) }) : spoilerFreeBody
-  return { title: fill(copy.finalTitle, values), body, spoilerFreeBody }
+  const spoilerFreeBody = fill(duel ? copy.finalSpoilerFree : copy.eventFinalSpoilerFree, values)
+  const title = fill(duel ? copy.finalTitle : copy.eventFinalTitle, values)
+  if (prefs.spoilerMode) return { title, body: spoilerFreeBody, spoilerFreeBody }
+  const { score } = event
+  if (score.kind === "team") return { title, body: fill(copy.finalBody, { ...values, homeScore: String(score.home), awayScore: String(score.away) }), spoilerFreeBody }
+  const result = resultLine(event, dictionary)
+  return { title, body: result ? fill(copy.eventFinalBody, { ...values, result }) : spoilerFreeBody, spoilerFreeBody }
 }

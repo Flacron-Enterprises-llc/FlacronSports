@@ -62,7 +62,7 @@ export function FavoriteStar({ team }: { team: string }) {
  * Spoiler mode masks the value in the rendered DOM rather than with CSS, so it
  * also stays out of the accessibility tree. Each reveal lasts for that view only.
  */
-export function ScoreValue({ value, label }: { value: number | undefined; label: string }) {
+export function ScoreValue({ value, label }: { value: number | string | undefined; label: string }) {
   const { prefs } = usePreferences()
   const { t } = useLocale()
   const [revealed, setRevealed] = useState(false)

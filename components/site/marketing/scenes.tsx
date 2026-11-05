@@ -360,7 +360,7 @@ export function AssistantScene({ s }: SceneProps) {
 export function CommunityScene({ s }: SceneProps) {
   return (
     <div className="grid min-h-[340px] gap-3 bg-bg p-4 sm:grid-cols-[1.3fr_1fr]">
-      <Panel title={s.chat} icon={Users} right={<Chip tone="warn">{s.soon}</Chip>}>
+      <Panel title={s.chat} icon={Users} right={<Chip>{s.moderated}</Chip>}>
         <ul className="space-y-2">
           {["w-11/12", "w-2/3", "w-4/5"].map((width, index) => (
             <li key={width} className="fs-st flex items-center gap-2" style={st(index)}>

@@ -39,3 +39,7 @@ next-env.d.ts
 # deployment bundle
 .amplify-hosting/
 amplify.zip
+
+# browser tests
+test-results/
+playwright-report/

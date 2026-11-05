@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { apiErrorResponse, requireFeature, requireUser, requireVerifiedUser } from "@/lib/api-auth"
 import { listMessages, postMatchMessage } from "@/lib/community/chat"
 import { assertId, cleanMessage, displayNameOf, MATCH_ID } from "@/lib/community/content"
+import { getMatchChatState } from "@/lib/community/engagement"
 import { requireEvent } from "@/lib/community/events"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { clientIp, rateLimit } from "@/lib/rate-limit"
@@ -18,7 +19,10 @@ export async function GET(request: Request, { params }: Context) {
     const matchId = assertId((await params).id, MATCH_ID)
     const viewer = request.headers.has("authorization") ? await requireUser(request) : null
     const cursor = new URL(request.url).searchParams.get("cursor")
-    return NextResponse.json(await listMessages(firestoreDocDb(), { scope: "match", scopeId: matchId, viewerUid: viewer?.uid ?? null, cursor }))
+    const db = firestoreDocDb()
+    const viewerUid = viewer?.uid ?? null
+    const [list, state] = await Promise.all([listMessages(db, { scope: "match", scopeId: matchId, viewerUid, cursor }), getMatchChatState(db, matchId, viewerUid)])
+    return NextResponse.json({ ...list, ...state })
   } catch (error) {
     return apiErrorResponse(error)
   }

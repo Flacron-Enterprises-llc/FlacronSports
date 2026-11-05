@@ -25,8 +25,10 @@ describe("marketing site", () => {
     expect(leaves(getMarketing("fr")).sort()).toEqual(leaves(getMarketing("en")).sort())
     for (const feature of FEATURES) expect(leaves(feature.fr).sort()).toEqual(leaves(feature.en).sort())
   })
-  it("marks only community as coming soon", () => {
-    expect(FEATURES.filter((feature) => feature.comingSoon).map((feature) => feature.slug)).toEqual(["community"])
+  it("marks no feature as coming soon, and says nothing of the kind about community", () => {
+    expect(FEATURES.filter((feature) => feature.comingSoon)).toEqual([])
+    const community = JSON.stringify([FEATURES.find((feature) => feature.slug === "community"), getMarketing("en").captions.community, getMarketing("fr").captions.community])
+    expect(community).not.toMatch(/coming soon|bientôt|not available yet|pas encore/i)
   })
   it("keeps the broadcast sentence next to watch content", () => {
     expect(FEATURES.find((feature) => feature.slug === "watch-options")?.broadcastNote).toBe(true)
@@ -35,7 +37,6 @@ describe("marketing site", () => {
   it("shows no AI wording, vendors or stack details", () => {
     expect(copy).not.toMatch(/\bAI\b|\bIA\b/)
     expect(copy).not.toMatch(/TheSportsDB|Stripe|Firebase|AWS|Amazon|\bSES\b|\bUTC\b|sandbox|\bAPI\b/)
-    expect(getDictionary("en").pricing.testBilling + getDictionary("fr").pricing.testBilling).not.toMatch(/Stripe|sandbox/i)
   })
   it("never fetches sports data from a marketing page", () => {
     for (const path of source) expect(readFileSync(path, "utf8"), path).not.toMatch(/lib\/sports\/service|components\/sports\//)

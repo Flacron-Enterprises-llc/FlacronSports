@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { userMessageRecords } from "@/lib/alerts/notifications"
 import { ApiError, apiErrorResponse, requireUser } from "@/lib/api-auth"
 import { getEffectiveAccess } from "@/lib/billing/firestore-store"
+import { exportCommunityData } from "@/lib/community/account"
+import { firestoreDocDb } from "@/lib/doc-db"
 import { getAdminDb } from "@/lib/firebase-admin"
 import { getPreferences } from "@/lib/me/preferences"
 import { rateLimit } from "@/lib/rate-limit"
@@ -19,7 +21,6 @@ export async function GET(request: Request) {
     const payments = await db.collection("billing_payments").where("uid", "==", user.uid).get()
     const { alerts, sends } = await userMessageRecords(db, user.uid)
     const purchases = await db.collection("billing_purchases").where("uid", "==", user.uid).get()
-    const predictions = await db.collection("predictions").where("uid", "==", user.uid).get()
     const body = {
       exportedAt: new Date().toISOString(),
       account: { uid: user.uid, email: user.email },
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
       payments: payments.docs.map((doc) => doc.data()),
       notifications: alerts.map((doc) => doc.data()),
       purchases: purchases.docs.map((doc) => doc.data()),
-      predictions: predictions.docs.map((doc) => doc.data()),
+      ...(await exportCommunityData(firestoreDocDb(), user.uid)),
       newsletterSends: sends.map((doc) => doc.data()),
     }
     return new NextResponse(JSON.stringify(body, null, 2), {

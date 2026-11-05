@@ -19,15 +19,18 @@ export interface NotificationRecord {
   locale: Preferences["locale"]
   createdAt: string
   emailStatus: "not_requested" | "sent" | "failed" | "no_address"
+  kickoffUTC?: string | null
   /** uid#createdAt. A range on one field needs no composite index. */
   feedKey: string
 }
 
-export const notificationId = (uid: string, eventId: string, type: DueAlert) => `${uid}_${eventId}_${type}`
+/** The kickoff is part of a start alert's identity, so a moved event alerts again at its new time. */
+export const notificationId = (uid: string, eventId: string, type: DueAlert, kickoffUTC?: string | null) =>
+  `${uid}_${eventId}_${type}${type === "start" && kickoffUTC ? `_${Date.parse(kickoffUTC)}` : ""}`
 
 /** create() fails on an existing document, so a duplicate is impossible rather than unlikely. */
 export async function claimNotification(db: Firestore, record: NotificationRecord): Promise<boolean> {
-  const ref = db.collection(NOTIFICATIONS_COLLECTION).doc(notificationId(record.uid, record.eventId, record.type))
+  const ref = db.collection(NOTIFICATIONS_COLLECTION).doc(notificationId(record.uid, record.eventId, record.type, record.kickoffUTC))
   try {
     await ref.create(record)
     return true
@@ -70,7 +73,7 @@ async function deliver(deps: AlertDeps, user: UserRow, event: SportEvent, type: 
   const path = `/app/match/${event.id}`
   const createdAt = now.toISOString()
   const record: NotificationRecord = {
-    uid, eventId: event.id, type, ...content, path, locale: prefs.locale, createdAt,
+    uid, eventId: event.id, type, ...content, path, locale: prefs.locale, createdAt, kickoffUTC: event.scheduledStartUTC,
     emailStatus: "not_requested", feedKey: `${uid}#${createdAt}`,
   }
   if (!(await claimNotification(db, record))) {
@@ -81,7 +84,7 @@ async function deliver(deps: AlertDeps, user: UserRow, event: SportEvent, type: 
   if (!prefs.alerts.email) return
 
   const { alerts: copy } = getDictionary(prefs.locale)
-  const ref = db.collection(NOTIFICATIONS_COLLECTION).doc(notificationId(uid, event.id, type))
+  const ref = db.collection(NOTIFICATIONS_COLLECTION).doc(notificationId(uid, event.id, type, event.scheduledStartUTC))
   const to = await deps.emailFor(uid)
   if (!to) {
     await ref.update({ emailStatus: "no_address" })
@@ -142,8 +145,8 @@ export async function listNotifications(db: Firestore, uid: string, spoilerMode:
   return snapshot.docs
     .map((doc) => doc.data() as NotificationRecord)
     .filter((record) => record.uid === uid)
-    .map(({ eventId, type, title, body, spoilerFreeBody, path, createdAt }) => ({
-      id: notificationId(uid, eventId, type),
+    .map(({ eventId, type, title, body, spoilerFreeBody, path, createdAt, kickoffUTC }) => ({
+      id: notificationId(uid, eventId, type, kickoffUTC),
       type, title, path, createdAt,
       body: spoilerMode ? spoilerFreeBody : body,
     }))

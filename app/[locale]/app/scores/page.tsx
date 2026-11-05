@@ -4,7 +4,7 @@ import { EventCard, FeedNotice } from "@/components/sports/event-card"
 import { EmptyState, PageHeader } from "@/components/site/states"
 import { pageContext } from "@/lib/page-context"
 import { enabledSports, getEvents, utcDate } from "@/lib/sports/service"
-import { SPORTS, type EventStatus, type SportId } from "@/lib/sports/types"
+import type { EventStatus, SportId } from "@/lib/sports/types"
 
 export const metadata: Metadata = { title: "Scores" }
 
@@ -27,7 +27,7 @@ export default async function ScoresPage({ params, searchParams }: Props) {
   const events = feed.events.filter((event) => {
     if (tab[1] && !(tab[1] as readonly EventStatus[]).includes(event.status)) return false
     if (!needle) return true
-    return [event.competition.name, ...event.participants.map((participant) => participant.name)].some((text) => text.toLowerCase().includes(needle))
+    return [event.competition.name, event.eventName ?? "", ...event.participants.map((participant) => participant.name)].some((text) => text.toLowerCase().includes(needle))
   })
 
   const link = (overrides: Search) => {
@@ -53,13 +53,9 @@ export default async function ScoresPage({ params, searchParams }: Props) {
 
       <div className="mt-3 flex flex-wrap gap-2">
         <Link href={link({ sport: undefined })} className={chip(!sport)}>{t.scores.allSports}</Link>
-        {SPORTS.map((item) =>
-          item.enabled ? (
-            <Link key={item.id} href={link({ sport: item.id })} className={chip(sport === item.id)}>{item.name[locale]}</Link>
-          ) : (
-            <span key={item.id} title={t.scores.comingSoon} className="rounded-full border border-dashed border-line-strong px-3 py-1.5 text-sm text-ink-3">{item.name[locale]}</span>
-          ),
-        )}
+        {enabledSports().map((item) => (
+          <Link key={item.id} href={link({ sport: item.id })} className={chip(sport === item.id)}>{item.name[locale]}</Link>
+        ))}
       </div>
 
       <form className="mt-4 flex flex-wrap items-end gap-3">

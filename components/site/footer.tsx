@@ -62,6 +62,7 @@ export function SiteFooter({ locale, t, href }: { locale: Locale; t: Dictionary;
                   <Link href={href(`/${policy.slug}`)} className="fs-link text-sm text-white/75 hover:text-white">{policy.label}</Link>
                 </li>
               ))}
+              <li><Link href={href("/community-guidelines")} className="fs-link text-sm text-white/75 hover:text-white">{t.footer.guidelines}</Link></li>
               <li><CookiePreferencesButton className="text-sm text-white/75 hover:text-white" /></li>
             </ul>
           </nav>

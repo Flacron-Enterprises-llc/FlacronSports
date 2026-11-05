@@ -126,3 +126,19 @@ jobs:
           curl -fsS -o /dev/null "$APP_BASE_URL/"
           curl -fsS -o /dev/null "$APP_BASE_URL/pricing"
           test "$(curl -fsS "$APP_BASE_URL/api/health" | jq -r .commit)" = "$GITHUB_SHA"
+
+  browser-tests:
+    needs: deploy-frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright test
+        env:
+          E2E_BASE_URL: ${{ vars.APP_BASE_URL }}

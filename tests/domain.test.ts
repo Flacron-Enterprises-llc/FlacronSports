@@ -29,9 +29,9 @@ describe("sports normalization", () => {
   it("honours the postponed flag", () => {
     expect(normalizeStatus({ idEvent: "1", strStatus: "NS", strPostponed: "yes" })).toBe("postponed")
   })
-  it("defines all 11 sport categories and enables only the verified team sports", () => {
+  it("defines all 11 sport categories and enables every sport the feed proved", () => {
     expect(SPORTS).toHaveLength(11)
-    expect(SPORTS.filter((sport) => sport.enabled).map((sport) => sport.id)).toEqual(["football", "basketball", "american-football", "baseball", "ice-hockey", "rugby", "volleyball"])
+    expect(SPORTS.filter((sport) => sport.enabled).map((sport) => sport.id)).toEqual(["football", "basketball", "american-football", "baseball", "ice-hockey", "tennis", "cricket", "rugby", "volleyball", "combat-sports", "motorsport"])
   })
 })
 
@@ -119,6 +119,11 @@ describe("users never see internal values", () => {
     const files = ["components", "app/[locale]"].flatMap(walk).filter((path) => !staffOnly.test(path))
     const copy = JSON.stringify(getDictionary("en")) + JSON.stringify(getDictionary("fr"))
     expect(copy).not.toMatch(/TheSportsDB|preview feed|API-Sports/)
+    const userCopy = (locale: "en" | "fr") => {
+      const { admin: _staff, ...rest } = getDictionary(locale) as unknown as Record<string, unknown>
+      return JSON.stringify(rest)
+    }
+    expect(userCopy("en") + userCopy("fr")).not.toMatch(/Stripe|sandbox|test billing|facturation de test|webhook|API|the feed|from the feed|du flux|le flux|provider update|fournisseur vidéo|licensed video provider/i)
     for (const path of files) {
       const source = readFileSync(path, "utf8")
       expect(source, path).not.toMatch(/provider\.name|\{feed\.source\}|\{table\.source\}|source\.provider/)

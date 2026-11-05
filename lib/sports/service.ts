@@ -1,9 +1,11 @@
 import { ApiError } from "@/lib/api-auth"
-import { normalizeEvent, PROVIDER_NAME, toUtc, type RawEvent } from "./thesportsdb"
+import { isCovered, normalizeEvent, PROVIDER_NAME, toUtc, type RawEvent } from "./thesportsdb"
 import { SPORTS, type EventFeed, type SportDefinition, type SportEvent, type SportId } from "./types"
 
 const BASE = "https://www.thesportsdb.com/api/v1/json"
 const TIMEOUT_MS = 6000
+const BACKEND_TIMEOUT_MS = 20_000
+const CALL_SPACING_MS = 400
 const REVALIDATE_SECONDS = 120
 
 // "123" is the provider's public test key: a handful of events per query and no
@@ -63,7 +65,9 @@ async function fetchJson<T>(path: string): Promise<T> {
 async function eventsForSport(sport: SportDefinition, date: string): Promise<{ events: SportEvent[]; stale: boolean }> {
   const query = new URLSearchParams({ d: date, s: sport.providerKey as string })
   const { data, stale } = await load<{ events: RawEvent[] | null }>(`eventsday.php?${query}`)
-  return { events: (data.events ?? []).map((raw) => normalizeEvent(raw, sport.id)), stale }
+  // The sport is rechecked per record, so a stray row can never be filed under the wrong sport.
+  const rows = (data.events ?? []).filter((raw) => (!raw.strSport || raw.strSport === sport.providerKey) && isCovered(raw, sport.id))
+  return { events: rows.map((raw) => normalizeEvent(raw, sport.id)), stale }
 }
 
 export function enabledSports(): SportDefinition[] {
@@ -74,16 +78,30 @@ export function utcDate(date: Date = new Date()): string {
   return date.toISOString().slice(0, 10)
 }
 
+/** Set on Amplify. Keeping provider calls on one server is what keeps them under the rate limit. */
+async function fromBackend<T>(path: string): Promise<T | null> {
+  const origin = process.env.API_ORIGIN
+  if (!origin) return null
+  const response = await fetch(`${origin}${path}`, { next: { revalidate: 60 }, signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS) })
+  if (response.status === 404) return { event: null } as T
+  if (!response.ok) throw new ApiError(503, "provider_unavailable", "Sports data is temporarily unavailable")
+  return response.json() as Promise<T>
+}
+
 export async function getEvents(options: { date?: string; sport?: SportId } = {}): Promise<EventFeed> {
   const date = options.date ?? utcDate()
+  const query = new URLSearchParams({ date, pageSize: "500", ...(options.sport ? { sport: options.sport } : {}) })
+  const remote = await fromBackend<EventFeed>(`/api/matches?${query}`).catch(() => null)
+  if (remote) return remote
   const sports = enabledSports().filter((sport) => !options.sport || sport.id === options.sport)
   const fetchedAt = new Date().toISOString()
   const base = { source: PROVIDER_NAME, fetchedAt, limited: apiKey().limited }
 
-  // One at a time: seven sports at once is what trips the provider's rate limit.
+  // One at a time: every sport at once is what trips the provider's rate limit.
   const succeeded: Awaited<ReturnType<typeof eventsForSport>>[] = []
   for (const sport of sports) {
     await eventsForSport(sport, date).then((result) => succeeded.push(result)).catch(() => undefined)
+    if (process.env.NODE_ENV === "production") await new Promise((resolve) => setTimeout(resolve, CALL_SPACING_MS))
   }
 
   if (sports.length > 0 && succeeded.length === 0) return { ...base, state: "unavailable", events: [] }
@@ -98,16 +116,14 @@ export async function getEvents(options: { date?: string; sport?: SportId } = {}
   return { ...base, state: complete ? "ok" : "stale", events }
 }
 
-type RawLookup = RawEvent & { strSport?: string }
-
 /** A rate-limited lookup can still be answered from a daily feed already in memory. */
-async function lookupRaw(providerId: string): Promise<RawLookup | undefined> {
+async function lookupRaw(providerId: string): Promise<RawEvent | undefined> {
   try {
-    const data = await fetchJson<{ events: RawLookup[] | null }>(`lookupevent.php?id=${providerId}`)
+    const data = await fetchJson<{ events: RawEvent[] | null }>(`lookupevent.php?id=${providerId}`)
     return data.events?.[0]
   } catch (error) {
     for (const entry of memory.values()) {
-      const found = (entry.data as { events?: RawLookup[] | null }).events?.find((event) => event.idEvent === providerId)
+      const found = (entry.data as { events?: RawEvent[] | null }).events?.find((event) => event.idEvent === providerId)
       if (found) return found
     }
     throw error
@@ -115,12 +131,16 @@ async function lookupRaw(providerId: string): Promise<RawLookup | undefined> {
 }
 
 export async function getEvent(id: string): Promise<SportEvent | null> {
+  if (process.env.API_ORIGIN) {
+    const remote = await fromBackend<{ event: SportEvent | null }>(`/api/matches/${encodeURIComponent(id)}`)
+    return remote?.event ?? null
+  }
   const match = id.match(/^tsdb-(\d+)$/)
   if (!match) return null
   const raw = await lookupRaw(match[1])
   if (!raw) return null
   const sport = enabledSports().find((candidate) => candidate.providerKey === raw.strSport)
-  return sport ? normalizeEvent(raw, sport.id) : null
+  return sport && isCovered(raw, sport.id) ? normalizeEvent(raw, sport.id) : null
 }
 
 interface RawTeam {
@@ -165,7 +185,7 @@ export async function getTeamFixtures(name: string, sport?: SportId): Promise<Te
     fetchJson<{ results: RawEvent[] | null }>(`eventslast.php?id=${id}`),
   ])
   const failures = [next, last].filter((result) => result.status === "rejected").length
-  const events = (rows: RawEvent[] | null | undefined) => (rows ?? []).map((raw) => normalizeEvent(raw, sportId))
+  const events = (rows: RawEvent[] | null | undefined) => (rows ?? []).filter((raw) => isCovered(raw, sportId)).map((raw) => normalizeEvent(raw, sportId))
   return {
     team,
     upcoming: next.status === "fulfilled" ? events(next.value.events) : [],

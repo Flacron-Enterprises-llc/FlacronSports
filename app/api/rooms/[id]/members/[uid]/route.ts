@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { apiErrorResponse, requireFeature, requireVerifiedUser } from "@/lib/api-auth"
-import { assertId, ROOM_ID } from "@/lib/community/content"
-import { removeMember } from "@/lib/community/rooms"
+import { assertId, OPAQUE_REF, ROOM_ID } from "@/lib/community/content"
+import { removeMember, resolveMemberRef } from "@/lib/community/rooms"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { rateLimit } from "@/lib/rate-limit"
 
@@ -13,8 +13,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     requireFeature("COMMUNITY_ENABLED")
     const user = await requireVerifiedUser(request)
     rateLimit(`rooms:${user.uid}`, 10, 60_000)
-    const { id, uid } = await params
-    await removeMember(firestoreDocDb(), { roomId: assertId(id, ROOM_ID), actorUid: user.uid, targetUid: assertId(uid, /^[\w-]{1,128}$/) })
+    const { id, uid: target } = await params
+    const roomId = assertId(id, ROOM_ID)
+    const db = firestoreDocDb()
+    const targetUid = target === "me" ? user.uid : await resolveMemberRef(db, roomId, assertId(target, OPAQUE_REF))
+    await removeMember(db, { roomId, actorUid: user.uid, targetUid })
     return NextResponse.json({ success: true })
   } catch (error) {
     return apiErrorResponse(error)

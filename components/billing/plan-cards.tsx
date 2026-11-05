@@ -9,8 +9,6 @@ import { PLANS, type BillingInterval, type PaidPlanId, type PlanId } from "@/lib
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { useLocale } from "@/lib/use-locale"
 
-const TEST_BILLING = process.env.NEXT_PUBLIC_BILLING_MODE !== "live"
-
 export function PlanCards() {
   const { locale, t, href } = useLocale()
   const user = useAuthUser()
@@ -54,9 +52,6 @@ export function PlanCards() {
 
   return (
     <div>
-      {TEST_BILLING && (
-        <p role="status" className="mb-6 rounded-lg border border-line bg-surface p-3 text-center text-sm font-medium text-warn">{t.pricing.testBilling}</p>
-      )}
       <div role="group" aria-label={t.pricing.compare} className="mx-auto mb-8 flex w-fit gap-1 rounded-lg border border-line bg-surface p-1">
         {(["monthly", "annual"] as const).map((value) => (
           <button

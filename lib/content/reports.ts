@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto"
 import type { Firestore } from "firebase-admin/firestore"
 import { getAdminDb } from "@/lib/firebase-admin"
-import { LOCALES, type Locale } from "@/lib/i18n"
-import type { SportEvent } from "@/lib/sports/types"
+import { getDictionary, LOCALES, type Locale } from "@/lib/i18n"
+import { eventTitle, resultLine } from "@/lib/sports/presentation"
+import type { EventScore, SportEvent } from "@/lib/sports/types"
 
 export const REPORTS_COLLECTION = "reports"
 /** Bump whenever the wording in TEMPLATES changes. */
@@ -50,9 +51,9 @@ export type SaveOutcome = "created" | "replaced" | "duplicate" | "locked" | "kep
 
 // Deliberately neutral: no "beat" or "won", because a level score can still be
 // settled on penalties and the feed does not give the shootout result.
-const TEMPLATES: Record<Locale, { title: string; body: string; dateLocale: string }> = {
-  en: { title: "Result: {home} v {away}", body: "Final score: {home} {homeScore}, {away} {awayScore}. {competition}, {date} (UTC).", dateLocale: "en-US" },
-  fr: { title: "Résultat : {home} - {away}", body: "Score final : {home} {homeScore}, {away} {awayScore}. {competition}, {date} (UTC).", dateLocale: "fr-FR" },
+const TEMPLATES: Record<Locale, { title: string; body: string; eventTitle: string; eventBody: string; dateLocale: string }> = {
+  en: { title: "Result: {home} v {away}", body: "Final score: {home} {homeScore}, {away} {awayScore}. {competition}, {date} (UTC).", eventTitle: "Result: {event}", eventBody: "{result}. {competition}, {date} (UTC).", dateLocale: "en-US" },
+  fr: { title: "Résultat : {home} - {away}", body: "Score final : {home} {homeScore}, {away} {awayScore}. {competition}, {date} (UTC).", eventTitle: "Résultat : {event}", eventBody: "{result}. {competition}, {date} (UTC).", dateLocale: "fr-FR" },
 }
 
 const PUBLIC: ReportStatus[] = ["published", "corrected"]
@@ -62,17 +63,22 @@ function eventDate(iso: string, locale: Locale): string {
   return new Intl.DateTimeFormat(TEMPLATES[locale].dateLocale, { dateStyle: "long", timeZone: "UTC" }).format(new Date(iso))
 }
 
+/** Only a complete result can be reported: one side's score is not a result. */
+function isComplete(score: EventScore): boolean {
+  if (score.kind === "team") return [score.home, score.away].every((value) => Number.isInteger(value) && value >= 0)
+  if (score.kind === "innings") return Boolean(score.home && score.away && score.winner)
+  if (score.kind === "sets") return Boolean(score.winner || score.retired)
+  return score.kind === "combat" || score.kind === "classification"
+}
+
 /** Why an event cannot be reported on, or null when every required fact is verified. */
 export function withholdReason(event: SportEvent): { status: "draft" | "rejected"; reason: string } | null {
   if (event.status !== "finished") return { status: "draft", reason: "not_finished" }
   const { score } = event
-  if (score.kind !== "team" || ![score.home, score.away].every((value) => Number.isInteger(value) && value >= 0)) {
-    return { status: "rejected", reason: "missing_score" }
-  }
+  if (!isComplete(score)) return { status: "rejected", reason: "missing_score" }
   const names = event.participants.map((participant) => participant.name)
-  if (event.participantType !== "team" || names.length !== 2 || names.some((name) => !name || name === "TBD")) {
-    return { status: "rejected", reason: "missing_participants" }
-  }
+  const named = score.kind === "classification" ? Boolean(event.eventName) : names.length === 2 && names.every((name) => name && name !== "TBD")
+  if (!named) return { status: "rejected", reason: "missing_participants" }
   if (!event.scheduledStartUTC) return { status: "rejected", reason: "missing_date" }
   if (!event.competition.name || event.competition.name === "Unknown competition") return { status: "rejected", reason: "missing_competition" }
   if (!event.provider.eventId) return { status: "rejected", reason: "missing_source" }
@@ -86,9 +92,10 @@ export function sourceVersion(event: SportEvent): string {
 
 /** Every number in the text must come from the event, whatever its teams are called. */
 export function isGrounded(body: string, event: SportEvent, locale: Locale): boolean {
-  if (event.score.kind !== "team" || !event.scheduledStartUTC) return false
-  const allowed = new Set([String(event.score.home), String(event.score.away), ...(eventDate(event.scheduledStartUTC, locale).match(/\d+/g) ?? [])])
-  const names = [...event.participants.map((item) => item.name), event.competition.name]
+  if (event.score.kind === "none" || !event.scheduledStartUTC) return false
+  const stated = JSON.stringify(event.score).match(/\d+/g) ?? []
+  const allowed = new Set([...stated, ...(eventDate(event.scheduledStartUTC, locale).match(/\d+/g) ?? [])])
+  const names = [...event.participants.map((item) => item.name), event.competition.name, ...(event.eventName ? [event.eventName] : [])]
   const rest = names.reduce((text, name) => text.split(name).join(" "), body)
   return (rest.match(/\d+/g) ?? []).every((number) => allowed.has(number))
 }
@@ -113,19 +120,19 @@ export function buildReport(event: SportEvent, locale: Locale, fetchedAt: string
   const withheld = withholdReason(event)
   if (withheld) return { ...base, status: withheld.status, title: "", body: "", withheldReason: withheld.reason, publishedAt: null, feedKey: null }
 
-  const [home, away] = base.participants
-  const { home: homeScore, away: awayScore } = event.score as { home: number; away: number }
-  const values = {
-    home, away, homeScore: String(homeScore), awayScore: String(awayScore),
-    competition: event.competition.name,
-    date: eventDate(event.scheduledStartUTC as string, locale),
-  }
+  const [home = "", away = ""] = base.participants
+  const { score } = event
   const template = TEMPLATES[locale]
-  const body = fill(template.body, values)
+  const shared = { competition: event.competition.name, date: eventDate(event.scheduledStartUTC as string, locale) }
+  const team = score.kind === "team"
+    ? { ...shared, home, away, homeScore: String(score.home), awayScore: String(score.away) }
+    : null
+  const values = team ?? { ...shared, event: eventTitle(event), result: resultLine(event, getDictionary(locale)) ?? "" }
+  const body = fill(team ? template.body : template.eventBody, values)
   if (!isGrounded(body, event, locale)) {
     return { ...base, status: "rejected", title: "", body: "", withheldReason: "failed_validation", publishedAt: null, feedKey: null }
   }
-  return { ...base, status: "validated", title: fill(template.title, values), body, withheldReason: null, publishedAt: null, feedKey: null }
+  return { ...base, status: "validated", title: fill(team ? template.title : template.eventTitle, values), body, withheldReason: null, publishedAt: null, feedKey: null }
 }
 
 const publishNow = (report: Report): Report => ({

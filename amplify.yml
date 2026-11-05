@@ -7,7 +7,7 @@ frontend:
         - npm ci
     build:
       commands:
-        - env | grep -E '^(APP_BASE_URL|API_ORIGIN|NEXT_PUBLIC_)' > .env.production
+        - env | grep -E '^(APP_BASE_URL|API_ORIGIN|COMMUNITY_ENABLED|NEXT_PUBLIC_)' > .env.production
         - npm run build
   artifacts:
     baseDirectory: .next

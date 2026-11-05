@@ -3,6 +3,7 @@ import { z } from "zod"
 import { ApiError, apiErrorResponse, requireRole } from "@/lib/api-auth"
 import { audit } from "@/lib/audit"
 import { assertId, MATCH_ID, MESSAGE_ID, ROOM_ID } from "@/lib/community/content"
+import { closePoll, createPoll, MAX_POLL_OPTIONS, setPinnedNotice } from "@/lib/community/engagement"
 import { listOpenReports, removeMessage, resolveReport, sanctionUser, setLock } from "@/lib/community/moderation"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { rateLimit } from "@/lib/rate-limit"
@@ -13,6 +14,7 @@ export const runtime = "nodejs"
 const REASON = z.string().trim().min(3).max(500)
 const REPORT_ID = z.string().max(200).optional()
 const SCOPE = z.enum(["match", "room"])
+const MATCH = z.string().max(64)
 const scopeId = (scope: "match" | "room", id: string) => assertId(id, scope === "match" ? MATCH_ID : ROOM_ID)
 
 const schema = z.discriminatedUnion("action", [
@@ -20,6 +22,10 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("sanction"), uid: z.string().min(1).max(128).regex(/^[\w-]+$/), type: z.enum(["mute", "suspend"]), hours: z.number().int().min(1).max(8760), reason: REASON }),
   z.object({ action: z.literal("lock"), scope: SCOPE, scopeId: z.string().max(64), locked: z.boolean(), reason: REASON }),
   z.object({ action: z.literal("resolve_report"), reportId: z.string().min(1).max(200), reason: REASON }),
+  z.object({ action: z.literal("pin_notice"), matchId: MATCH, text: z.string().trim().min(1).max(500), reason: REASON }),
+  z.object({ action: z.literal("clear_notice"), matchId: MATCH, reason: REASON }),
+  z.object({ action: z.literal("create_poll"), matchId: MATCH, question: z.string().trim().min(1).max(140), options: z.array(z.string().trim().min(1).max(80)).min(2).max(MAX_POLL_OPTIONS), reason: REASON }),
+  z.object({ action: z.literal("close_poll"), matchId: MATCH, reason: REASON }),
 ])
 
 export async function GET(request: Request) {
@@ -55,6 +61,18 @@ export async function POST(request: Request) {
       const id = scopeId(body.scope, body.scopeId)
       await setLock(db, { scope: body.scope, scopeId: id, locked: body.locked, reason: body.reason, actorUid: user.uid }, now)
       await audit(body.locked ? "moderation.room_locked" : "moderation.room_unlocked", user.uid, { scope: body.scope, scopeId: id, reason: body.reason })
+    } else if (body.action === "pin_notice" || body.action === "clear_notice") {
+      const matchId = assertId(body.matchId, MATCH_ID)
+      await setPinnedNotice(db, user, { matchId, text: body.action === "pin_notice" ? body.text : null }, now)
+      await audit(`moderation.${body.action}`, user.uid, { matchId, reason: body.reason })
+    } else if (body.action === "create_poll") {
+      const matchId = assertId(body.matchId, MATCH_ID)
+      const { id } = await createPoll(db, user, { matchId, question: body.question, options: body.options }, now)
+      await audit("moderation.poll_created", user.uid, { matchId, pollId: id, reason: body.reason })
+    } else if (body.action === "close_poll") {
+      const matchId = assertId(body.matchId, MATCH_ID)
+      await closePoll(db, user, { matchId })
+      await audit("moderation.poll_closed", user.uid, { matchId, reason: body.reason })
     } else {
       await resolveReport(db, { reportId: safeReportId(body.reportId), actorUid: user.uid, note: body.reason }, now)
       await audit("moderation.report_resolved", user.uid, { reportId: body.reportId, reason: body.reason })

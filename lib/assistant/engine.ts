@@ -1,7 +1,8 @@
 // Deterministic and grounded: no model is called, so every answer comes from the
 // sports feed or the curated reference. Anything else is admitted as unknown.
 
-import { getDictionary, type Locale } from "@/lib/i18n"
+import { getDictionary, type Dictionary, type Locale } from "@/lib/i18n"
+import { eventTitle, hasResult, resultLine } from "@/lib/sports/presentation"
 import type { EventFeed, SportEvent, SportId } from "@/lib/sports/types"
 import { REFERENCE, REFERENCE_REVIEWED_UTC, type ReferenceEntry } from "./reference"
 
@@ -82,21 +83,23 @@ const teamMatches = (event: SportEvent, topic: string, question: string) =>
   event.participants.some((participant) => nameMatches(participant.name, topic, question))
 
 const fixtureMatches = (event: SportEvent, topic: string, question: string) =>
-  teamMatches(event, topic, question) || nameMatches(event.competition.name, topic, question)
+  teamMatches(event, topic, question) ||
+  nameMatches(event.competition.name, topic, question) ||
+  Boolean(event.eventName && nameMatches(event.eventName, topic, question))
 
 function findReference(question: string): ReferenceEntry | null {
   const padded = ` ${question} `
   return REFERENCE.find((entry) => entry.terms.some((term) => padded.includes(` ${term} `))) ?? null
 }
 
-function toItem(event: SportEvent, withScore: boolean): AnswerItem {
+function toItem(event: SportEvent, withScore: boolean, t: Dictionary): AnswerItem {
   return {
     matchId: event.id,
-    title: event.participants.map((participant) => participant.name).join(" / "),
+    title: eventTitle(event),
     competition: event.competition.name,
     startUTC: event.scheduledStartUTC,
     status: event.status,
-    score: withScore && event.score.kind === "team" ? `${event.score.home} - ${event.score.away}` : null,
+    score: withScore ? resultLine(event, t) : null,
   }
 }
 
@@ -133,8 +136,8 @@ export async function answerQuestion(raw: string, locale: Locale, sources: Assis
     if (topic.length < 3) return refused("unknown", copy.needTeam)
     const answerResult = (found: SportEvent, feed: Omit<EventFeed, "events">): AssistantAnswer => ({
       kind: "result",
-      text: found.score.kind === "team" ? copy.resultFound : copy.resultNoScore,
-      items: [toItem(found, true)],
+      text: hasResult(found) ? copy.resultFound : copy.resultNoScore,
+      items: [toItem(found, true, t)],
       notes: feedNotes(feed),
       ...feedSource(feed),
       charged: true,
@@ -169,7 +172,7 @@ export async function answerQuestion(raw: string, locale: Locale, sources: Assis
     return {
       kind: "fixtures",
       text: fill(copy.fixturesFound, { count: found.length }),
-      items: found.slice(0, MAX_ITEMS).map((event) => toItem(event, false)),
+      items: found.slice(0, MAX_ITEMS).map((event) => toItem(event, false, t)),
       notes: feedNotes(feed),
       ...feedSource(feed),
       charged: true,

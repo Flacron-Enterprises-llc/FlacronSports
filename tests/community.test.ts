@@ -1,4 +1,5 @@
 // Synthetic users, events and an in-memory store for isolated tests only.
+import { readFileSync } from "node:fs"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const verifyIdToken = vi.fn()
@@ -6,20 +7,32 @@ vi.mock("@/lib/firebase-admin", () => ({ getAdminAuth: () => ({ verifyIdToken })
 
 import { reviewReport } from "@/lib/admin/report-review"
 import { sumMoney } from "@/lib/admin/billing-health"
-import { assertRole, requireAdmin, requireFeature, requireRole, type ApiError } from "@/lib/api-auth"
-import { ADDONS, buildPurchase, type BillingPurchase } from "@/lib/billing/addons"
+import { assertRole, requireAdmin, requireFeature, requireRole, type ApiError, type AuthedUser } from "@/lib/api-auth"
+import { addonOnSale, ADDONS, buildPurchase, type BillingPurchase } from "@/lib/billing/addons"
 import { PLANS, type PlanId } from "@/lib/billing/plans"
-import { blockAuthor, listMessages, postMatchMessage, reportMessage } from "@/lib/community/chat"
-import { assertId, cleanMessage, containsPiratedStreamLink, displayNameOf, MATCH_ID } from "@/lib/community/content"
+import { eraseCommunityData, exportCommunityData } from "@/lib/community/account"
+import { blockAuthor, listBlocked, listMessages, postMatchMessage, reportMessage, unblockAuthor } from "@/lib/community/chat"
+import { assertId, cleanMessage, containsPiratedStreamLink, displayNameOf, FORMER_MEMBER, MATCH_ID, OPAQUE_REF } from "@/lib/community/content"
+import { closePoll, createPoll, getMatchChatState, reactToMessage, setPinnedNotice, voteInPoll } from "@/lib/community/engagement"
+import { acceptGuidelines, GATE_CODE, GUIDELINES_VERSION } from "@/lib/community/gate"
 import { listOpenReports, removeMessage, sanctionUser, setLock } from "@/lib/community/moderation"
 import {
-  getLeaderboard, POINTS, scorePrediction, settleMatch, submitPrediction, supportsScorePrediction,
+  getLeaderboard, pendingMatchIds, POINTS, scorePrediction, settleMatch, submitPrediction, supportsScorePrediction,
 } from "@/lib/community/predictions"
 import {
-  assertRoomMember, closeRoom, createRoom, getRoomAsMember, joinCap, joinRoom, postRoomMessage, removeMember, revokeInvite,
+  assertRoomMember, closeRoom, createRoom, getRoomAsMember, joinCap, joinRoom, postRoomMessage, removeMember, resolveMemberRef, revokeInvite,
 } from "@/lib/community/rooms"
 import type { SportEvent } from "@/lib/sports/types"
-import { fakeDb } from "./fake-db"
+import { fakeDb as bareDb } from "./fake-db"
+
+/** Everyone has passed the gate here; the gate's own tests use bareDb. */
+const fakeDb = () => bareDb({ acceptEveryone: true })
+
+const staff = (uid: string, role?: string, secondFactor?: string) =>
+  ({ uid, email: null, emailVerified: true, token: { role, firebase: { sign_in_second_factor: secondFactor } } }) as unknown as AuthedUser
+const moderator = staff("staff-1", "moderator", "totp")
+const noSecondFactor = staff("staff-2", "moderator")
+const member = staff("member-1")
 
 const now = new Date("2026-11-05T12:00:00Z")
 const later = (ms: number) => new Date(now.getTime() + ms)
@@ -419,6 +432,364 @@ describe("predictions", () => {
 
   it("is empty, not padded, before any points exist", async () => {
     expect(await getLeaderboard(fakeDb().db)).toEqual([])
+  })
+})
+
+describe("age and rules gate", () => {
+  const scoped = { scope: "match" as const, scopeId: "tsdb-7" }
+  const seed = async () => {
+    const fake = bareDb()
+    await acceptGuidelines(fake.db, "host", now)
+    await acceptGuidelines(fake.db, "author", now)
+    const { id: roomId, inviteToken } = await createRoom(fake.db, { uid: "host", displayName: "Host", plan: "plus", matchId: "tsdb-7", name: "Room", kickoffUTC: null }, now)
+    const { id: messageId } = await postMatchMessage(fake.db, { matchId: "tsdb-7", uid: "author", displayName: "Author", text: "hi" }, now)
+    await createPoll(fake.db, moderator, { matchId: "tsdb-7", question: "Who wins?", options: ["A", "B"] }, now)
+    fake.put(`room_members/${roomId}_u1`, { roomId, uid: "u1", displayName: "U", role: "member", status: "active", joinedAtUTC: now.toISOString() })
+    fake.put(`rooms/${"b".repeat(24)}`, { hostUid: "u1", matchId: "tsdb-7", inviteHash: null, status: "active" })
+    fake.put(`room_members/${"b".repeat(24)}_u1`, { roomId: "b".repeat(24), uid: "u1", displayName: "U", role: "host", status: "active", joinedAtUTC: now.toISOString() })
+    fake.put("room_members/x", { roomId, uid: "other", displayName: "O", role: "member", status: "active", joinedAtUTC: now.toISOString() })
+    return { ...fake, roomId, inviteToken, messageId }
+  }
+  type Seed = Awaited<ReturnType<typeof seed>>
+
+  it.each<[string, (s: Seed) => Promise<unknown>]>([
+    ["postMatchMessage", ({ db }) => postMatchMessage(db, { matchId: "tsdb-7", uid: "u1", displayName: "U", text: "hi" }, now)],
+    ["postRoomMessage", ({ db, roomId }) => postRoomMessage(db, { roomId, uid: "u1", text: "hi" }, now)],
+    ["createRoom", ({ db }) => createRoom(db, { uid: "u1", displayName: "U", plan: "plus", matchId: "tsdb-7", name: "R", kickoffUTC: null }, now)],
+    ["joinRoom", ({ db, inviteToken }) => joinRoom(db, { uid: "u2", displayName: "U", token: inviteToken, hostPlan: async () => "plus" }, now)],
+    ["revokeInvite", ({ db }) => revokeInvite(db, { roomId: "b".repeat(24), uid: "u1", replace: false })],
+    ["removeMember", ({ db, roomId }) => removeMember(db, { roomId, actorUid: "u1", targetUid: "u1" })],
+    ["closeRoom", ({ db }) => closeRoom(db, { roomId: "b".repeat(24), uid: "u1" })],
+    ["submitPrediction", ({ db }) => submitPrediction(db, { uid: "u1", displayName: "U", event: match(), home: 1, away: 0 }, now)],
+    ["reportMessage", ({ db, messageId }) => reportMessage(db, { ...scoped, messageId, reporterUid: "u1", reason: "abuse" }, now)],
+    ["blockAuthor", ({ db, messageId }) => blockAuthor(db, { ...scoped, messageId, uid: "u1" })],
+    ["unblockAuthor", ({ db }) => unblockAuthor(db, { uid: "u1", ref: "c".repeat(32) })],
+    ["reactToMessage", ({ db, messageId }) => reactToMessage(db, { ...scoped, messageId, uid: "u1", reaction: "like" }, now)],
+    ["voteInPoll", ({ db }) => voteInPoll(db, { matchId: "tsdb-7", uid: "u1", option: 0 }, now)],
+  ])("refuses %s until the guidelines are accepted", async (_name, run) => {
+    const seeded = await seed()
+    expect(await code(run(seeded))).toBe(GATE_CODE)
+    await acceptGuidelines(seeded.db, "u1", now)
+    await acceptGuidelines(seeded.db, "u2", now)
+    expect(await code(run(seeded))).not.toBe(GATE_CODE)
+  })
+
+  it("stores the acceptance on the server with its time, once", async () => {
+    const { db, docs } = bareDb()
+    await acceptGuidelines(db, "u1", now)
+    await acceptGuidelines(db, "u1", later(DAY))
+    expect(docs.get("community_acceptance/u1")).toEqual({ uid: "u1", ageConfirmed: true, guidelinesVersion: GUIDELINES_VERSION, acceptedAtUTC: now.toISOString() })
+  })
+
+  it("keeps the acceptance route strict about both confirmations", () => {
+    const route = readFileSync("app/api/community/accept/route.ts", "utf8")
+    expect(route).toMatch(/ageConfirmed: z\.literal\(true\), guidelinesAccepted: z\.literal\(true\)/)
+    expect(route).toMatch(/requireVerifiedUser/)
+    expect(route).toMatch(/rateLimit/)
+  })
+})
+
+describe("reactions", () => {
+  const seed = async () => {
+    const fake = fakeDb()
+    const { id } = await postMatchMessage(fake.db, { matchId: "tsdb-7", uid: "author", displayName: "A", text: "hi" }, now)
+    const react = (uid: string, reaction: unknown) => reactToMessage(fake.db, { scope: "match", scopeId: "tsdb-7", messageId: id, uid, reaction }, now)
+    const seen = async (uid: string | null) => (await listMessages(fake.db, { scope: "match", scopeId: "tsdb-7", viewerUid: uid })).messages[0]
+    return { ...fake, id, react, seen }
+  }
+
+  it("keeps one per user per message and counts for everyone", async () => {
+    const { react, seen } = await seed()
+    await react("u1", "like")
+    await react("u2", "like")
+    expect(await seen("u1")).toMatchObject({ reactions: { like: 2 }, myReaction: "like" })
+    await react("u1", "fire")
+    expect(await seen("u1")).toMatchObject({ reactions: { like: 1, fire: 1 }, myReaction: "fire" })
+    expect(await seen(null)).toMatchObject({ reactions: { like: 1, fire: 1 }, myReaction: null })
+  })
+
+  it("takes a reaction back when chosen again, including under concurrency", async () => {
+    const { react, seen, docs } = await seed()
+    await Promise.all([react("u1", "like"), react("u1", "like"), react("u1", "like")])
+    expect((await seen("u1")).reactions).toEqual({ like: 1 })
+    await react("u1", "like")
+    expect((await seen("u1")).reactions).toEqual({})
+    expect([...docs.keys()].filter((path) => path.startsWith("message_reactions/"))).toEqual([])
+  })
+
+  it("accepts only the fixed list and never reveals who reacted", async () => {
+    const { react, seen } = await seed()
+    expect(await code(react("u1", "angry"))).toBe("invalid_reaction")
+    await react("u1", "love")
+    expect(JSON.stringify(await seen("u2"))).not.toContain("u1")
+  })
+
+  it("refuses removed messages, locked chats and suspended users, but not muted ones", async () => {
+    const { db, id, react } = await seed()
+    await sanctionUser(db, { uid: "s", type: "suspend", hours: 1, reason: "abuse", actorUid: "mod" }, now)
+    await sanctionUser(db, { uid: "m", type: "mute", hours: 1, reason: "spam", actorUid: "mod" }, now)
+    expect(await code(react("s", "like"))).toBe("sanctioned")
+    expect(await code(react("m", "like"))).toBe("ok")
+    await setLock(db, { scope: "match", scopeId: "tsdb-7", locked: true, reason: "raid", actorUid: "mod" }, now)
+    expect(await code(react("u1", "like"))).toBe("room_locked")
+    await setLock(db, { scope: "match", scopeId: "tsdb-7", locked: false, reason: "calm", actorUid: "mod" }, now)
+    await removeMessage(db, { scope: "match", scopeId: "tsdb-7", messageId: id, reason: "abuse", actorUid: "mod" }, now)
+    expect(await code(react("u1", "like"))).toBe("not_found")
+  })
+
+  it("keeps room reactions to room members", async () => {
+    const { db } = fakeDb()
+    const { id: roomId } = await createRoom(db, { uid: "host", displayName: "H", plan: "plus", matchId: "tsdb-7", name: "R", kickoffUTC: null }, now)
+    const { id: messageId } = await postRoomMessage(db, { roomId, uid: "host", text: "hi" }, now)
+    const react = (uid: string) => reactToMessage(db, { scope: "room", scopeId: roomId, messageId, uid, reaction: "like" }, now)
+    expect(await code(react("stranger"))).toBe("not_found")
+    expect(await code(react("host"))).toBe("ok")
+  })
+})
+
+describe("match polls", () => {
+  const input = { matchId: "tsdb-7", question: "Who wins?", options: ["Home", "Away"] }
+  const vote = (db: ReturnType<typeof fakeDb>["db"], uid: string, option: unknown = 0) => voteInPoll(db, { matchId: "tsdb-7", uid, option }, now)
+  const state = (db: ReturnType<typeof fakeDb>["db"], uid: string | null = null) => getMatchChatState(db, "tsdb-7", uid)
+
+  it("is created by moderators only, with a second factor", async () => {
+    const { db } = fakeDb()
+    expect(await code(createPoll(db, member, input, now))).toBe("forbidden")
+    expect(await code(createPoll(db, noSecondFactor, input, now))).toBe("mfa_required")
+    expect(await code(createPoll(db, moderator, input, now))).toBe("ok")
+    expect(await code(closePoll(db, member, { matchId: "tsdb-7" }))).toBe("forbidden")
+  })
+
+  it("allows one open poll per match and validates its options", async () => {
+    const { db } = fakeDb()
+    expect(await code(createPoll(db, moderator, { ...input, options: ["Only"] }, now))).toBe("invalid_poll")
+    expect(await code(createPoll(db, moderator, { ...input, options: ["Same", "Same"] }, now))).toBe("invalid_poll")
+    expect(await code(createPoll(db, moderator, { ...input, options: ["a", "b", "c", "d", "e"] }, now))).toBe("invalid_poll")
+    await createPoll(db, moderator, input, now)
+    expect(await code(createPoll(db, moderator, input, now))).toBe("poll_open")
+    await closePoll(db, moderator, { matchId: "tsdb-7" })
+    expect(await code(createPoll(db, moderator, input, later(1000)))).toBe("ok")
+    expect((await state(db))?.poll).toMatchObject({ open: true })
+  })
+
+  it("keeps one vote per user, even concurrently, and tallies per option", async () => {
+    const { db } = fakeDb()
+    await createPoll(db, moderator, input, now)
+    const results = await Promise.allSettled([vote(db, "u1"), vote(db, "u1", 1), vote(db, "u1")])
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1)
+    expect(await code(vote(db, "u1", 1))).toBe("already_voted")
+    await vote(db, "u2", 1)
+    await vote(db, "u3", 1)
+    const { poll } = await state(db, "u2")
+    expect(poll?.options.reduce((sum, option) => sum + option.votes, 0)).toBe(3)
+    expect(poll?.options[1].votes).toBeGreaterThanOrEqual(2)
+    expect(poll?.myVote).toBe(1)
+  })
+
+  it("refuses bad options, closed polls and sanctioned users, and hides who made the poll", async () => {
+    const { db } = fakeDb()
+    await createPoll(db, moderator, input, now)
+    expect(await code(vote(db, "u1", 2))).toBe("invalid_vote")
+    expect(await code(vote(db, "u1", "0"))).toBe("invalid_vote")
+    await sanctionUser(db, { uid: "s", type: "suspend", hours: 1, reason: "abuse", actorUid: "mod" }, now)
+    expect(await code(vote(db, "s"))).toBe("sanctioned")
+    expect(JSON.stringify(await state(db))).not.toContain(moderator.uid)
+    await closePoll(db, moderator, { matchId: "tsdb-7" })
+    expect(await code(vote(db, "u1"))).toBe("poll_closed")
+  })
+})
+
+describe("pinned notice", () => {
+  it("is set and cleared by moderators only and never shows who pinned it", async () => {
+    const { db } = fakeDb()
+    const pin = (actor: AuthedUser, text: string | null) => setPinnedNotice(db, actor, { matchId: "tsdb-7", text }, now)
+    expect(await code(pin(member, "x"))).toBe("forbidden")
+    expect(await code(pin(noSecondFactor, "x"))).toBe("mfa_required")
+    expect((await getMatchChatState(db, "tsdb-7", null)).notice).toBeNull()
+    await pin(moderator, "Kickoff delayed")
+    const { notice } = await getMatchChatState(db, "tsdb-7", null)
+    expect(notice?.text).toBe("Kickoff delayed")
+    expect(JSON.stringify(notice)).not.toContain(moderator.uid)
+    expect(await code(pin(member, null))).toBe("forbidden")
+    await pin(moderator, null)
+    expect((await getMatchChatState(db, "tsdb-7", null)).notice).toBeNull()
+  })
+
+  it("does not disturb the lock on the same chat", async () => {
+    const { db } = fakeDb()
+    await setLock(db, { scope: "match", scopeId: "tsdb-7", locked: true, reason: "raid", actorUid: "mod" }, now)
+    await setPinnedNotice(db, moderator, { matchId: "tsdb-7", text: "Calm down" }, now)
+    expect((await getMatchChatState(db, "tsdb-7", null)).locked).toBe(true)
+  })
+})
+
+describe("unblock", () => {
+  const seed = async () => {
+    const fake = fakeDb()
+    const { id } = await postMatchMessage(fake.db, { matchId: "tsdb-7", uid: "author", displayName: "Sam", text: "hi" }, now)
+    await blockAuthor(fake.db, { scope: "match", scopeId: "tsdb-7", messageId: id, uid: "viewer" })
+    return fake
+  }
+  const visible = async (db: ReturnType<typeof fakeDb>["db"]) => (await listMessages(db, { scope: "match", scopeId: "tsdb-7", viewerUid: "viewer" })).messages.length
+
+  it("lists names without uids and restores the person's messages", async () => {
+    const { db } = await seed()
+    expect(await visible(db)).toBe(0)
+    const list = await listBlocked(db, "viewer")
+    expect(list).toEqual([{ ref: expect.stringMatching(OPAQUE_REF), displayName: "Sam" }])
+    expect(JSON.stringify(list)).not.toContain("author")
+    await unblockAuthor(db, { uid: "viewer", ref: list[0].ref })
+    expect(await visible(db)).toBe(1)
+    expect(await listBlocked(db, "viewer")).toEqual([])
+  })
+
+  it("refuses a ref that is not on this person's own list", async () => {
+    const { db } = await seed()
+    const [{ ref }] = await listBlocked(db, "viewer")
+    expect(await code(unblockAuthor(db, { uid: "viewer", ref: "0".repeat(32) }))).toBe("not_found")
+    expect(await code(unblockAuthor(db, { uid: "someone", ref }))).toBe("not_found")
+  })
+})
+
+describe("data rights", () => {
+  const seed = async () => {
+    const fake = fakeDb()
+    const { db } = fake
+    const room = await createRoom(db, { uid: "gone", displayName: "Gone", plan: "plus", matchId: "tsdb-7", name: "Sam's room", kickoffUTC: null }, now)
+    const other = await createRoom(db, { uid: "stay", displayName: "Stay", plan: "plus", matchId: "tsdb-7", name: "Other", kickoffUTC: null }, now)
+    await joinRoom(db, { uid: "stay", displayName: "Stay", token: room.inviteToken, hostPlan: async () => "plus" }, now)
+    await joinRoom(db, { uid: "gone", displayName: "Gone", token: other.inviteToken, hostPlan: async () => "plus" }, now)
+    const plain = await postMatchMessage(db, { matchId: "tsdb-7", uid: "gone", displayName: "Gone", text: "plain" }, now)
+    const reported = await postMatchMessage(db, { matchId: "tsdb-8", uid: "gone", displayName: "Gone", text: "reported" }, now)
+    const removed = await postMatchMessage(db, { matchId: "tsdb-7", uid: "gone", displayName: "Gone", text: "removed" }, later(6000))
+    const kept = await postMatchMessage(db, { matchId: "tsdb-7", uid: "stay", displayName: "Stay", text: "kept" }, now)
+    await postRoomMessage(db, { roomId: other.id, uid: "gone", text: "in a room" }, now)
+    await reportMessage(db, { scope: "match", scopeId: "tsdb-8", messageId: reported.id, reporterUid: "stay", reason: "abuse" }, now)
+    await removeMessage(db, { scope: "match", scopeId: "tsdb-7", messageId: removed.id, reason: "abuse", actorUid: "mod-uid" }, now)
+    await reactToMessage(db, { scope: "match", scopeId: "tsdb-7", messageId: kept.id, uid: "gone", reaction: "like" }, now)
+    await submitPrediction(db, { uid: "gone", displayName: "Gone", event: match(), home: 2, away: 1 }, now)
+    await settleMatch(db, match({ status: "finished", score: { kind: "team", home: 2, away: 1 } }))
+    await blockAuthor(db, { scope: "match", scopeId: "tsdb-7", messageId: kept.id, uid: "gone" })
+    await blockAuthor(db, { scope: "match", scopeId: "tsdb-7", messageId: plain.id, uid: "stay" })
+    await createPoll(db, moderator, { matchId: "tsdb-7", question: "Q?", options: ["A", "B"] }, now)
+    await voteInPoll(db, { matchId: "tsdb-7", uid: "gone", option: 1 }, now)
+    return { ...fake, room, other, plain, reported, removed, kept }
+  }
+  const message = (s: Awaited<ReturnType<typeof seed>>, matchId: string, id: string) => s.docs.get(`match_chats/${matchId}/messages/${id}`)
+
+  it("anonymizes messages, blanking text unless moderation needs it", async () => {
+    const s = await seed()
+    await eraseCommunityData(s.db, "gone")
+    expect(message(s, "tsdb-7", s.plain.id)).toMatchObject({ uid: "", displayName: FORMER_MEMBER, text: "", formerMember: true })
+    expect(message(s, "tsdb-8", s.reported.id)).toMatchObject({ uid: "", displayName: FORMER_MEMBER, text: "reported" })
+    expect(message(s, "tsdb-7", s.removed.id)).toMatchObject({ uid: "", displayName: FORMER_MEMBER, text: "removed" })
+    expect(message(s, "tsdb-7", s.kept.id)).toMatchObject({ uid: "stay", text: "kept" })
+    const room = [...s.docs.entries()].filter(([path]) => path.startsWith(`rooms/${s.other.id}/messages/`))
+    expect(room.map(([, doc]) => doc)).toEqual([expect.objectContaining({ uid: "", displayName: FORMER_MEMBER, text: "" })])
+  })
+
+  it("shows other readers no retained text and no way to act on the author", async () => {
+    const s = await seed()
+    await eraseCommunityData(s.db, "gone")
+    const seen = (await listMessages(s.db, { scope: "match", scopeId: "tsdb-8", viewerUid: "stay" })).messages[0]
+    expect(seen).toMatchObject({ text: "", displayName: FORMER_MEMBER, formerMember: true, mine: false })
+    expect(await code(blockAuthor(s.db, { scope: "match", scopeId: "tsdb-8", messageId: s.reported.id, uid: "stay" }))).toBe("not_found")
+  })
+
+  it("deletes predictions, points, memberships, blocks, reactions and votes, and leaves nothing that names the uid", async () => {
+    const s = await seed()
+    await eraseCommunityData(s.db, "gone")
+    const left = [...s.docs.entries()].filter(([path, doc]) => path.includes("gone") || JSON.stringify(doc).includes('"gone"'))
+    expect(left.map(([path]) => path.split("/")[0]).sort()).toEqual(["community_reports"])
+    expect(message(s, "tsdb-7", s.kept.id)?.reactionCounts).toEqual({ like: 0 })
+    expect((await getMatchChatState(s.db, "tsdb-7", null)).poll?.options[1].votes).toBe(0)
+  })
+
+  it("closes rooms the person hosted and frees their place in others", async () => {
+    const s = await seed()
+    await eraseCommunityData(s.db, "gone")
+    expect(s.docs.get(`rooms/${s.room.id}`)).toMatchObject({ status: "closed", hostUid: "", name: "", inviteHash: null })
+    expect(s.docs.get(`rooms/${s.other.id}`)).toMatchObject({ status: "active", memberCount: 1 })
+    expect(await code(joinRoom(s.db, { uid: "new", displayName: "N", token: s.room.inviteToken, hostPlan: async () => "plus" }, now))).toBe("invite_invalid")
+  })
+
+  it("keeps enforcement records and is safe to run twice", async () => {
+    const s = await seed()
+    await sanctionUser(s.db, { uid: "gone", type: "mute", hours: 1, reason: "spam", actorUid: "mod" }, now)
+    await eraseCommunityData(s.db, "gone")
+    await eraseCommunityData(s.db, "gone")
+    expect(s.docs.has("community_sanctions/gone")).toBe(true)
+    expect(await listOpenReports(s.db)).toHaveLength(1)
+  })
+
+  it("exports the person's messages, rooms and predictions and nobody else's data", async () => {
+    const s = await seed()
+    const data = await exportCommunityData(s.db, "gone")
+    expect(data.messages.map((row) => row.text).sort()).toEqual(["in a room", "plain", "removed", "reported"])
+    expect(data.messages.find((row) => row.text === "removed")?.removedByModerator).toBe(true)
+    expect(data.rooms.map((row) => [row.name, row.role]).sort()).toEqual([["Other", "member"], ["Sam's room", "host"]])
+    expect(data.predictions).toEqual([expect.objectContaining({ matchId: "tsdb-7", home: 2, away: 1, points: 5 })])
+    expect(data.reactions).toEqual([expect.objectContaining({ reaction: "like" })])
+    expect(data.pollVotes).toEqual([expect.objectContaining({ option: 1 })])
+    expect(data.blockedPeople).toEqual(["Stay"])
+    const text = JSON.stringify(data)
+    expect(text).not.toMatch(/mod-uid|inviteHash|"stay"/)
+  })
+})
+
+describe("room pass sales", () => {
+  const env = (community?: string) => ({ STRIPE_PRICE_ROOM_PASS: "price_test", COMMUNITY_ENABLED: community })
+
+  it("goes on sale only with the community flag on", () => {
+    expect(addonOnSale("room_pass", env("true"))).toBe(true)
+    expect(addonOnSale("room_pass", env("false"))).toBe(false)
+    expect(addonOnSale("room_pass", env())).toBe(false)
+  })
+  it("still needs a configured price", () => {
+    expect(addonOnSale("room_pass", { COMMUNITY_ENABLED: "true" })).toBe(false)
+  })
+})
+
+describe("firestore behaviour", () => {
+  it("settles matches that have started before ones still to come", async () => {
+    const { db, put } = fakeDb()
+    put("predictions/tsdb-1_a", { matchId: "tsdb-1", settled: false, lockedAtUTC: later(DAY).toISOString() })
+    put("predictions/tsdb-2_a", { matchId: "tsdb-2", settled: false, lockedAtUTC: later(-DAY).toISOString() })
+    put("predictions/tsdb-3_a", { matchId: "tsdb-3", settled: false, lockedAtUTC: later(-2 * DAY).toISOString() })
+    expect(await pendingMatchIds(db, 20, now)).toEqual(["tsdb-3", "tsdb-2"])
+  })
+
+  it("rejects what real Firestore would reject", async () => {
+    const { db } = fakeDb()
+    await expect(db.set("a/b", { value: undefined })).rejects.toThrow()
+    await expect(db.query("a", { where: [["x", 1]], orderBy: { field: "y", direction: "asc" } })).rejects.toThrow()
+  })
+
+  it("merges nested maps key by key", async () => {
+    const { db, docs } = fakeDb()
+    await db.set("a/b", { map: { one: 1, two: 2 } })
+    await db.set("a/b", { map: { one: 3 } }, { merge: true })
+    expect(docs.get("a/b")).toEqual({ map: { one: 3, two: 2 } })
+  })
+})
+
+describe("room views", () => {
+  it("gives hosts opaque member refs that resolve only within the room", async () => {
+    const { db } = fakeDb()
+    const { id, inviteToken } = await createRoom(db, { uid: "host", displayName: "H", plan: "plus", matchId: "tsdb-7", name: "R", kickoffUTC: null }, now)
+    await joinRoom(db, { uid: "u1", displayName: "U", token: inviteToken, hostPlan: async () => "plus" }, now)
+    const view = await getRoomAsMember(db, id, "host")
+    expect(JSON.stringify(view)).not.toMatch(/u1|hostUid/)
+    const target = view.members.find((row) => row.role === "member")
+    expect(await resolveMemberRef(db, id, target?.ref as string)).toBe("u1")
+    expect(await code(resolveMemberRef(db, id, "0".repeat(32)))).toBe("not_found")
+  })
+
+  it("does not reveal which moderator locked a room", async () => {
+    const { db } = fakeDb()
+    const { id } = await createRoom(db, { uid: "host", displayName: "H", plan: "plus", matchId: "tsdb-7", name: "R", kickoffUTC: null }, now)
+    await setLock(db, { scope: "room", scopeId: id, locked: true, reason: "private note", actorUid: "mod-uid" }, now)
+    expect(JSON.stringify(await getRoomAsMember(db, id, "host"))).not.toMatch(/mod-uid|private note/)
   })
 })
 

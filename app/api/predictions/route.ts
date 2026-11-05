@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { apiErrorResponse, requireFeature, requireUser, requireVerifiedUser } from "@/lib/api-auth"
 import { assertId, displayNameOf, MATCH_ID } from "@/lib/community/content"
 import { requireEvent } from "@/lib/community/events"
-import { submitPrediction, type Prediction } from "@/lib/community/predictions"
+import { submitPrediction, toOwnPrediction, type Prediction } from "@/lib/community/predictions"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { rateLimit } from "@/lib/rate-limit"
 
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     const user = await requireUser(request)
     const matchId = assertId(new URL(request.url).searchParams.get("matchId"), MATCH_ID)
     const prediction = await firestoreDocDb().get<Prediction>(`predictions/${matchId}_${user.uid}`)
-    return NextResponse.json({ prediction })
+    return NextResponse.json({ prediction: prediction && toOwnPrediction(prediction) })
   } catch (error) {
     return apiErrorResponse(error)
   }
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     const { matchId, home, away } = await request.json().catch(() => ({}))
     const event = await requireEvent(assertId(matchId, MATCH_ID))
     const prediction = await submitPrediction(firestoreDocDb(), { uid: user.uid, displayName: displayNameOf(user.token), event, home, away }, new Date())
-    return NextResponse.json({ prediction }, { status: 201 })
+    return NextResponse.json({ prediction: toOwnPrediction(prediction) }, { status: 201 })
   } catch (error) {
     return apiErrorResponse(error)
   }

@@ -11,6 +11,8 @@ import { spendableCredits } from "@/lib/billing/allowance"
 import { PLANS, type PlanId } from "@/lib/billing/plans"
 import type { DocDb, DocTx, Row } from "@/lib/doc-db"
 import { assertNotSanctioned, newMessageId, messagesPath, readSanction, type StoredMessage } from "./chat"
+import { opaqueRef } from "./content"
+import { requireAccepted } from "./gate"
 
 const ROOM_LIFETIME_HOURS = 24
 
@@ -39,9 +41,9 @@ export interface Member {
   joinedAtUTC: string
 }
 
-const roomPath = (id: string) => `rooms/${id}`
-const memberPath = (roomId: string, uid: string) => `room_members/${roomId}_${uid}`
-const invitePath = (hash: string) => `room_invites/${hash}`
+export const roomPath = (id: string) => `rooms/${id}`
+export const memberPath = (roomId: string, uid: string) => `room_members/${roomId}_${uid}`
+export const invitePath = (hash: string) => `room_invites/${hash}`
 const notFound = () => new ApiError(404, "not_found", "Not found")
 
 export const hashInvite = (token: string) => createHash("sha256").update(token).digest("hex")
@@ -76,6 +78,7 @@ export async function createRoom(
     const hosted = await tx.query<Room>("rooms", { where: [["hostUid", uid], ["status", "active"]] })
     const purchases = await tx.query<BillingPurchase>("billing_purchases", { where: [["uid", uid], ["unit", "room"]] })
 
+    await requireAccepted(tx, uid)
     assertNotSanctioned(sanction, now, "participate")
     const activeBase = hosted.filter((room) => !room.passPurchaseId && nowMs < Date.parse(room.expiresAtUTC)).length
     const slot = decideRoomSlot(plan, activeBase, spendableCredits(purchases, nowMs))
@@ -106,7 +109,7 @@ export async function createRoom(
 }
 
 /** A refunded or expired pass closes its room to new joins and messages. */
-async function assertRoomOpen(tx: Pick<DocTx, "get">, room: Room | null, now: Date): Promise<Room> {
+export async function assertRoomOpen(tx: Pick<DocTx, "get">, room: Room | null, now: Date): Promise<Room> {
   if (!room || room.status !== "active") throw notFound()
   if (now.getTime() >= Date.parse(room.expiresAtUTC)) throw new ApiError(410, "room_expired", "This room has expired")
   if (room.locked) throw new ApiError(423, "room_locked", "This room is locked")
@@ -142,6 +145,7 @@ export async function joinRoom(
     const current = await tx.get<Room>(roomPath(roomId))
     const existing = await tx.get<Member>(memberPath(roomId, input.uid))
     const sanction = await readSanction(tx, input.uid)
+    await requireAccepted(tx, input.uid)
     const room = await assertRoomOpen(tx, current, now)
 
     assertNotSanctioned(sanction, now, "participate")
@@ -165,13 +169,22 @@ export async function getRoomAsMember(db: Pick<DocDb, "get" | "query">, roomId: 
 
   const isHost = room.hostUid === uid
   const members = isHost ? await db.query<Member>("room_members", { where: [["roomId", roomId], ["status", "active"]] }) : []
-  const { inviteHash, hostUid: _host, passPurchaseId: _pass, ...visible } = room
+  const { name, participantCap, memberCount, status, locked, expiresAtUTC, inviteHash } = room
   return {
     id: roomId,
-    room: { ...visible, inviteActive: Boolean(inviteHash) },
+    room: { name, participantCap, memberCount, status, locked, expiresAtUTC, inviteActive: Boolean(inviteHash) },
     isHost,
-    members: members.map(({ uid: memberUid, displayName, role }) => ({ uid: memberUid, displayName, role })),
+    members: members.map(({ uid: memberUid, displayName, role }) => ({ ref: memberRef(roomId, memberUid), displayName, role })),
   }
+}
+
+const memberRef = (roomId: string, uid: string) => opaqueRef(`room:${roomId}`, uid)
+
+export async function resolveMemberRef(db: Pick<DocDb, "query">, roomId: string, ref: string): Promise<string> {
+  const members = await db.query<Member>("room_members", { where: [["roomId", roomId], ["status", "active"]] })
+  const member = members.find((row) => memberRef(roomId, row.uid) === ref)
+  if (!member) throw notFound()
+  return member.uid
 }
 
 export async function listMyRooms(db: Pick<DocDb, "get" | "query">, uid: string) {
@@ -185,6 +198,7 @@ export async function listMyRooms(db: Pick<DocDb, "get" | "query">, uid: string)
 }
 
 async function hostRoom(tx: Pick<DocTx, "get">, roomId: string, uid: string): Promise<Room> {
+  await requireAccepted(tx, uid)
   const room = await tx.get<Room>(roomPath(roomId))
   const member = await tx.get<Member>(memberPath(roomId, uid))
   if (!room || member?.status !== "active") throw notFound()
@@ -215,6 +229,7 @@ export function removeMember(db: DocDb, input: { roomId: string; actorUid: strin
     const room = await tx.get<Room>(roomPath(roomId))
     const actor = await tx.get<Member>(memberPath(roomId, actorUid))
     const target = await tx.get<Member>(memberPath(roomId, targetUid))
+    await requireAccepted(tx, actorUid)
     if (!room || actor?.status !== "active") throw notFound()
     const leaving = actorUid === targetUid
     if (!leaving && room.hostUid !== actorUid) throw new ApiError(403, "forbidden", "Only the host can do this")
@@ -241,6 +256,7 @@ export function postRoomMessage(db: DocDb, input: { roomId: string; uid: string;
   return db.transaction(async (tx) => {
     const member = await tx.get<Member>(memberPath(roomId, uid))
     if (member?.status !== "active") throw notFound()
+    await requireAccepted(tx, uid)
     const current = await tx.get<Room>(roomPath(roomId))
     const sanction = await readSanction(tx, uid)
     await assertRoomOpen(tx, current, now)

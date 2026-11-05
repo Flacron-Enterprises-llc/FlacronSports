@@ -1,5 +1,6 @@
 // Shared validation for user-written community content.
 
+import { createHash } from "node:crypto"
 import { ApiError } from "@/lib/api-auth"
 
 export const MAX_MESSAGE_LENGTH = 500
@@ -7,6 +8,8 @@ export const MAX_MESSAGE_LENGTH = 500
 export const MATCH_ID = /^tsdb-\d+$/
 export const ROOM_ID = /^[a-f0-9]{24}$/
 export const MESSAGE_ID = /^\d{13}-[a-f0-9]{8}$/
+export const OPAQUE_REF = /^[a-f0-9]{32}$/
+export const FORMER_MEMBER = "Former member"
 
 // Brand names only, and each may be spaced or dotted out. Plain words stay allowed:
 // a fan can discuss a "strikeout" or say an official stream was good.
@@ -50,6 +53,11 @@ export function cleanMessage(raw: unknown): string {
 export function displayNameOf(token: Record<string, unknown>): string {
   const name = typeof token.name === "string" ? token.name.trim().slice(0, 40) : ""
   return name && !name.includes("@") ? name : "Fan"
+}
+
+/** Stands in for a uid in API responses. It differs per context, so refs cannot be linked. */
+export function opaqueRef(context: string, uid: string): string {
+  return createHash("sha256").update(`${context}:${uid}`).digest("hex").slice(0, 32)
 }
 
 export function assertId(value: unknown, pattern: RegExp): string {

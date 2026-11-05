@@ -18,7 +18,7 @@ export type SportId =
 export interface SportDefinition {
   id: SportId
   name: { en: string; fr: string }
-  /** Enabled only after the provider returned real two-team fixtures. Individual sports stay off until the schema fits them. */
+  /** Enabled only after the provider returned real events with correct participants. */
   enabled: boolean
   providerKey?: string
 }
@@ -29,12 +29,12 @@ export const SPORTS: SportDefinition[] = [
   { id: "american-football", name: { en: "American football", fr: "Football américain" }, enabled: true, providerKey: "American Football" },
   { id: "baseball", name: { en: "Baseball", fr: "Baseball" }, enabled: true, providerKey: "Baseball" },
   { id: "ice-hockey", name: { en: "Ice hockey", fr: "Hockey sur glace" }, enabled: true, providerKey: "Ice Hockey" },
-  { id: "tennis", name: { en: "Tennis", fr: "Tennis" }, enabled: false },
-  { id: "cricket", name: { en: "Cricket", fr: "Cricket" }, enabled: false },
+  { id: "tennis", name: { en: "Tennis", fr: "Tennis" }, enabled: true, providerKey: "Tennis" },
+  { id: "cricket", name: { en: "Cricket", fr: "Cricket" }, enabled: true, providerKey: "Cricket" },
   { id: "rugby", name: { en: "Rugby", fr: "Rugby" }, enabled: true, providerKey: "Rugby" },
   { id: "volleyball", name: { en: "Volleyball", fr: "Volley-ball" }, enabled: true, providerKey: "Volleyball" },
-  { id: "combat-sports", name: { en: "Combat sports", fr: "Sports de combat" }, enabled: false },
-  { id: "motorsport", name: { en: "Motorsport", fr: "Sport automobile" }, enabled: false },
+  { id: "combat-sports", name: { en: "Combat sports", fr: "Sports de combat" }, enabled: true, providerKey: "Fighting" },
+  { id: "motorsport", name: { en: "Motorsport", fr: "Sport automobile" }, enabled: true, providerKey: "Motorsport" },
 ]
 
 export type EventStatus =
@@ -56,18 +56,55 @@ export interface Participant {
   badgeUrl: string | null
 }
 
+export interface SetLine {
+  name: string
+  games: number[]
+}
+
+export interface Innings {
+  runs: number
+  wickets: number | null
+  overs: string | null
+}
+
+export type CombatMethod =
+  | "unanimous-decision"
+  | "split-decision"
+  | "majority-decision"
+  | "decision"
+  | "ko"
+  | "tko"
+  | "submission"
+  | "disqualification"
+
+export interface ClassificationEntry {
+  position: number
+  name: string
+  team: string | null
+  time: string | null
+}
+
 export type EventScore =
   | { kind: "none" }
   | { kind: "team"; home: number; away: number }
+  | { kind: "sets"; lines: SetLine[]; winner: string | null; retired: string | null }
+  | { kind: "innings"; home: Innings | null; away: Innings | null; winner: string | null; margin: { value: number; unit: "runs" | "wickets" } | null }
+  | { kind: "combat"; winner: string; method: CombatMethod | null; round: number | null; time: string | null }
+  | { kind: "classification"; entries: ClassificationEntry[] }
 
 export interface SportEvent {
   id: string
   sportId: SportId
-  eventType: "match"
+  eventType: "match" | "bout" | "fight-card" | "session"
   participantType: ParticipantType
+  /** Empty when the source names nobody, for example a practice session. */
   participants: Participant[]
+  /** Tournament, fight card or session name, for events not named after two sides. */
+  eventName?: string | null
   competition: { id: string | null; name: string; country: string | null }
   scheduledStartUTC: string | null
+  /** The source gave a date with a midnight placeholder, so no start time is known. */
+  dateOnly?: boolean
   status: EventStatus
   /** Raw provider status, kept so unmapped values stay visible to operators. */
   providerStatus: string | null

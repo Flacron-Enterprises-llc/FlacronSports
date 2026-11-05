@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  Bell, CreditCard, Home, LayoutDashboard, LogOut, Menu, MessageCircleQuestion, Newspaper, PlayCircle, Settings, Shield, Star, Trophy, Users, X,
+  Bell, CreditCard, Home, LayoutDashboard, LogOut, Medal, Menu, MessageCircleQuestion, Newspaper, PlayCircle, Settings, Shield, Star, Trophy, Users, X,
 } from "lucide-react"
 import { Logo } from "@/components/site/brand"
 import { ThemeToggle } from "@/components/site/theme-toggle"
@@ -17,7 +17,6 @@ import { localePath } from "@/lib/i18n"
 import { POLICIES } from "@/lib/legal/content"
 import { useLocale } from "@/lib/use-locale"
 
-const TEST_BILLING = process.env.NEXT_PUBLIC_BILLING_MODE !== "live"
 const COMMUNITY = process.env.NEXT_PUBLIC_COMMUNITY_ENABLED === "true"
 
 function stripLocale(path: string): string {
@@ -53,7 +52,7 @@ function useNav(role: string | null) {
         title: t.dash.tools,
         items: [
           { to: "/app/assistant", label: t.nav.assistant, icon: MessageCircleQuestion },
-          ...(COMMUNITY ? [{ to: "/app/rooms", label: t.dash.rooms, icon: Users }] : []),
+          ...(COMMUNITY ? [{ to: "/app/rooms", label: t.dash.rooms, icon: Users }, { to: "/app/predictions", label: t.dash.predictions, icon: Medal }] : []),
         ],
       },
       {
@@ -216,7 +215,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Menu aria-hidden className="size-5" />
           </button>
           <span className="lg:hidden"><Logo href={href("/app")} /></span>
-          {TEST_BILLING && <span className="hidden rounded-full border border-line px-2.5 py-0.5 text-xs font-medium text-warn sm:inline-block">{t.dash.testMode}</span>}
         </div>
         <div className="flex items-center gap-1">
           <Link href={localePath(locale === "en" ? "fr" : "en", path)} hrefLang={locale === "en" ? "fr" : "en"} className="rounded-md px-2 py-2 text-sm font-medium text-ink-2 hover:text-ink">{t.nav.language}</Link>

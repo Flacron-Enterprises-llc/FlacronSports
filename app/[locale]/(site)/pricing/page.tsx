@@ -15,15 +15,14 @@ export default async function PricingPage({ params }: LocaleParams) {
   const { locale, t, href } = await pageContext(params)
   const m = getMarketing(locale)
   const fr = locale === "fr"
-  const soon = t.pricing.soon
   const rows: [string, string, string, string][] = [
     [fr ? "Scores et calendriers" : "Scores and schedules", ...(Array(3).fill(fr ? "Sports activés" : "All enabled sports") as [string, string, string])],
     [fr ? "Vidéo publique autorisée" : "Authorized public video", ...(Array(3).fill(fr ? "Si disponible" : "Where available") as [string, string, string])],
     [fr ? "Favoris" : "Favorite teams or athletes", fr ? "5 au total" : "5 total", fr ? "Illimités" : "Unlimited", fr ? "Illimités" : "Unlimited"],
     [fr ? "Publicités FlacronSport" : "FlacronSport display ads", fr ? "Incluses" : "Included", fr ? "Retirées" : "Removed", fr ? "Retirées" : "Removed"],
     [fr ? "Assistant sportif par mois" : "Sports assistant per month", ...(["free", "plus", "premium"] as const).map((id) => String(PLANS[id].assistantRequestsPerMonth)) as [string, string, string]],
-    [`${fr ? "Création de salons privés" : "Private room creation"} (${soon})`, fr ? "Rejoindre uniquement" : "Join only", fr ? "3 salons actifs" : "3 active rooms", fr ? "10 salons actifs" : "10 active rooms"],
-    [`${fr ? "Participants par salon" : "Room participant limit"} (${soon})`, fr ? "Selon l'hôte" : "Host plan applies", "20", "50"],
+    [fr ? "Création de salons privés" : "Private room creation", fr ? "Rejoindre uniquement" : "Join only", fr ? "3 salons actifs" : "3 active rooms", fr ? "10 salons actifs" : "10 active rooms"],
+    [fr ? "Participants par salon" : "Room participant limit", fr ? "Selon l'hôte" : "Host plan applies", "20", "50"],
   ]
 
   return (

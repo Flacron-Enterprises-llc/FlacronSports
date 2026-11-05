@@ -461,3 +461,13 @@ describe("jobs and standings", () => {
     expect(JSON.stringify({ reports, alerts, notifications, newsletter, team, standings })).not.toMatch(/\bAI\b|artificial intelligence/i)
   })
 })
+
+describe("moved events", () => {
+  it("gives a moved kickoff its own start alert and leaves the final alert single", () => {
+    const first = notificationId("u1", "tsdb-1", "start", "2026-11-05T18:00:00.000Z")
+    const moved = notificationId("u1", "tsdb-1", "start", "2026-11-05T20:00:00.000Z")
+    expect(moved).not.toBe(first)
+    expect(notificationId("u1", "tsdb-1", "start", "2026-11-05T18:00:00.000Z")).toBe(first)
+    expect(notificationId("u1", "tsdb-1", "final", "2026-11-05T18:00:00.000Z")).toBe(notificationId("u1", "tsdb-1", "final", "2026-11-05T20:00:00.000Z"))
+  })
+})

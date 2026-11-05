@@ -7,6 +7,7 @@ import { getAdminDb } from "@/lib/firebase-admin"
 
 export interface QuerySpec {
   where?: [field: string, value: unknown][]
+  arrayContains?: [field: string, value: unknown]
   orderBy?: { field: string; direction: "asc" | "desc" }
   limit?: number
   startAfter?: unknown
@@ -18,6 +19,7 @@ export interface DocTx {
   get<T>(path: string): Promise<T | null>
   query<T>(collection: string, spec?: QuerySpec): Promise<Row<T>[]>
   set(path: string, data: object, options?: { merge?: boolean }): void
+  delete(path: string): void
 }
 
 export interface DocDb {
@@ -25,11 +27,14 @@ export interface DocDb {
   get<T>(path: string): Promise<T | null>
   query<T>(collection: string, spec?: QuerySpec): Promise<Row<T>[]>
   set(path: string, data: object, options?: { merge?: boolean }): Promise<void>
+  delete(path: string): Promise<void>
+  count(collection: string, spec?: QuerySpec): Promise<number>
 }
 
 function buildQuery(firestore: NonNullable<ReturnType<typeof getAdminDb>>, collection: string, spec: QuerySpec = {}): Query {
   let query: Query = firestore.collection(collection)
   for (const [field, value] of spec.where ?? []) query = query.where(field, "==", value)
+  if (spec.arrayContains) query = query.where(spec.arrayContains[0], "array-contains", spec.arrayContains[1])
   if (spec.orderBy) query = query.orderBy(spec.orderBy.field, spec.orderBy.direction)
   if (spec.startAfter !== undefined) query = query.startAfter(spec.startAfter)
   if (spec.limit) query = query.limit(spec.limit)
@@ -55,6 +60,9 @@ export function firestoreDocDb(): DocDb {
           set(path, data, options) {
             tx.set(firestore.doc(path), data, { merge: options?.merge === true })
           },
+          delete(path) {
+            tx.delete(firestore.doc(path))
+          },
         }),
       ),
     async get<T>(path: string) {
@@ -67,6 +75,12 @@ export function firestoreDocDb(): DocDb {
     },
     async set(path, data, options) {
       await firestore.doc(path).set(data, { merge: options?.merge === true })
+    },
+    async delete(path) {
+      await firestore.doc(path).delete()
+    },
+    async count(collection, spec) {
+      return (await buildQuery(firestore, collection, spec).count().get()).data().count
     },
   }
 }

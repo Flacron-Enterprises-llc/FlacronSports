@@ -5,6 +5,8 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib"
 import { ApiError } from "@/lib/api-auth"
 import { consumePurchasedCredit, hasPurchasedCredit } from "@/lib/billing/allowance"
 import type { DocDb } from "@/lib/doc-db"
+import { getDictionary } from "@/lib/i18n"
+import { eventTitle, resultLine } from "@/lib/sports/presentation"
 import type { SportEvent } from "@/lib/sports/types"
 
 export interface MatchSummary {
@@ -20,11 +22,11 @@ export type PdfRenderer = (summary: MatchSummary) => Promise<Uint8Array>
 
 export function buildMatchSummary(event: SportEvent): MatchSummary {
   return {
-    title: event.participants.map((participant) => participant.name).join(" / "),
+    title: eventTitle(event),
     competition: event.competition.name,
-    kickoffUTC: event.scheduledStartUTC,
+    kickoffUTC: event.dateOnly ? null : event.scheduledStartUTC,
     status: event.status,
-    score: event.score.kind === "team" ? `${event.score.home} - ${event.score.away}` : null,
+    score: resultLine(event, getDictionary("en")),
     venue: event.venue,
   }
 }

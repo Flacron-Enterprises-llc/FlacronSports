@@ -2,17 +2,19 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { MatchCommunity } from "@/components/community/match-community"
 import { StatusLabel } from "@/components/sports/event-card"
+import { EventResult } from "@/components/sports/event-result"
 import { ExportButton } from "@/components/sports/export-button"
 import { FavoriteStar, LocalTime, MatchScore } from "@/components/sports/parts"
 import { supportsScorePrediction } from "@/lib/community/predictions"
 import { pageContext } from "@/lib/page-context"
+import { eventTitle, isDuel } from "@/lib/sports/presentation"
 import { getEvent } from "@/lib/sports/service"
 import type { SportEvent } from "@/lib/sports/types"
 import { evaluateViewing } from "@/lib/video/viewing"
 
 export default async function MatchPage({ params }: { params: Promise<{ locale: string; id: string }> }) {
   const { id } = await params
-  const { t, href } = await pageContext(params)
+  const { locale, t, href } = await pageContext(params)
 
   let event: SportEvent | null = null
   let failed = false
@@ -34,7 +36,11 @@ export default async function MatchPage({ params }: { params: Promise<{ locale: 
     )
   }
 
+  const duel = isDuel(event)
   const [home, away] = event.participants
+  const title = eventTitle(event)
+  const startLabel = event.participantType === "team" && event.sportId !== "cricket" ? t.match.kickoff : t.event.start
+  const start = event.scheduledStartUTC
   const viewing = evaluateViewing([], { country: null, platform: "web", entitled: false, now: new Date() })
 
   return (
@@ -51,16 +57,30 @@ export default async function MatchPage({ params }: { params: Promise<{ locale: 
           <p className="text-sm font-medium text-ink-2">{event.competition.name}</p>
           <StatusLabel status={event.status} t={t} />
         </div>
-        <h1 className="mt-4 text-2xl font-bold text-ink">{home.name} / {away.name}</h1>
-        <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-          <p className="flex items-center gap-1 font-semibold text-ink"><FavoriteStar team={home.name} />{home.name}</p>
-          <div className="text-center">
-            {event.score.kind === "team" ? <MatchScore home={event.score.home} away={event.score.away} label={`${home.name} / ${away.name}`} /> : <span className="text-sm font-medium text-ink-3">{t.match.noScore}</span>}
+        {event.participantType !== "team" && <p className="mt-4 text-sm text-ink-3">{t.event.types[event.eventType]}</p>}
+        {duel && event.eventName && <p className="mt-1 font-semibold text-ink-2">{event.eventName}</p>}
+        <h1 className={`${event.participantType === "team" ? "mt-4" : "mt-1"} text-2xl font-bold text-ink`}>{title}</h1>
+        {duel && (
+          <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <p className="flex items-center gap-1 font-semibold text-ink"><FavoriteStar team={home.name} />{home.name}</p>
+            <div className="text-center">
+              {event.score.kind === "team" && <MatchScore home={event.score.home} away={event.score.away} label={title} />}
+              {event.score.kind === "none" && <span className="text-sm font-medium text-ink-3">{event.participantType === "team" ? t.match.noScore : t.event.noResult}</span>}
+            </div>
+            <p className="flex items-center justify-end gap-1 text-right font-semibold text-ink">{away.name}<FavoriteStar team={away.name} /></p>
           </div>
-          <p className="flex items-center justify-end gap-1 text-right font-semibold text-ink">{away.name}<FavoriteStar team={away.name} /></p>
-        </div>
+        )}
+        {!duel && event.score.kind === "none" && <p className="mt-3 text-sm text-ink-3">{t.event.noParticipants}</p>}
+        <EventResult event={event} t={t} />
         <dl className="mt-6 grid gap-3 border-t border-line pt-4 text-sm sm:grid-cols-2">
-          <div><dt className="text-ink-3">{t.match.kickoff}</dt><dd className="text-ink">{event.scheduledStartUTC ? <LocalTime iso={event.scheduledStartUTC} mode="datetime" /> : t.match.tbd}</dd></div>
+          <div>
+            <dt className="text-ink-3">{startLabel}</dt>
+            <dd className="text-ink">
+              {start && !event.dateOnly && <LocalTime iso={start} mode="datetime" />}
+              {start && event.dateOnly && `${new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(new Date(start))}. ${t.match.tbd}`}
+              {!start && t.match.tbd}
+            </dd>
+          </div>
           {event.venue && <div><dt className="text-ink-3">{t.match.venue}</dt><dd className="text-ink">{event.venue}</dd></div>}
         </dl>
         <ExportButton matchId={event.id} />
@@ -70,8 +90,8 @@ export default async function MatchPage({ params }: { params: Promise<{ locale: 
         <MatchCommunity
           matchId={event.id}
           predictable={supportsScorePrediction(event) && event.status === "scheduled" && Boolean(event.scheduledStartUTC) && Date.now() < Date.parse(event.scheduledStartUTC as string)}
-          home={home.name}
-          away={away.name}
+          home={duel ? home.name : title}
+          away={duel ? away.name : title}
         />
       )}
     </main>

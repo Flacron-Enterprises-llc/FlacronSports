@@ -30,7 +30,6 @@ export default async function HomePage({ params }: LocaleParams) {
   const m = getMarketing(locale)
   const h = m.home
   const enabled = SPORTS.filter((sport) => sport.enabled)
-  const inValidation = SPORTS.length - enabled.length
 
   return (
     <main id="main">
@@ -165,15 +164,15 @@ export default async function HomePage({ params }: LocaleParams) {
           </div>
           <Link href={href("/sports")} className={buttonClass("outline", "md", "self-start lg:self-auto")}>{m.common.allSports}</Link>
         </div>
-        <dl data-reveal className="mt-10 grid gap-4 sm:grid-cols-3">
-          {([[enabled.length, h.statAvailable], [inValidation, h.statValidation], [LOCALES.length, h.statLanguages]] as const).map(([value, label]) => (
+        <dl data-reveal className="mt-10 grid gap-4 sm:grid-cols-2">
+          {([[enabled.length, h.statAvailable], [LOCALES.length, h.statLanguages]] as const).map(([value, label]) => (
             <div key={label} className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-sm)]">
               <dd className="font-display text-[2rem] font-semibold leading-none text-ink"><CountUp value={value} /></dd>
               <dt className="mt-2 text-sm text-ink-2">{label}</dt>
             </div>
           ))}
         </dl>
-        <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+        <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
           {enabled.map((sport, index) => (
             <li key={sport.id} data-reveal style={reveal(index)} className="flex flex-col items-center gap-2 rounded-2xl border border-line bg-surface p-4 text-center">
               <SportIcon id={sport.id} className="size-7 text-brand" />

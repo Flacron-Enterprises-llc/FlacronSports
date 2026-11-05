@@ -193,6 +193,7 @@ Resources:
             - { Name: APP_BASE_URL, Value: !Ref AppBaseUrl }
             - { Name: SES_REGION, Value: !Ref AWS::Region }
             - { Name: JOBS_ENABLED, Value: "true" }
+            - { Name: COMMUNITY_ENABLED, Value: "true" }
             - { Name: EMAIL_FROM, Value: !Sub "FlacronSport <noreply@${EmailIdentity}>" }
             - { Name: STRIPE_PRICE_PLUS_MONTHLY, Value: !Ref PricePlusMonthly }
             - { Name: STRIPE_PRICE_PLUS_ANNUAL, Value: !Ref PricePlusAnnual }
@@ -395,6 +396,100 @@ Resources:
       Threshold: 85
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
+      AlarmActions: [!Ref Alerts]
+
+  WebhookFailureFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref LogGroup
+      FilterPattern: '"Stripe webhook failed"'
+      MetricTransformations:
+        - { MetricName: WebhookFailures, MetricNamespace: FlacronSport, MetricValue: "1", DefaultValue: 0 }
+
+  JobFailureFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref LogGroup
+      FilterPattern: '"Job" "failed"'
+      MetricTransformations:
+        - { MetricName: JobFailures, MetricNamespace: FlacronSport, MetricValue: "1", DefaultValue: 0 }
+
+  FeedDownFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref LogGroup
+      FilterPattern: '"Jobs tick" "\"today\":\"unavailable\""'
+      MetricTransformations:
+        - { MetricName: FeedUnavailable, MetricNamespace: FlacronSport, MetricValue: "1", DefaultValue: 0 }
+
+  JobsHeartbeatFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref LogGroup
+      FilterPattern: '"Jobs tick"'
+      MetricTransformations:
+        - { MetricName: JobsHeartbeat, MetricNamespace: FlacronSport, MetricValue: "1" }
+
+  WebhookFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: flacron-sport-webhook-failures
+      AlarmDescription: Stripe webhook processing failed
+      Namespace: FlacronSport
+      MetricName: WebhookFailures
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref Alerts]
+
+  JobFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: flacron-sport-job-failures
+      AlarmDescription: A scheduled job failed
+      Namespace: FlacronSport
+      MetricName: JobFailures
+      Statistic: Sum
+      Period: 900
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref Alerts]
+
+  FeedDownAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: flacron-sport-score-feed-down
+      AlarmDescription: The score feed was unavailable for three job runs in a row
+      Namespace: FlacronSport
+      MetricName: FeedUnavailable
+      Statistic: Sum
+      Period: 900
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 3
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref Alerts]
+
+  JobsStoppedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: flacron-sport-jobs-stopped
+      AlarmDescription: No job run was logged for an hour, so scores and reports are going stale
+      Namespace: FlacronSport
+      MetricName: JobsHeartbeat
+      Statistic: Sum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
       AlarmActions: [!Ref Alerts]
 
   Budget:

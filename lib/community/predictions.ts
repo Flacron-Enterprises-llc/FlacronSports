@@ -5,6 +5,7 @@ import { ApiError } from "@/lib/api-auth"
 import type { DocDb } from "@/lib/doc-db"
 import type { SportEvent, SportId } from "@/lib/sports/types"
 import { assertNotSanctioned, readSanction } from "./chat"
+import { requireAccepted } from "./gate"
 
 export const SCORING_VERSION = 1
 export const POINTS = { exact: 5, outcome: 2 } as const
@@ -64,6 +65,7 @@ export async function submitPrediction(
   return db.transaction(async (tx) => {
     const existing = await tx.get<Prediction>(predictionPath(event.id, uid))
     const sanction = await readSanction(tx, uid)
+    await requireAccepted(tx, uid)
     assertNotSanctioned(sanction, now, "participate")
     if (existing) throw new ApiError(409, "duplicate_prediction", "You already predicted this match")
 
@@ -146,7 +148,11 @@ export async function getLeaderboard(db: Pick<DocDb, "query">) {
   })
 }
 
-export async function pendingMatchIds(db: Pick<DocDb, "query">, limit = 20): Promise<string[]> {
+/** Oldest kickoffs first, so matches still to come cannot crowd out ones ready to settle. */
+export async function pendingMatchIds(db: Pick<DocDb, "query">, limit = 20, now = new Date()): Promise<string[]> {
   const rows = await db.query<Prediction>("predictions", { where: [["settled", false]], limit: 500 })
-  return [...new Set(rows.map((row) => row.matchId))].slice(0, limit)
+  const started = rows.filter((row) => Date.parse(row.lockedAtUTC) <= now.getTime()).sort((a, b) => a.lockedAtUTC.localeCompare(b.lockedAtUTC))
+  return [...new Set(started.map((row) => row.matchId))].slice(0, limit)
 }
+
+export const toOwnPrediction = ({ home, away, settled, voided, points }: Prediction) => ({ home, away, settled, voided, points })

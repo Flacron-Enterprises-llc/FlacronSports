@@ -17,10 +17,7 @@ export default async function SportsPage({ params }: LocaleParams) {
   const { locale, t, href } = await pageContext(params)
   const m = getMarketing(locale)
   const p = m.sportsPage
-  const groups = [
-    { id: "available", title: p.availableTitle, lead: p.availableLead, sports: SPORTS.filter((sport) => sport.enabled), badge: p.available, soon: false },
-    { id: "validation", title: p.validationTitle, lead: p.validationLead, sports: SPORTS.filter((sport) => !sport.enabled), badge: p.validation, soon: true },
-  ]
+  const sports = SPORTS.filter((sport) => sport.enabled)
 
   return (
     <main id="main">
@@ -36,28 +33,26 @@ export default async function SportsPage({ params }: LocaleParams) {
         </div>
       </div>
 
-      {groups.map((group) => (
-        <section key={group.id} aria-labelledby={group.id} className="mx-auto mt-16 max-w-7xl px-4 sm:px-6">
-          <div data-reveal className="max-w-2xl">
-            <h2 id={group.id} className="text-[1.75rem] font-semibold tracking-[-0.025em] text-ink">{group.title}</h2>
-            <p className="mt-3 text-[16px] leading-7 text-ink-2">{group.lead}</p>
-          </div>
-          <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {group.sports.map((sport, index) => (
-              <li key={sport.id} data-reveal style={reveal(index % 3)} className="flex h-full flex-col rounded-2xl border border-line bg-surface p-6 shadow-[var(--shadow-sm)]">
-                <div className="flex items-start justify-between gap-3">
-                  <span className={`inline-flex size-12 items-center justify-center rounded-xl ${group.soon ? "bg-surface-muted text-ink-2" : "bg-navy text-white dark:bg-white/10 dark:text-brand"}`}>
-                    <SportIcon id={sport.id} />
-                  </span>
-                  <StatusBadge soon={group.soon}>{group.badge}</StatusBadge>
-                </div>
-                <h3 className="mt-5 text-lg font-semibold text-ink">{sport.name[locale]}</h3>
-                <p className="mt-2 text-sm leading-6 text-ink-2">{m.sportLines[sport.id]}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
+      <section aria-labelledby="available" className="mx-auto mt-16 max-w-7xl px-4 sm:px-6">
+        <div data-reveal className="max-w-2xl">
+          <h2 id="available" className="text-[1.75rem] font-semibold tracking-[-0.025em] text-ink">{p.availableTitle}</h2>
+          <p className="mt-3 text-[16px] leading-7 text-ink-2">{p.availableLead}</p>
+        </div>
+        <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {sports.map((sport, index) => (
+            <li key={sport.id} data-reveal style={reveal(index % 3)} className="flex h-full flex-col rounded-2xl border border-line bg-surface p-6 shadow-[var(--shadow-sm)]">
+              <div className="flex items-start justify-between gap-3">
+                <span className="inline-flex size-12 items-center justify-center rounded-xl bg-navy text-white dark:bg-white/10 dark:text-brand">
+                  <SportIcon id={sport.id} />
+                </span>
+                <StatusBadge>{p.available}</StatusBadge>
+              </div>
+              <h3 className="mt-5 text-lg font-semibold text-ink">{sport.name[locale]}</h3>
+              <p className="mt-2 text-sm leading-6 text-ink-2">{m.sportLines[sport.id]}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <p className="mx-auto mt-8 max-w-7xl px-4 text-sm text-ink-3 sm:px-6">{p.coverageNote}</p>
 

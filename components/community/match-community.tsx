@@ -5,19 +5,16 @@ import Link from "next/link"
 import { authFetch } from "@/lib/auth-fetch"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { useLocale } from "@/lib/use-locale"
+import { useCommunityGate } from "./community-gate"
+import { Leaderboard } from "./leaderboard"
 import { MessageList } from "./message-list"
-
-interface Entry {
-  rank: number
-  displayName: string
-  points: number
-}
 
 const FIELD = "mt-1 w-full rounded-md border border-line bg-surface px-3 py-2 text-ink"
 
 function Predictions({ matchId, predictable, home, away }: { matchId: string; predictable: boolean; home: string; away: string }) {
   const { t } = useLocale()
   const user = useAuthUser()
+  const gate = useCommunityGate()
   const [homeScore, setHomeScore] = useState("")
   const [awayScore, setAwayScore] = useState("")
   const [mine, setMine] = useState<{ home: number; away: number } | null>(null)
@@ -31,15 +28,19 @@ function Predictions({ matchId, predictable, home, away }: { matchId: string; pr
       .catch(() => undefined)
   }, [user, matchId])
 
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault()
+  const send = async () => {
     const response = await authFetch("/api/predictions", {
       method: "POST",
       body: JSON.stringify({ matchId, home: Number(homeScore), away: Number(awayScore) }),
     }).catch(() => null)
     const data = await response?.json().catch(() => null)
     if (response?.ok) setMine(data.prediction)
-    else setNotice(data?.code === "prediction_locked" ? t.community.predictionLocked : data?.code === "duplicate_prediction" ? t.community.predictionDuplicate : t.community.sendFailed)
+    else if (!gate.intercept(data?.code, send)) setNotice(data?.code === "prediction_locked" ? t.community.predictionLocked : data?.code === "duplicate_prediction" ? t.community.predictionDuplicate : t.community.sendFailed)
+  }
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault()
+    send()
   }
 
   return (
@@ -55,29 +56,8 @@ function Predictions({ matchId, predictable, home, away }: { matchId: string; pr
         </form>
       )}
       {!mine && !predictable && <p className="mt-2 text-sm text-ink-2">{t.community.predictionLocked}</p>}
+      {gate.prompt}
       {notice && <p role="status" className="mt-2 text-sm text-ink">{notice}</p>}
-    </div>
-  )
-}
-
-function Leaderboard() {
-  const { t } = useLocale()
-  const [entries, setEntries] = useState<Entry[] | null>(null)
-
-  useEffect(() => {
-    fetch("/api/predictions/leaderboard")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => setEntries(data?.entries ?? []))
-      .catch(() => setEntries([]))
-  }, [])
-
-  return (
-    <div>
-      <h3 className="font-semibold text-ink">{t.community.leaderboard}</h3>
-      {entries?.length === 0 && <p className="mt-1 text-sm text-ink-2">{t.community.noPoints}</p>}
-      <ol className="mt-2 space-y-1 text-sm text-ink-2">
-        {entries?.map((entry, index) => <li key={index}>{entry.rank}. {entry.displayName} · {entry.points}</li>)}
-      </ol>
     </div>
   )
 }

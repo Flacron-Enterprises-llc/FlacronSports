@@ -50,6 +50,20 @@ export async function runIsolated<T extends Record<string, () => Promise<unknown
   return results as { [K in keyof T]: JobResult<Awaited<ReturnType<T[K]>>> }
 }
 
+const TICK_MS = 15 * 60_000
+const ROTATING_OFFSETS = [-7, -6, -5, -4, -3, -2, 2, 3, 4, 5, 6, 7]
+const ROTATING_PER_TICK = 3
+
+/**
+ * The days a visitor can open beyond yesterday and today. Tomorrow is kept current
+ * and the rest take turns, so the calendar stays stored without tripping the rate limit.
+ */
+export function calendarDates(now: Date): string[] {
+  const start = Math.floor(now.getTime() / TICK_MS) * ROTATING_PER_TICK
+  const rotating = Array.from({ length: ROTATING_PER_TICK }, (_, index) => ROTATING_OFFSETS[(start + index) % ROTATING_OFFSETS.length])
+  return [1, ...rotating].map((offset) => utcDate(new Date(now.getTime() + offset * DAY)))
+}
+
 export async function runTick(now: Date = new Date()) {
   const db = getAdminDb()
   if (!db) throw new ApiError(503, "storage_unavailable", "Storage is not available")
@@ -86,5 +100,9 @@ export async function runTick(now: Date = new Date()) {
     },
   })
 
-  return { feed: { yesterday: yesterday.state, today: today.state, events: events.length }, ...jobs }
+  // Last, so a slow provider cannot hold up the jobs above.
+  const calendar: Record<string, string> = {}
+  for (const date of calendarDates(now)) calendar[date] = (await getEvents({ date, refresh: true })).state
+
+  return { feed: { yesterday: yesterday.state, today: today.state, events: events.length, calendar }, ...jobs }
 }

@@ -10,6 +10,8 @@ const BACKEND_TIMEOUT_MS = 20_000
 const CALL_SPACING_MS = 400
 const REFRESH_SPACING_MS = 2500
 const SNAPSHOT_FRESH_MS = 45 * 60_000
+// Other days refresh in rotation, so their snapshots are older between visits.
+const CALENDAR_FRESH_MS = 2 * 3_600_000
 const REVALIDATE_SECONDS = 120
 
 // "123" is the provider's public test key: a handful of events per query and no
@@ -75,13 +77,13 @@ async function writeSnapshot(path: string, data: unknown, at: number): Promise<v
  * provider, so traffic cannot trip its rate limit. On any failure the last good
  * answer is kept and reported as stale, including after a restart.
  */
-async function load<T>(path: string, refresh = false): Promise<{ data: T; stale: boolean }> {
+async function load<T>(path: string, refresh = false, snapshotFreshMs = SNAPSHOT_FRESH_MS): Promise<{ data: T; stale: boolean }> {
   const cached = memory.get(path)
   const now = Date.now()
   if (!refresh && cached && now - cached.at < FRESH_MS) return { data: cached.data as T, stale: false }
 
   const snapshot = refresh ? null : await readSnapshot(path)
-  if (snapshot && now - snapshot.at < SNAPSHOT_FRESH_MS) {
+  if (snapshot && now - snapshot.at < snapshotFreshMs) {
     memory.set(path, { data: snapshot.data, at: now })
     return { data: snapshot.data as T, stale: false }
   }
@@ -104,7 +106,8 @@ async function fetchJson<T>(path: string): Promise<T> {
 
 async function eventsForSport(sport: SportDefinition, date: string, refresh = false): Promise<{ events: SportEvent[]; stale: boolean }> {
   const query = new URLSearchParams({ d: date, s: sport.providerKey as string })
-  const { data, stale } = await load<{ events: RawEvent[] | null }>(`eventsday.php?${query}`, refresh)
+  const nearToday = Math.abs(Date.parse(date) - Date.parse(utcDate())) <= 86_400_000
+  const { data, stale } = await load<{ events: RawEvent[] | null }>(`eventsday.php?${query}`, refresh, nearToday ? SNAPSHOT_FRESH_MS : CALENDAR_FRESH_MS)
   // The sport is rechecked per record, so a stray row can never be filed under the wrong sport.
   const rows = (data.events ?? []).filter((raw) => (!raw.strSport || raw.strSport === sport.providerKey) && isCovered(raw, sport.id))
   return { events: rows.map((raw) => normalizeEvent(raw, sport.id)), stale }

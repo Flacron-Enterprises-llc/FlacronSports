@@ -3,13 +3,16 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import type { TotpSecret } from "firebase/auth"
-import { useAuthUser } from "@/lib/hooks/useAuthUser"
+import { ArrowLeft, ExternalLink, KeyRound, LoaderCircle } from "lucide-react"
+import { useAccount } from "@/components/dashboard/account-context"
+import { CopyButton } from "@/components/dashboard/controls"
+import { btn, Notice, Panel } from "@/components/site/states"
 import { enrolledTotp, finishTotpEnrolment, mfaFailure, startTotpEnrolment, type MfaFailure } from "@/lib/mfa"
 import { useLocale } from "@/lib/use-locale"
 
 export function SecurityPanel() {
   const { t, href } = useLocale()
-  const user = useAuthUser()
+  const { user } = useAccount()
   const [enrolled, setEnrolled] = useState(false)
   const [setup, setSetup] = useState<{ secret: TotpSecret; key: string; uri: string } | null>(null)
   const [code, setCode] = useState("")
@@ -21,9 +24,7 @@ export function SecurityPanel() {
     if (user) setEnrolled(enrolledTotp(user).length > 0)
   }, [user])
 
-  if (!user) {
-    return <p className="text-ink-2">{t.auth.required} <Link className="font-semibold text-hot-text underline" href={href("/signin")}>{t.nav.signIn}</Link></p>
-  }
+  if (!user) return null
 
   const messages: Record<MfaFailure, string> = {
     disabled: t.security.disabled,
@@ -58,34 +59,36 @@ export function SecurityPanel() {
   }
 
   return (
-    <section className="rounded-2xl border border-line bg-surface p-6">
-      <h2 className="text-lg font-semibold text-ink">{t.security.totpTitle}</h2>
-      <p className="mt-2 text-sm leading-6 text-ink-2">{enrolled ? t.security.enrolled : t.security.totpBody}</p>
-      {done && <p role="status" className="mt-3 text-sm text-good">{t.security.signInAgain}</p>}
-      {failure && <p role="alert" className="mt-3 text-sm text-bad">{messages[failure]}</p>}
-
-      {!enrolled && !setup && (
-        <button type="button" disabled={busy} onClick={start} className="mt-4 rounded-md bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-navy-deep disabled:opacity-60">{t.security.start}</button>
-      )}
-
-      {setup && (
-        <form onSubmit={finish} className="mt-4 space-y-3">
-          <p className="text-sm text-ink-2">{t.security.secretHelp}</p>
-          <div>
-            <p className="text-sm font-medium text-ink">{t.security.secret}</p>
-            <code className="mt-1 block break-all rounded-md border border-line bg-surface-muted p-2 text-sm text-ink">{setup.key}</code>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-ink">{t.security.uri}</p>
-            <code className="mt-1 block break-all rounded-md border border-line bg-surface-muted p-2 text-xs text-ink">{setup.uri}</code>
-          </div>
-          <label className="block text-sm font-medium text-ink">
-            {t.security.code}
-            <input className="mt-1 w-full rounded-md border border-line bg-surface px-3 py-2 text-ink" inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
-          </label>
-          <button type="submit" disabled={busy} className="rounded-md bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-navy-deep disabled:opacity-60">{t.security.verify}</button>
-        </form>
-      )}
-    </section>
+    <div className="space-y-4">
+      <Link href={href("/app/settings")} className="inline-flex min-h-8 items-center gap-1.5 text-sm font-semibold text-hot-text hover:underline"><ArrowLeft aria-hidden className="size-4" />{t.settings.title}</Link>
+      {done && <Notice tone="success" role="status">{t.security.signInAgain}</Notice>}
+      {failure && <Notice tone="danger" role="alert">{messages[failure]}</Notice>}
+      <Panel title={t.security.totpTitle} description={enrolled ? t.security.enrolled : t.security.totpBody} icon={<KeyRound aria-hidden />}>
+        {!enrolled && !setup && (
+          <button type="button" disabled={busy} onClick={start} className={btn("navy")}>
+            {busy && <LoaderCircle aria-hidden className="size-4 animate-spin" />}
+            {t.security.start}
+          </button>
+        )}
+        {setup && (
+          <form onSubmit={finish} className="space-y-4">
+            <p className="text-sm leading-6 text-ink-2">{t.security.secretHelp}</p>
+            <div>
+              <p className="text-sm font-medium text-ink">{t.security.secret}</p>
+              <code className="mt-1 block break-all rounded-lg border border-line bg-surface-muted p-2.5 text-sm text-ink">{setup.key}</code>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <CopyButton value={setup.key} label={t.community.copy} done={t.community.copied} />
+                <a href={setup.uri} className={btn("outline", "sm")}><ExternalLink aria-hidden className="size-3.5" />{t.security.uri}</a>
+              </div>
+            </div>
+            <label className="block text-sm font-medium text-ink">
+              {t.security.code}
+              <input className="fs-input mt-1 h-10 max-w-[12rem] px-3 tracking-widest" inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" maxLength={6} value={code} onChange={(event) => setCode(event.target.value)} />
+            </label>
+            <button type="submit" disabled={busy} className={btn("navy")}>{t.security.verify}</button>
+          </form>
+        )}
+      </Panel>
+    </div>
   )
 }

@@ -78,7 +78,7 @@ export function AppTour() {
   useLayoutEffect(() => {
     if (!step) return
     const place = () => {
-      const element = visibleTarget(step.target)
+      const element = visibleTarget(step.target) ?? visibleTarget("menu")
       if (!element) return setBox(null)
       setBox(element.getBoundingClientRect())
     }
@@ -113,8 +113,8 @@ export function AppTour() {
 
   return (
     <div className="fixed inset-0 z-[70]">
-      <div aria-hidden className="absolute inset-0 bg-[#001a3f]/40" onClick={finish} />
-      {box && <div aria-hidden className="pointer-events-none absolute rounded-lg ring-2 ring-orange" style={{ left: box.left - 4, top: box.top - 4, width: box.width + 8, height: box.height + 8 }} />}
+      <div aria-hidden className="fs-scrim absolute inset-0" onClick={finish} />
+      {box && <div aria-hidden className="pointer-events-none absolute rounded-lg ring-2 ring-orange transition-all duration-300 [transition-timing-function:var(--ease)]" style={{ left: box.left - 4, top: box.top - 4, width: box.width + 8, height: box.height + 8 }} />}
       <div
         ref={panel}
         role="dialog"
@@ -124,11 +124,19 @@ export function AppTour() {
         tabIndex={-1}
         onKeyDown={(event) => {
           if (event.key === "Escape") finish()
+          if (event.key === "Tab") {
+            const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("button"))
+            const edge = event.shiftKey ? items[0] : items[items.length - 1]
+            if (document.activeElement === edge || document.activeElement === event.currentTarget) {
+              event.preventDefault()
+              ;(event.shiftKey ? items[items.length - 1] : items[0])?.focus()
+            }
+          }
           if (event.key === "ArrowRight" && !last) setIndex(index + 1)
           if (event.key === "ArrowLeft" && index > 0) setIndex(index - 1)
         }}
         style={style}
-        className="absolute rounded-xl border border-line bg-surface-raised p-4 shadow-[var(--shadow-lg)]"
+        className="fs-pop absolute rounded-xl border border-line bg-surface-raised p-4 shadow-[var(--shadow-lg)]"
       >
         <p className="text-xs font-medium text-ink-2">{index + 1} / {steps.length}</p>
         <h2 id="tour-title" className="mt-1 text-base font-semibold text-ink">{copy[0]}</h2>
@@ -140,7 +148,7 @@ export function AppTour() {
             <button
               type="button"
               onClick={() => (last ? (finish(), step.id === "settings" && router.push(href("/app/settings"))) : setIndex(index + 1))}
-              className="rounded-md bg-navy px-3 py-1.5 text-sm font-semibold text-white hover:bg-navy-deep"
+              className="rounded-md bg-navy px-3 py-1.5 text-sm font-semibold text-white hover:bg-navy-deep dark:bg-brand dark:text-brand-on"
             >
               {last ? t.tour.finish : t.tour.next}
             </button>

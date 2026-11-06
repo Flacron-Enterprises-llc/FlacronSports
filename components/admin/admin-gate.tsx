@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
+import { Gauge, ShieldAlert, Wallet } from "lucide-react"
+import { ErrorNotice, Tabs } from "@/components/dashboard/controls"
+import { btn, EmptyState, ListSkeleton, Notice } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import type { MoneyLine } from "@/lib/admin/billing-health"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
@@ -11,8 +14,8 @@ type Role = "moderator" | "editor" | "admin"
 type Tab = "operations" | "moderation" | "billing"
 
 const TABS: Record<Role, Tab[]> = { admin: ["operations", "moderation", "billing"], moderator: ["moderation"], editor: [] }
-const CARD = "rounded-xl border border-line bg-surface p-4"
-const FIELD = "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink"
+const CARD = "rounded-xl border border-line bg-surface p-4 shadow-[var(--shadow-sm)]"
+const FIELD = "fs-input h-10 px-3 text-sm"
 
 function useAdminData<T>(path: string) {
   const [data, setData] = useState<T | null>(null)
@@ -30,10 +33,10 @@ function useAdminData<T>(path: string) {
   return { data, failed, load }
 }
 
-function Status({ failed, loaded }: { failed: boolean; loaded: boolean }) {
+function Status({ failed, loaded, onRetry }: { failed: boolean; loaded: boolean; onRetry(): void }) {
   const { t } = useLocale()
-  if (failed) return <p role="alert" className="text-sm text-bad">{t.admin.loadFailed}</p>
-  return loaded ? null : <p role="status" className="text-sm text-ink-2">{t.admin.loading}</p>
+  if (failed) return <ErrorNotice onRetry={onRetry}>{t.admin.loadFailed}</ErrorNotice>
+  return loaded ? null : <div role="status" aria-label={t.admin.loading}><ListSkeleton rows={3} /></div>
 }
 
 function Fact({ label, value }: { label: string; value: string | number }) {
@@ -47,17 +50,16 @@ interface Operations {
 
 function OperationsTab() {
   const { t, locale } = useLocale()
-  const { data, failed } = useAdminData<Operations>("/api/admin/operations")
+  const { data, failed, load } = useAdminData<Operations>("/api/admin/operations")
   const when = (iso: string) => new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso))
   return (
     <div className="space-y-4">
-      <Status failed={failed} loaded={Boolean(data)} />
+      <Status failed={failed} loaded={Boolean(data)} onRetry={load} />
       {data && (
         <>
-          <dl className="grid gap-3 sm:grid-cols-2">
-            <Fact label={t.admin.feedState} value={`${data.feed.state}${data.feed.limited ? ` (${t.admin.limitedFeed})` : ""}`} />
+          <dl className="fs-stagger grid gap-3 sm:grid-cols-2">
+            <Fact label={t.admin.feedState} value={`${t.ui.feedStates[data.feed.state as keyof typeof t.ui.feedStates] ?? t.ui.feedStates.unavailable}${data.feed.limited ? ` (${t.admin.limitedFeed})` : ""}`} />
             <Fact label={t.admin.feedEvents} value={data.feed.events} />
-            <Fact label={t.feed.source} value={data.feed.source} />
             <Fact label={t.feed.updated} value={when(data.feed.fetchedAt)} />
             <Fact label={t.admin.jobsEnabled} value={data.jobs.enabled ? t.admin.yes : t.admin.no} />
             <Fact label={t.admin.lastReport} value={data.jobs.lastReportGeneratedAt ? when(data.jobs.lastReportGeneratedAt) : t.admin.none} />
@@ -81,7 +83,7 @@ interface Report {
 }
 
 function ModerationTab() {
-  const { t } = useLocale()
+  const { t, href } = useLocale()
   const { data, failed, load } = useAdminData<{ reports: Report[] }>("/api/admin/moderation")
   const [reason, setReason] = useState("")
   const [hours, setHours] = useState(24)
@@ -94,18 +96,18 @@ function ModerationTab() {
     if (response?.ok) load()
   }
 
-  const button = "rounded-md border border-line px-3 py-1.5 text-sm font-semibold text-ink hover:bg-surface-muted"
+  const button = btn("outline", "sm")
   return (
     <div className="space-y-4">
-      <Status failed={failed} loaded={Boolean(data)} />
+      <Status failed={failed} loaded={Boolean(data)} onRetry={load} />
       <label className="block text-sm font-medium text-ink">{t.admin.reason}<input className={`mt-1 ${FIELD}`} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} /></label>
       <label className="block text-sm font-medium text-ink">{t.admin.hours}<input className={`mt-1 ${FIELD}`} type="number" min={1} max={8760} value={hours} onChange={(e) => setHours(Number(e.target.value))} /></label>
-      {notice && <p role="status" className="text-sm text-ink">{notice}</p>}
-      {data?.reports.length === 0 && <p className="text-sm text-ink-2">{t.admin.noReports}</p>}
+      {notice && <Notice role="status">{notice}</Notice>}
+      {data?.reports.length === 0 && <EmptyState compact icon={<ShieldAlert aria-hidden />} title={t.admin.noReports} />}
       <ul className="space-y-3">
         {data?.reports.map((report) => (
           <li key={report.id} className={CARD}>
-            <p className="text-sm font-semibold text-ink">{report.reason} · {report.scope} {report.scopeId}</p>
+            <p className="text-sm font-semibold text-ink">{t.community.reportReasons[report.reason as keyof typeof t.community.reportReasons] ?? t.community.reportReasons.other} · {report.scope === "match" ? <Link href={href(`/app/match/${report.scopeId}`)} className="text-hot-text underline">{t.ui.matchCenter}</Link> : t.dash.rooms}</p>
             <p className="mt-1 break-words text-sm text-ink-2">{report.messageText}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button type="button" className={button} onClick={() => act({ action: "remove_message", scope: report.scope, scopeId: report.scopeId, messageId: report.messageId, reportId: report.id })}>{t.admin.removeMessage}</button>
@@ -150,13 +152,13 @@ function MoneyList({ title, lines }: { title: string; lines: MoneyLine[] }) {
 
 function BillingTab() {
   const { t } = useLocale()
-  const { data, failed } = useAdminData<BillingHealth>("/api/admin/billing-health")
+  const { data, failed, load } = useAdminData<BillingHealth>("/api/admin/billing-health")
   return (
     <div className="space-y-4">
-      <Status failed={failed} loaded={Boolean(data)} />
+      <Status failed={failed} loaded={Boolean(data)} onRetry={load} />
       {data && (
         <>
-          <dl className="grid gap-3 sm:grid-cols-3">
+          <dl className="fs-stagger grid gap-3 sm:grid-cols-3">
             <Fact label={t.admin.processed} value={data.processedEvents} />
             <Fact label={t.admin.quarantined} value={data.quarantinedEvents} />
             <Fact label={t.admin.needReview} value={data.purchasesNeedingReview} />
@@ -164,11 +166,16 @@ function BillingTab() {
           <MoneyList title={t.admin.gross} lines={data.grossInvoices} />
           <MoneyList title={t.admin.addons} lines={data.addonSales} />
           <MoneyList title={t.admin.refunds} lines={data.refunds} />
-          {data.truncated && <p role="status" className="text-sm text-warn">{t.admin.truncated}</p>}
+          {data.truncated && <Notice tone="warning" role="status">{t.admin.truncated}</Notice>}
         </>
       )}
     </div>
   )
+}
+
+function TabIcon({ id }: { id: Tab }) {
+  const Icon = id === "operations" ? Gauge : id === "moderation" ? ShieldAlert : Wallet
+  return <Icon aria-hidden className="size-4" />
 }
 
 export function AdminGate() {
@@ -192,26 +199,22 @@ export function AdminGate() {
 
   if (!role) {
     if (access === "mfa") {
-      return <p role="status" className="text-ink-2">{t.admin.mfaRequired} <Link className="font-semibold text-hot-text underline" href={href("/app/settings/security")}>{t.security.title}</Link></p>
+      return <EmptyState icon={<ShieldAlert aria-hidden />} title={t.admin.mfaRequired} action={{ href: href("/app/settings/security"), label: t.security.title }} />
     }
-    return <p role="status" className="text-ink-2">{access === "checking" ? t.admin.checking : t.admin.denied}</p>
+    if (access === "checking") return <div role="status" aria-label={t.admin.checking}><ListSkeleton rows={3} /></div>
+    return <EmptyState icon={<ShieldAlert aria-hidden />} title={t.admin.denied} action={{ href: href("/app"), label: t.dash.dashboard }} />
   }
 
   const tabs = TABS[role]
-  if (tabs.length === 0) return <p role="status" className="text-ink-2">{t.admin.editorNote}</p>
+  if (tabs.length === 0) return <Notice role="status">{t.admin.editorNote}</Notice>
 
   return (
     <div>
-      <div role="tablist" aria-label={t.admin.title} className="mb-6 flex flex-wrap gap-1 border-b border-line">
-        {tabs.map((id) => (
-          <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={`px-3 py-2 text-sm font-semibold ${tab === id ? "border-b-2 border-navy text-ink" : "text-ink-2 hover:text-ink"}`}>
-            {t.admin.tabs[id]}
-          </button>
-        ))}
-      </div>
-      {tab === "operations" && <OperationsTab />}
-      {tab === "moderation" && <ModerationTab />}
-      {tab === "billing" && <BillingTab />}
+      <Tabs<Tab> value={tab ?? tabs[0]} onChange={setTab} tabs={tabs.map((id) => ({ value: id, label: t.admin.tabs[id], icon: <TabIcon id={id} /> }))} label={t.admin.title}>
+        {(tab ?? tabs[0]) === "operations" && <OperationsTab />}
+        {(tab ?? tabs[0]) === "moderation" && <ModerationTab />}
+        {(tab ?? tabs[0]) === "billing" && <BillingTab />}
+      </Tabs>
     </div>
   )
 }

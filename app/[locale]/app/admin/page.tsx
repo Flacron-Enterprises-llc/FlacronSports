@@ -1,14 +1,16 @@
-import type { Metadata } from "next"
+import { Shield } from "lucide-react"
 import { AdminGate } from "@/components/admin/admin-gate"
-import { PageHeader } from "@/components/site/states"
+import { AppPage, PageHeader } from "@/components/site/states"
+import { pageContext, titled, type LocaleParams } from "@/lib/page-context"
 
-export const metadata: Metadata = { title: "Admin", robots: { index: false } }
+export const generateMetadata = titled((t) => t.admin.title, { robots: { index: false } })
 
-export default function AdminPage() {
+export default async function Page({ params }: LocaleParams) {
+  const { t } = await pageContext(params)
   return (
-    <main id="main" className="mx-auto max-w-5xl px-4 sm:px-6">
-      <PageHeader title="Admin" />
+    <AppPage width="md">
+      <PageHeader title={t.admin.title} icon={<Shield aria-hidden />} />
       <AdminGate />
-    </main>
+    </AppPage>
   )
 }

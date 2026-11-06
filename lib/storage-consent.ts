@@ -29,3 +29,5 @@ export function writeStored(key: string, value: unknown): void {
     /* storage unavailable */
   }
 }
+
+export const SPOILER_DECIDED_KEY = "fs-spoiler-decided"

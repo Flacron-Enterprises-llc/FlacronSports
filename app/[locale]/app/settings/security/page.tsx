@@ -1,16 +1,16 @@
-import type { Metadata } from "next"
+import { ShieldCheck } from "lucide-react"
 import { SecurityPanel } from "@/components/account/security-panel"
-import { PageHeader } from "@/components/site/states"
-import { pageContext, type LocaleParams } from "@/lib/page-context"
+import { AppPage, PageHeader } from "@/components/site/states"
+import { pageContext, titled, type LocaleParams } from "@/lib/page-context"
 
-export const metadata: Metadata = { title: "Security", robots: { index: false } }
+export const generateMetadata = titled((t) => t.security.title, { robots: { index: false } })
 
-export default async function SecurityPage({ params }: LocaleParams) {
+export default async function Page({ params }: LocaleParams) {
   const { t } = await pageContext(params)
   return (
-    <main id="main" className="mx-auto max-w-3xl px-4 sm:px-6">
-      <PageHeader title={t.security.title} lead={t.security.lead} />
+    <AppPage width="sm">
+      <PageHeader title={t.security.title} lead={t.security.lead} icon={<ShieldCheck aria-hidden />} />
       <SecurityPanel />
-    </main>
+    </AppPage>
   )
 }

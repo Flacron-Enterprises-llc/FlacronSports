@@ -1,16 +1,16 @@
-import type { Metadata } from "next"
+import { Bell } from "lucide-react"
 import { NotificationList } from "@/components/account/notification-list"
-import { PageHeader } from "@/components/site/states"
-import { pageContext, type LocaleParams } from "@/lib/page-context"
+import { AppPage, PageHeader } from "@/components/site/states"
+import { pageContext, titled, type LocaleParams } from "@/lib/page-context"
 
-export const metadata: Metadata = { title: "Notifications", robots: { index: false } }
+export const generateMetadata = titled((t) => t.notifications.title, { robots: { index: false } })
 
-export default async function NotificationsPage({ params }: LocaleParams) {
+export default async function Page({ params }: LocaleParams) {
   const { t } = await pageContext(params)
   return (
-    <main id="main" className="mx-auto max-w-3xl px-4 sm:px-6">
-      <PageHeader title={t.notifications.title} lead={t.notifications.lead} />
+    <AppPage width="sm">
+      <PageHeader title={t.notifications.title} lead={t.notifications.lead} icon={<Bell aria-hidden />} />
       <NotificationList />
-    </main>
+    </AppPage>
   )
 }

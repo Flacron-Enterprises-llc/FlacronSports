@@ -2,119 +2,144 @@
 
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
+import { CreditCard, ExternalLink, Gauge, Sparkles } from "lucide-react"
+import { useAccount } from "@/components/dashboard/account-context"
+import { ErrorNotice, useConfirm } from "@/components/dashboard/controls"
+import { AddonOffers } from "@/components/billing/addon-offers"
+import { PlanCards } from "@/components/billing/plan-cards"
+import { btn, Meter, Notice, Panel, Skeleton } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
+import { billingMessage } from "@/lib/billing-client"
 import type { EffectiveAccess } from "@/lib/billing/entitlements"
 import { PLANS, type BillingInterval, type PaidPlanId } from "@/lib/billing/plans"
-import { signOutUser } from "@/lib/firebase-auth"
-import { useAuthUser } from "@/lib/hooks/useAuthUser"
+import { usePreferences } from "./prefs-provider"
 import { useLocale } from "@/lib/use-locale"
+import { cn } from "@/lib/utils"
+
+function StatusChip({ access }: { access: EffectiveAccess }) {
+  const { t } = useLocale()
+  const tone = access.state === "past_due" ? "fs-chip-live" : access.state === "canceling" ? "fs-chip-warn" : "fs-chip-good"
+  const label = t.ui.planStates[access.state]
+  return <span className={cn("rounded-full border px-2 py-0.5 text-[11.5px] font-semibold", tone)}>{label}</span>
+}
 
 export function AccountPanel() {
   const { locale, t, href } = useLocale()
-  const router = useRouter()
   const params = useSearchParams()
-  const user = useAuthUser()
-  const [access, setAccess] = useState<EffectiveAccess | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
+  const { user, access, balance, dayPassEnd, plan, loaded, reload } = useAccount()
+  const { prefs } = usePreferences()
+  const { confirm, dialog } = useConfirm()
+  const [message, setMessage] = useState<{ text: string; tone: "success" | "danger" | "info" } | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const load = useCallback(async () => {
-    const response = await authFetch("/api/billing/status")
-    if (response.ok) setAccess(await response.json())
-    else setMessage(t.account.failed)
-  }, [t])
-
   useEffect(() => {
-    if (user) load().catch(() => setMessage(t.account.failed))
-  }, [user, load, t])
-
-  useEffect(() => {
-    if (params?.get("checkout") === "canceled") setMessage(t.account.checkoutCanceled)
+    if (params?.get("checkout") === "canceled") setMessage({ text: t.account.checkoutCanceled, tone: "info" })
   }, [params, t])
 
-  if (!user) {
-    return (
-      <p className="text-ink-2">
-        {t.auth.required} <Link className="font-semibold text-hot-text underline" href={href("/signin")}>{t.nav.signIn}</Link>
-      </p>
-    )
-  }
+  useEffect(() => {
+    if (window.location.hash) document.querySelector(window.location.hash)?.scrollIntoView()
+  }, [])
 
   const date = (seconds: number) => new Intl.DateTimeFormat(locale, { dateStyle: "long" }).format(new Date(seconds * 1000))
+  const stamp = (iso: string) => new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso))
+
+  const post = useCallback(async (path: string, body?: unknown) => {
+    setBusy(true)
+    const response = await authFetch(path, { method: "POST", ...(body ? { body: JSON.stringify(body) } : {}) }).catch(() => null)
+    const data = await response?.json().catch(() => null)
+    setBusy(false)
+    return { ok: Boolean(response?.ok), data }
+  }, [])
 
   const setCancel = async (undo: boolean) => {
-    if (!undo && !window.confirm(t.account.confirmCancel)) return
-    setBusy(true)
-    const response = await authFetch("/api/billing/cancel", { method: "POST", body: JSON.stringify({ undo }) }).catch(() => null)
-    if (response?.ok) {
-      setMessage(undo ? null : t.account.canceled)
-      setAccess((current) => current && { ...current, cancelAtPeriodEnd: !undo, state: undo ? "active" : "canceling" })
-    } else setMessage(t.account.failed)
-    setBusy(false)
+    if (!undo && !(await confirm(t.account.confirmCancel, true))) return
+    const { ok, data } = await post("/api/billing/cancel", { undo })
+    setMessage(ok ? { text: undo ? t.ui.renewalOn : t.account.canceled, tone: "success" } : { text: billingMessage(data?.code, t), tone: "danger" })
+    if (ok) await reload()
   }
 
   const portal = async () => {
-    const response = await authFetch("/api/billing/portal", { method: "POST" }).catch(() => null)
-    const data = response?.ok ? await response.json() : null
+    const { data } = await post("/api/billing/portal")
     if (data?.url) window.location.assign(data.url)
-    else setMessage(t.account.failed)
+    else setMessage({ text: billingMessage(data?.code, t), tone: "danger" })
   }
 
-  const changePlan = async (plan: PaidPlanId, interval: BillingInterval) => {
-    if (!window.confirm(t.account.confirmChange)) return
-    setBusy(true)
-    const response = await authFetch("/api/billing/change-plan", { method: "POST", body: JSON.stringify({ plan, interval }) }).catch(() => null)
-    setMessage(response?.ok ? t.account.changed : t.account.failed)
-    setBusy(false)
-    await load().catch(() => undefined)
+  const changePlan = async (next: PaidPlanId, interval: BillingInterval) => {
+    if (!(await confirm(t.account.confirmChange))) return
+    const { ok, data } = await post("/api/billing/change-plan", { plan: next, interval })
+    setMessage(ok ? { text: t.account.changed, tone: "success" } : { text: billingMessage(data?.code, t), tone: "danger" })
+    if (ok) await reload()
   }
 
-  const paid = access && access.plan !== "free"
+  const paid = access !== null && access.plan !== "free"
+  const limit = PLANS[plan].favoritesLimit
+  const rooms = PLANS[plan].privateRooms
 
   return (
-    <div className="space-y-4">
-      {message && <p role="status" className="rounded-lg border border-line bg-surface p-3 text-sm text-ink">{message}</p>}
-      {access?.state === "past_due" && <p role="alert" className="rounded-lg border border-line bg-surface p-3 text-sm text-bad">{t.account.pastDue}</p>}
-      <section className="rounded-2xl border border-line bg-surface p-6 shadow-[var(--shadow-md)]">
-        <p className="text-sm text-ink-2">{user.email}</p>
-        <h2 className="mt-4 text-sm font-medium text-ink-2">{t.account.plan}</h2>
-        {access ? <p className="font-display text-2xl font-semibold text-ink">{PLANS[access.plan].name}</p> : <div className="fs-skeleton mt-1 h-8 w-32" />}
-        {paid && access.currentPeriodEnd && (
-          <p className="mt-1 text-sm text-ink-2">{access.cancelAtPeriodEnd ? t.account.ends : t.account.renews} {date(access.currentPeriodEnd)}</p>
-        )}
-        <div className="mt-6 flex flex-wrap gap-2">
-          {paid ? (
-            <>
-              <button type="button" onClick={portal} className="rounded-md bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-navy-deep">{t.account.manage}</button>
-              <button type="button" disabled={busy} onClick={() => setCancel(access.cancelAtPeriodEnd)} className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-ink hover:bg-surface-muted disabled:opacity-60">
-                {access.cancelAtPeriodEnd ? t.account.undo : t.account.cancel}
-              </button>
-            </>
-          ) : (
-            <Link href={href("/pricing")} className="rounded-md bg-orange px-4 py-2 text-sm font-semibold text-[#0a1a33] hover:bg-orange-hover">{t.account.choose}</Link>
-          )}
-          <Link href={href("/app/settings")} className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-ink hover:bg-surface-muted">{t.settings.title}</Link>
-          <button type="button" onClick={() => signOutUser().then(() => router.push(href("/")))} className="rounded-md px-4 py-2 text-sm font-semibold text-ink-2 hover:text-ink">{t.account.signOut}</button>
-        </div>
-      </section>
-      {paid && access.state !== "past_due" && (
-        <section aria-labelledby="change-plan" className="rounded-2xl border border-line bg-surface p-6">
-          <h2 id="change-plan" className="text-lg font-semibold text-ink">{t.account.changePlan}</h2>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {(["plus", "premium"] as const).flatMap((plan) =>
-              (["monthly", "annual"] as const).map((interval) => {
-                const current = access.plan === plan && access.interval === interval
-                return (
-                  <button key={plan + interval} type="button" disabled={busy || current} onClick={() => changePlan(plan, interval)} className="rounded-md border border-line px-3 py-2 text-sm font-semibold text-ink hover:bg-surface-muted disabled:opacity-50">
-                    {PLANS[plan].name} · {t.pricing[interval]}
-                  </button>
-                )
-              }),
-            )}
+    <div className="space-y-5">
+      {dialog}
+      {message && <Notice tone={message.tone} role="status">{message.text}</Notice>}
+      {access?.state === "past_due" && <Notice tone="danger" role="alert" action={<button type="button" onClick={portal} className={btn("outline", "sm")}>{t.account.manage}</button>}>{t.account.pastDue}</Notice>}
+      {loaded && !access && <ErrorNotice onRetry={reload}>{t.account.failed}</ErrorNotice>}
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Panel title={t.account.plan} icon={<CreditCard aria-hidden />} actions={access && access.plan !== "free" ? <StatusChip access={access} /> : undefined}>
+          {access ? <p className="font-display text-[1.75rem] font-semibold leading-none text-ink">{PLANS[access.plan].name}</p> : !loaded ? <Skeleton className="h-8 w-32" /> : null}
+          <p className="mt-2 truncate text-sm text-ink-2">{user?.email}</p>
+          {paid && access.currentPeriodEnd && <p className="mt-1 text-sm text-ink-2">{access.cancelAtPeriodEnd ? t.account.ends : t.account.renews} {date(access.currentPeriodEnd)}</p>}
+          {paid && access.interval && <p className="mt-1 text-sm text-ink-2">{t.pricing[access.interval]}</p>}
+          <div className="mt-5 flex flex-wrap gap-2">
+            {paid ? (
+              <>
+                <button type="button" disabled={busy} onClick={portal} className={btn("navy")}><ExternalLink aria-hidden className="size-4" />{t.account.manage}</button>
+                <button type="button" disabled={busy} onClick={() => setCancel(access.cancelAtPeriodEnd)} className={btn("outline")}>{access.cancelAtPeriodEnd ? t.account.undo : t.account.cancel}</button>
+              </>
+            ) : loaded ? (
+              <Link href={href("/app/billing#plans")} className={btn("primary")}><Sparkles aria-hidden className="size-4" />{t.account.choose}</Link>
+            ) : null}
           </div>
+        </Panel>
+
+        <Panel title={t.ui.usage} description={t.ui.usageLead} icon={<Gauge aria-hidden />}>
+          {balance ? (
+            <dl className="space-y-4 text-sm">
+              <div>
+                <div className="flex justify-between gap-3"><dt className="text-ink-2">{t.ui.assistantAllowance}</dt><dd className="tabular font-semibold text-ink">{balance.included.used} / {balance.included.limit}</dd></div>
+                <Meter value={balance.included.used} max={balance.included.limit} label={t.ui.assistantAllowance} className="mt-1.5" />
+              </div>
+              {limit !== null && (
+                <div>
+                  <div className="flex justify-between gap-3"><dt className="text-ink-2">{t.nav.myTeams}</dt><dd className="tabular font-semibold text-ink">{prefs.favorites.length} / {limit}</dd></div>
+                  <Meter value={prefs.favorites.length} max={limit} label={t.nav.myTeams} className="mt-1.5" />
+                </div>
+              )}
+              {rooms && <div className="flex justify-between gap-3"><dt className="text-ink-2">{t.dash.rooms}</dt><dd className="tabular font-semibold text-ink">{t.ui.roomAllowance.replace("{active}", String(rooms.active)).replace("{people}", String(rooms.participantsPerRoom))}</dd></div>}
+              {balance.credits.map((credit) => (
+                <div key={credit.purchaseId} className="flex justify-between gap-3">
+                  <dt className="min-w-0 text-ink-2">{t.addons.items[credit.sku][0]}<span className="block text-xs">{t.assistant.expires} {stamp(credit.expiresAtUTC)}</span></dt>
+                  <dd className="tabular font-semibold text-ink">{credit.remaining}</dd>
+                </div>
+              ))}
+              {dayPassEnd && <p className="text-ink-2">{t.assistant.dayPass} {stamp(dayPassEnd)}</p>}
+            </dl>
+          ) : !loaded ? (
+            <div role="status" aria-label={t.ui.loading} className="space-y-3"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-2/3" /></div>
+          ) : (
+            <p className="text-sm text-ink-2">{t.account.failed}</p>
+          )}
+        </Panel>
+      </div>
+
+      {access?.state !== "past_due" && (
+        <section id="plans" aria-labelledby="plans-title" className="scroll-mt-24">
+          <h2 id="plans-title" className="mb-4 text-[17px] font-semibold text-ink">{paid ? t.account.changePlan : t.ui.choosePlan}</h2>
+          <PlanCards onPick={paid ? changePlan : undefined} currentInterval={access?.interval} />
+          <p className="mt-4 text-xs leading-5 text-ink-2">{t.pricing.disclaimer}</p>
         </section>
       )}
+
+      <AddonOffers />
     </div>
   )
 }

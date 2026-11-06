@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { authFetch } from "@/lib/auth-fetch"
+import { PLANS } from "@/lib/billing/plans"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { DEFAULT_PREFERENCES, type Preferences } from "@/lib/me/preferences-defaults"
 import { readStored, writeStored } from "@/lib/storage-consent"
@@ -14,7 +15,11 @@ interface PrefsValue {
   ready: boolean
   signedIn: boolean
   update(patch: Partial<Preferences>): Promise<boolean>
+  /** Runs one at a time from the latest list, so two quick stars cannot overwrite each other. */
+  toggleFavorite(name: string): Promise<FavoriteResult>
 }
+
+export type FavoriteResult = "added" | "removed" | "limit" | "failed"
 
 const PrefsContext = createContext<PrefsValue | null>(null)
 
@@ -24,6 +29,9 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
   const [guestReady, setGuestReady] = useState(false)
   const [loadedUid, setLoadedUid] = useState<string | null>(null)
   const guestRef = useRef<Preferences>(DEFAULT_PREFERENCES)
+  const latest = useRef<Preferences>(DEFAULT_PREFERENCES)
+  const queue = useRef<Promise<unknown>>(Promise.resolve())
+  latest.current = prefs
 
   useEffect(() => {
     const stored = { ...DEFAULT_PREFERENCES, ...readStored<Partial<Preferences>>(KEY, {}) }
@@ -73,9 +81,40 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
     [user],
   )
 
+  const toggleFavorite = useCallback(
+    (name: string) => {
+      const run = async (): Promise<FavoriteResult> => {
+        const names = latest.current.favorites
+        const following = names.includes(name)
+        const favorites = following ? names.filter((item) => item !== name) : [...names, name]
+        if (!user) {
+          if (!following && names.length >= (PLANS.free.favoritesLimit as number)) return "limit"
+          const next = { ...latest.current, favorites }
+          latest.current = next
+          setPrefs(next)
+          writeStored(KEY, next)
+          return following ? "removed" : "added"
+        }
+        const response = await authFetch("/api/me/preferences", { method: "PUT", body: JSON.stringify({ favorites }) }).catch(() => null)
+        if (!response?.ok) {
+          const data = await response?.json().catch(() => null)
+          return data?.code === "favorites_limit" ? "limit" : "failed"
+        }
+        const next = (await response.json()) as Preferences
+        latest.current = next
+        setPrefs(next)
+        return following ? "removed" : "added"
+      }
+      const result = queue.current.then(run, run)
+      queue.current = result
+      return result
+    },
+    [user],
+  )
+
   // Derived, so a just-signed-in user is never ready on guest defaults.
   const ready = user ? loadedUid === user.uid : guestReady
-  const value = useMemo(() => ({ prefs, ready, signedIn: Boolean(user), update }), [prefs, ready, user, update])
+  const value = useMemo(() => ({ prefs, ready, signedIn: Boolean(user), update, toggleFavorite }), [prefs, ready, user, update, toggleFavorite])
   return <PrefsContext.Provider value={value}>{children}</PrefsContext.Provider>
 }
 

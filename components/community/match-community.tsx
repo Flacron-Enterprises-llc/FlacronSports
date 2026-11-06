@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { Medal, MessagesSquare, Users } from "lucide-react"
+import { btn, Notice, Panel } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { useLocale } from "@/lib/use-locale"
 import { useCommunityGate } from "./community-gate"
 import { Leaderboard } from "./leaderboard"
 import { MessageList } from "./message-list"
-
-const FIELD = "mt-1 w-full rounded-md border border-line bg-surface px-3 py-2 text-ink"
 
 function Predictions({ matchId, predictable, home, away }: { matchId: string; predictable: boolean; home: string; away: string }) {
   const { t } = useLocale()
@@ -19,6 +19,7 @@ function Predictions({ matchId, predictable, home, away }: { matchId: string; pr
   const [awayScore, setAwayScore] = useState("")
   const [mine, setMine] = useState<{ home: number; away: number } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -29,51 +30,56 @@ function Predictions({ matchId, predictable, home, away }: { matchId: string; pr
   }, [user, matchId])
 
   const send = async () => {
+    setBusy(true)
+    setNotice(null)
     const response = await authFetch("/api/predictions", {
       method: "POST",
       body: JSON.stringify({ matchId, home: Number(homeScore), away: Number(awayScore) }),
     }).catch(() => null)
     const data = await response?.json().catch(() => null)
+    setBusy(false)
     if (response?.ok) setMine(data.prediction)
     else if (!gate.intercept(data?.code, send)) setNotice(data?.code === "prediction_locked" ? t.community.predictionLocked : data?.code === "duplicate_prediction" ? t.community.predictionDuplicate : t.community.sendFailed)
   }
 
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault()
-    send()
-  }
+  const field = "fs-input mt-1 h-10 px-3 text-center font-display text-lg font-semibold"
 
   return (
     <div>
-      <h3 className="font-semibold text-ink">{t.community.predictions}</h3>
-      <p className="mt-1 text-sm leading-6 text-ink-2">{t.community.predictionRules}</p>
-      {mine && <p className="mt-2 text-sm font-semibold text-ink">{t.community.yourPrediction} {mine.home} - {mine.away}</p>}
+      {mine && <Notice tone="success" role="status">{t.community.yourPrediction} <span className="tabular font-semibold text-ink">{mine.home} – {mine.away}</span></Notice>}
       {!mine && user && predictable && (
-        <form onSubmit={submit} className="mt-3 grid grid-cols-2 gap-3">
-          <label className="text-sm font-medium text-ink">{home}<input className={FIELD} type="number" min={0} max={300} required value={homeScore} onChange={(e) => setHomeScore(e.target.value)} /></label>
-          <label className="text-sm font-medium text-ink">{away}<input className={FIELD} type="number" min={0} max={300} required value={awayScore} onChange={(e) => setAwayScore(e.target.value)} /></label>
-          <button type="submit" className="col-span-2 rounded-md bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-navy-deep">{t.community.predict}</button>
+        <form onSubmit={(event) => { event.preventDefault(); void send() }} className="grid grid-cols-2 gap-3">
+          <label className="min-w-0 text-sm font-medium text-ink"><span className="block truncate">{home}</span><input className={field} type="number" min={0} max={300} required value={homeScore} onChange={(event) => setHomeScore(event.target.value)} /></label>
+          <label className="min-w-0 text-sm font-medium text-ink"><span className="block truncate">{away}</span><input className={field} type="number" min={0} max={300} required value={awayScore} onChange={(event) => setAwayScore(event.target.value)} /></label>
+          <button type="submit" disabled={busy} className={btn("primary", "md", "col-span-2")}>{t.community.predict}</button>
         </form>
       )}
-      {!mine && !predictable && <p className="mt-2 text-sm text-ink-2">{t.community.predictionLocked}</p>}
+      {!mine && !predictable && <p className="text-sm text-ink-2">{t.community.predictionLocked}</p>}
       {gate.prompt}
       {notice && <p role="status" className="mt-2 text-sm text-ink">{notice}</p>}
+      <details className="mt-3 text-[13px] leading-5 text-ink-2">
+        <summary className="cursor-pointer font-semibold hover:text-ink">{t.community.pointRules}</summary>
+        <p className="mt-1">{t.community.predictionRules}</p>
+      </details>
     </div>
   )
 }
 
-export function MatchCommunity({ matchId, predictable, home, away }: { matchId: string; predictable: boolean; home: string; away: string }) {
+export function MatchCommunity({ matchId, predictable, scorePredictions, home, away }: { matchId: string; predictable: boolean; scorePredictions: boolean; home: string; away: string }) {
   const { t, href } = useLocale()
   return (
-    <section aria-label={t.community.title} className="mt-5 space-y-6 rounded-2xl border border-line bg-surface p-6">
-      <h2 className="text-lg font-semibold text-ink">{t.community.title}</h2>
-      <Predictions matchId={matchId} predictable={predictable} home={home} away={away} />
-      <Leaderboard />
-      <Link href={href(`/app/rooms?match=${matchId}`)} className="block text-sm font-semibold text-hot-text hover:underline">{t.community.rooms}</Link>
-      <div>
-        <h3 className="mb-2 font-semibold text-ink">{t.community.chat}</h3>
-        <MessageList scope="match" scopeId={matchId} path={`/api/matches/${matchId}/chat`} />
+    <div className="space-y-5">
+      <div className="grid gap-5 md:grid-cols-2">
+        {scorePredictions && <Panel title={t.community.predictions} icon={<Medal aria-hidden />}><Predictions matchId={matchId} predictable={predictable} home={home} away={away} /></Panel>}
+        <Panel title={t.community.leaderboard} icon={<Medal aria-hidden />}><Leaderboard /></Panel>
       </div>
-    </section>
+      <Panel
+        title={t.community.chat}
+        icon={<MessagesSquare aria-hidden />}
+        actions={<Link href={href(`/app/rooms?match=${matchId}`)} className={btn("outline", "sm")}><Users aria-hidden className="size-3.5" />{t.community.rooms}</Link>}
+      >
+        <MessageList scope="match" scopeId={matchId} path={`/api/matches/${matchId}/chat`} />
+      </Panel>
+    </div>
   )
 }

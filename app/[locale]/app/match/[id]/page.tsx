@@ -1,18 +1,31 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
+import { ArrowLeft, CalendarClock, MapPin, Trophy } from "lucide-react"
 import { MatchCommunity } from "@/components/community/match-community"
-import { StatusLabel } from "@/components/sports/event-card"
+import { ErrorNotice } from "@/components/dashboard/controls"
+import { SportIcon } from "@/components/site/sport-icon"
+import { AppPage, Panel } from "@/components/site/states"
+import { nameOf, StatusLabel } from "@/components/sports/event-card"
 import { EventResult } from "@/components/sports/event-result"
 import { ExportButton } from "@/components/sports/export-button"
-import { FavoriteStar, LocalTime, MatchScore } from "@/components/sports/parts"
+import { MatchTabs, ViewingPanel } from "@/components/sports/match-center"
+import { Crest, FavoriteStar, LiveRefresh, LocalTime, MatchScore } from "@/components/sports/parts"
 import { supportsScorePrediction } from "@/lib/community/predictions"
+import { getDictionary, isLocale } from "@/lib/i18n"
 import { pageContext } from "@/lib/page-context"
 import { eventTitle, isDuel } from "@/lib/sports/presentation"
 import { getEvent } from "@/lib/sports/service"
 import type { SportEvent } from "@/lib/sports/types"
-import { evaluateViewing } from "@/lib/video/viewing"
 
-export default async function MatchPage({ params }: { params: Promise<{ locale: string; id: string }> }) {
+type Props = { params: Promise<{ locale: string; id: string }> }
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { locale } = await params
+  return { title: getDictionary(isLocale(locale) ? locale : "en").ui.matchCenter }
+}
+
+export default async function MatchPage({ params }: Props) {
   const { id } = await params
   const { locale, t, href } = await pageContext(params)
 
@@ -25,14 +38,18 @@ export default async function MatchPage({ params }: { params: Promise<{ locale: 
   }
   if (!event && !failed) notFound()
 
-  const back = <Link href={href("/app/scores")} className="text-sm font-semibold text-hot-text hover:underline">{t.match.back}</Link>
+  const back = (
+    <Link href={href("/app/scores")} className="inline-flex min-h-8 items-center gap-1.5 text-sm font-semibold text-hot-text hover:underline">
+      <ArrowLeft aria-hidden className="size-4" /> {t.match.back}
+    </Link>
+  )
 
   if (!event) {
     return (
-      <main id="main" className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+      <AppPage width="md">
         {back}
-        <p role="alert" className="mt-6 rounded-lg border border-line bg-surface p-4 text-sm text-bad">{t.feed.unavailable}</p>
-      </main>
+        <div className="mt-5"><ErrorNotice>{t.feed.unavailable}</ErrorNotice></div>
+      </AppPage>
     )
   }
 
@@ -41,59 +58,96 @@ export default async function MatchPage({ params }: { params: Promise<{ locale: 
   const title = eventTitle(event)
   const startLabel = event.participantType === "team" && event.sportId !== "cricket" ? t.match.kickoff : t.event.start
   const start = event.scheduledStartUTC
-  const viewing = evaluateViewing([], { country: null, platform: "web", entitled: false, now: new Date() })
+  const community = process.env.COMMUNITY_ENABLED === "true"
+  const scorePredictions = supportsScorePrediction(event)
+  const hasResultPanel = event.score.kind !== "none" && event.score.kind !== "team"
 
-  return (
-    <main id="main" className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-      {back}
-      <section aria-label={t.match.viewing} className="mt-6 rounded-2xl border border-line bg-surface p-6">
-        <h2 className="text-lg font-semibold text-ink">{t.match.viewing}</h2>
-        <p className="mt-2 text-sm leading-6 text-ink-2">{t.match.noVideo}</p>
-        {viewing.options.some((option) => option.action === "follow_live") && <p className="mt-3 text-sm font-semibold text-ink">{t.match.followLive}</p>}
-      </section>
-
-      <section className="mt-5 rounded-2xl border border-line bg-surface p-6 shadow-[var(--shadow-md)]">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-medium text-ink-2">{event.competition.name}</p>
-          <StatusLabel status={event.status} t={t} />
-        </div>
-        {event.participantType !== "team" && <p className="mt-4 text-sm text-ink-3">{t.event.types[event.eventType]}</p>}
-        {duel && event.eventName && <p className="mt-1 font-semibold text-ink-2">{event.eventName}</p>}
-        <h1 className={`${event.participantType === "team" ? "mt-4" : "mt-1"} text-2xl font-bold text-ink`}>{title}</h1>
-        {duel && (
-          <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-            <p className="flex items-center gap-1 font-semibold text-ink"><FavoriteStar team={home.name} />{home.name}</p>
-            <div className="text-center">
-              {event.score.kind === "team" && <MatchScore home={event.score.home} away={event.score.away} label={title} />}
-              {event.score.kind === "none" && <span className="text-sm font-medium text-ink-3">{event.participantType === "team" ? t.match.noScore : t.event.noResult}</span>}
-            </div>
-            <p className="flex items-center justify-end gap-1 text-right font-semibold text-ink">{away.name}<FavoriteStar team={away.name} /></p>
-          </div>
-        )}
-        {!duel && event.score.kind === "none" && <p className="mt-3 text-sm text-ink-3">{t.event.noParticipants}</p>}
-        <EventResult event={event} t={t} />
-        <dl className="mt-6 grid gap-3 border-t border-line pt-4 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-ink-3">{startLabel}</dt>
-            <dd className="text-ink">
+  const overview = (
+    <div className="space-y-4">
+      <Panel>
+        <dl className="grid gap-4 text-sm sm:grid-cols-3">
+          <div className="min-w-0">
+            <dt className="flex items-center gap-1.5 text-ink-2"><CalendarClock aria-hidden className="size-4" />{startLabel}</dt>
+            <dd className="mt-1 font-medium text-ink">
               {start && !event.dateOnly && <LocalTime iso={start} mode="datetime" />}
               {start && event.dateOnly && `${new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(new Date(start))}. ${t.match.tbd}`}
               {!start && t.match.tbd}
             </dd>
           </div>
-          {event.venue && <div><dt className="text-ink-3">{t.match.venue}</dt><dd className="text-ink">{event.venue}</dd></div>}
+          <div className="min-w-0">
+            <dt className="flex items-center gap-1.5 text-ink-2"><Trophy aria-hidden className="size-4" />{t.match.competition}</dt>
+            <dd className="mt-1 font-medium text-ink">{event.competition.name}</dd>
+          </div>
+          {event.venue && (
+            <div className="min-w-0">
+              <dt className="flex items-center gap-1.5 text-ink-2"><MapPin aria-hidden className="size-4" />{t.match.venue}</dt>
+              <dd className="mt-1 font-medium text-ink">{event.venue}</dd>
+            </div>
+          )}
         </dl>
-        <ExportButton matchId={event.id} />
+      </Panel>
+      {!duel && event.score.kind === "none" && <p className="text-sm text-ink-2">{t.event.noParticipants}</p>}
+      <ExportButton matchId={event.id} />
+    </div>
+  )
+
+  return (
+    <AppPage width="md">
+      <LiveRefresh live={event.status === "live"} />
+      {back}
+
+      <section aria-label={title} className="fs-band fs-rise relative mt-4 overflow-hidden rounded-2xl p-5 sm:p-7">
+        <div aria-hidden className="fs-grid pointer-events-none absolute inset-0 opacity-60" />
+        <div className="relative">
+          <div className="flex items-center justify-between gap-3">
+            <p className="flex min-w-0 items-center gap-1.5 text-[13px] font-medium text-white/80">
+              <SportIcon id={event.sportId} className="size-4 shrink-0" />
+              <span className="min-w-0 truncate">{event.competition.name}</span>
+            </p>
+            <span className="rounded-full bg-white/95 dark:bg-surface"><StatusLabel status={event.status} t={t} /></span>
+          </div>
+          {event.participantType !== "team" && <p className="mt-4 text-[13px] text-white/75">{t.event.types[event.eventType]}</p>}
+          {duel && event.eventName && <p className="mt-1 font-semibold text-white/85">{event.eventName}</p>}
+          <h1 className={duel ? "sr-only" : "mt-1 text-2xl font-semibold text-white"}>{title}</h1>
+
+          {duel && (
+            <div className="mt-5 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-4">
+              <div className="flex min-w-0 flex-col items-center gap-2 text-center">
+                <Crest name={home.name} url={home.badgeUrl} size="lg" />
+                <p className="min-w-0 break-words text-sm font-semibold leading-5 text-white sm:text-base">{nameOf(home.name, t)}</p>
+                <span className="text-white [&_button]:text-white/70 [&_button:hover]:bg-white/10"><FavoriteStar team={home.name} /></span>
+              </div>
+              <div className="text-center">
+                {event.score.kind === "team" && <MatchScore home={event.score.home} away={event.score.away} label={title} />}
+                {event.score.kind === "none" && <span className="block max-w-24 text-xs font-medium text-white/75 sm:max-w-32 sm:text-sm">{event.participantType === "team" ? t.match.noScore : t.event.noResult}</span>}
+                {event.score.kind !== "team" && event.score.kind !== "none" && <span aria-hidden className="font-display text-xl font-semibold text-white/70">–</span>}
+              </div>
+              <div className="flex min-w-0 flex-col items-center gap-2 text-center">
+                <Crest name={away.name} url={away.badgeUrl} size="lg" />
+                <p className="min-w-0 break-words text-sm font-semibold leading-5 text-white sm:text-base">{nameOf(away.name, t)}</p>
+                <span className="text-white [&_button]:text-white/70 [&_button:hover]:bg-white/10"><FavoriteStar team={away.name} /></span>
+              </div>
+            </div>
+          )}
+        </div>
       </section>
 
-      {process.env.COMMUNITY_ENABLED === "true" && (
-        <MatchCommunity
-          matchId={event.id}
-          predictable={supportsScorePrediction(event) && event.status === "scheduled" && Boolean(event.scheduledStartUTC) && Date.now() < Date.parse(event.scheduledStartUTC as string)}
-          home={duel ? home.name : title}
-          away={duel ? away.name : title}
+      <div className="fs-rise mt-5" style={{ ["--i" as string]: 1 }}>
+        <MatchTabs
+          overview={overview}
+          result={hasResultPanel ? <Panel><EventResult event={event} t={t} /></Panel> : undefined}
+          viewing={<ViewingPanel matchId={event.id} />}
+          community={community ? (
+            <MatchCommunity
+              matchId={event.id}
+              predictable={scorePredictions && event.status === "scheduled" && Boolean(start) && Date.now() < Date.parse(start as string)}
+              scorePredictions={scorePredictions}
+              home={duel ? home.name : title}
+              away={duel ? away.name : title}
+            />
+          ) : undefined}
         />
-      )}
-    </main>
+      </div>
+    </AppPage>
   )
 }

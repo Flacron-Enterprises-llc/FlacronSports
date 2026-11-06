@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { Clock, LoaderCircle } from "lucide-react"
+import { authButton } from "@/components/auth/auth-ui"
+import { AnimatedCheck, IconBadge, StatusCard } from "@/components/site/status-card"
 import { authFetch } from "@/lib/auth-fetch"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { useLocale } from "@/lib/use-locale"
@@ -40,12 +43,17 @@ export function PaymentStatus() {
   }, [user])
 
   const [title, body] = { confirming: [t.paid.confirming, t.paid.confirmingBody], done: [t.paid.done, t.paid.doneBody], delayed: [t.paid.delayed, t.paid.delayedBody] }[state]
+  const visual = {
+    confirming: <span className="fs-tint-brand inline-flex size-[72px] items-center justify-center rounded-full text-brand"><LoaderCircle aria-hidden className="size-8 animate-spin" /></span>,
+    done: <AnimatedCheck />,
+    delayed: <IconBadge icon={Clock} tone="warn" />,
+  }[state]
 
   return (
-    <div role="status" aria-live="polite" className="mx-auto max-w-md rounded-2xl border border-line bg-surface p-8 text-center shadow-[var(--shadow-md)]">
-      <h1 className="text-2xl font-bold text-ink">{title}</h1>
-      <p className="mt-2 text-sm text-ink-2">{body}</p>
-      {state !== "confirming" && <Link href={href("/app/billing")} className="mt-5 inline-block font-semibold text-hot-text underline">{t.paid.go}</Link>}
+    <div role="status" aria-live="polite" className="flex w-full justify-center">
+      <StatusCard key={state} visual={visual} title={title} body={body}>
+        {state !== "confirming" && <Link href={href("/app/billing")} className={authButton.primary}>{t.paid.go}</Link>}
+      </StatusCard>
     </div>
   )
 }

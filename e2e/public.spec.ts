@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test, type Page } from "@playwright/test"
 
-const PAGES = ["/", "/features", "/features/scores-and-fixtures", "/sports", "/pricing", "/faq", "/about", "/contact", "/community-guidelines", "/eula", "/signin", "/signup", "/fr", "/fr/pricing"]
+const PAGES = ["/", "/features", "/features/scores-and-fixtures", "/sports", "/pricing", "/faq", "/about", "/contact", "/community-guidelines", "/eula", "/signin", "/signup", "/forgot-password", "/fr", "/fr/pricing"]
 
 async function dismissConsent(page: Page) {
   const reject = page.getByRole("button", { name: /Reject non-essential|Refuser/ }).first()

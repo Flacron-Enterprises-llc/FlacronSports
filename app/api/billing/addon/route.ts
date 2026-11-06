@@ -52,8 +52,8 @@ export async function POST(request: Request) {
       line_items: [{ price, quantity: 1 }],
       metadata,
       payment_intent_data: { metadata },
-      success_url: `${origin}/assistant?addon=success`,
-      cancel_url: `${origin}/assistant?addon=canceled`,
+      success_url: `${origin}/app/assistant?addon=success`,
+      cancel_url: `${origin}/app/assistant?addon=canceled`,
     })
 
     return NextResponse.json({ url: session.url })

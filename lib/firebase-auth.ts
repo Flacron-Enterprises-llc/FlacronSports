@@ -88,10 +88,11 @@ export const signUpWithEmail = async (email: string, password: string) => {
   try {
     const authInstance = getFirebaseAuth();
     const userCredential = await createUserWithEmailAndPassword(authInstance, email, password);
-    await sendVerification(userCredential.user);
-    return { user: userCredential.user, error: null };
+    // The account exists by now, so a failed email is retried from the verify page rather than failing sign-up.
+    const emailSent = await sendVerification(userCredential.user).then(() => true, () => false);
+    return { user: userCredential.user, error: null, emailSent };
   } catch (error: any) {
-    return { user: null, error: error.message };
+    return { user: null, error: error.message, cause: error };
   }
 };
 

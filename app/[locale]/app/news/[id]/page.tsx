@@ -1,6 +1,9 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
+import { ArrowLeft, ArrowRight, Flag } from "lucide-react"
+import { ErrorNotice } from "@/components/dashboard/controls"
+import { AppPage, Notice } from "@/components/site/states"
 import { LocalTime, SpoilerGuard } from "@/components/sports/parts"
 import { getPublishedReport, type Report } from "@/lib/content/reports"
 import { isLocale } from "@/lib/i18n"
@@ -32,46 +35,49 @@ export default async function ReportPage({ params }: Props) {
   }
   if (!report && !failed) notFound()
 
-  const back = <Link href={href("/app/news")} className="text-sm font-semibold text-hot-text hover:underline">{t.reports.back}</Link>
+  const back = (
+    <Link href={href("/app/news")} className="inline-flex min-h-8 items-center gap-1.5 text-sm font-semibold text-hot-text hover:underline">
+      <ArrowLeft aria-hidden className="size-4" /> {t.reports.back}
+    </Link>
+  )
 
   if (!report) {
     return (
-      <main id="main" className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+      <AppPage width="sm">
         {back}
-        <p role="alert" className="mt-6 rounded-lg border border-line bg-surface p-4 text-sm text-bad">{t.reports.unavailable}</p>
-      </main>
+        <div className="mt-5"><ErrorNotice>{t.reports.unavailable}</ErrorNotice></div>
+      </AppPage>
     )
   }
 
   const subject = encodeURIComponent(`${t.reports.reportError}: ${report.title}`)
 
   return (
-    <main id="main" className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+    <AppPage width="sm">
       {back}
-      <article className="mt-6 rounded-2xl border border-line bg-surface p-6 shadow-[var(--shadow-md)]">
+      <article className="fs-rise mt-4 rounded-xl border border-line bg-surface p-5 shadow-[var(--shadow-sm)] sm:p-8">
         <p className="text-xs font-semibold text-hot-text">{t.reports.label}</p>
-        <h1 className="mt-2 text-2xl font-bold text-ink">{report.title}</h1>
-        <p className="mt-1 text-sm text-ink-2">{report.competition}</p>
-        <div className="mt-5 leading-7 text-ink">
+        <h1 className="mt-2 text-2xl font-semibold leading-tight text-ink sm:text-[1.75rem]">{report.title}</h1>
+        <p className="mt-1.5 text-sm text-ink-2">{report.competition}</p>
+        <div className="mt-6 text-[15.5px] leading-7 text-ink">
           <SpoilerGuard label={t.reports.reveal}><p>{report.body}</p></SpoilerGuard>
         </div>
         {report.correctionNote && (
-          <aside className="mt-5 rounded-lg border border-line p-3 text-sm text-ink-2">
-            <p className="font-semibold text-ink">{t.reports.correction}</p>
-            <p className="mt-1">{report.correctionNote}</p>
-          </aside>
+          <Notice className="mt-5" role="note" title={t.reports.correction}>
+            <SpoilerGuard label={t.reports.reveal}>{report.correctionNote}</SpoilerGuard>
+          </Notice>
         )}
         <p className="mt-5 text-xs leading-5 text-ink-3">{t.reports.labelHelp}</p>
         <dl className="mt-4 grid gap-3 border-t border-line pt-4 text-sm sm:grid-cols-3">
-          {report.publishedAt && <div><dt className="text-ink-3">{t.reports.published}</dt><dd className="text-ink"><LocalTime iso={report.publishedAt} mode="datetime" /></dd></div>}
-          <div><dt className="text-ink-3">{t.reports.updated}</dt><dd className="text-ink"><LocalTime iso={report.updatedAt} mode="datetime" /></dd></div>
-          <div><dt className="text-ink-3">{t.reports.source}</dt><dd className="text-ink">{t.reports.verifiedData}</dd></div>
+          {report.publishedAt && <div><dt className="text-ink-2">{t.reports.published}</dt><dd className="mt-0.5 font-medium text-ink"><LocalTime iso={report.publishedAt} mode="datetime" /></dd></div>}
+          <div><dt className="text-ink-2">{t.reports.updated}</dt><dd className="mt-0.5 font-medium text-ink"><LocalTime iso={report.updatedAt} mode="datetime" /></dd></div>
+          <div><dt className="text-ink-2">{t.reports.source}</dt><dd className="mt-0.5 font-medium text-ink">{t.reports.verifiedData}</dd></div>
         </dl>
-        <div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold">
-          <Link href={href(`/app/match/${report.matchId}`)} className="text-hot-text hover:underline">{t.reports.matchLink}</Link>
-          <a href={`mailto:${CORRECTIONS_EMAIL}?subject=${subject}`} className="text-hot-text hover:underline">{t.reports.reportError}</a>
+        <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold">
+          <Link href={href(`/app/match/${report.matchId}`)} className="inline-flex items-center gap-1.5 text-hot-text hover:underline">{t.reports.matchLink}<ArrowRight aria-hidden className="size-3.5" /></Link>
+          <a href={`mailto:${CORRECTIONS_EMAIL}?subject=${subject}`} className="inline-flex items-center gap-1.5 text-ink-2 hover:text-ink hover:underline"><Flag aria-hidden className="size-3.5" />{t.reports.reportError}</a>
         </div>
       </article>
-    </main>
+    </AppPage>
   )
 }

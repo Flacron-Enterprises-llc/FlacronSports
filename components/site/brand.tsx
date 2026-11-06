@@ -3,7 +3,7 @@ import Link from "next/link"
 
 export function Logo({ reversed = false, href = "/" }: { reversed?: boolean; href?: string }) {
   return (
-    <Link href={href} aria-label="FlacronSport home" className="inline-flex items-center gap-2.5 rounded-md">
+    <Link href={href} aria-label="FlacronSport home" className="inline-flex min-h-11 items-center gap-2.5 rounded-md">
       {reversed ? (
         <Image src="/brand/fs-mark-reversed.png" alt="" width={50} height={28} priority className="h-7 w-auto" />
       ) : (

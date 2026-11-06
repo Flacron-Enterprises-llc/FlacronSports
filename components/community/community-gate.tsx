@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { btn } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import { useLocale } from "@/lib/use-locale"
 
@@ -22,7 +23,7 @@ function GatePrompt({ onAccepted, onCancel }: { onAccepted(): void; onCancel(): 
   }
 
   return (
-    <form onSubmit={confirm} role="group" aria-label={t.community.gateTitle} className="mt-3 space-y-2 rounded-lg border border-line bg-surface-muted p-4 text-sm text-ink">
+    <form onSubmit={confirm} role="group" aria-label={t.community.gateTitle} className="fs-pop mt-3 space-y-2 rounded-xl border border-line bg-surface-muted p-4 text-sm text-ink">
       <p className="font-semibold">{t.community.gateTitle}</p>
       <p className="text-ink-2">{t.community.gateBody}</p>
       <label className="flex items-start gap-2"><input type="checkbox" required className="mt-1" checked={age} onChange={(e) => setAge(e.target.checked)} />{t.community.gateAge}</label>
@@ -32,8 +33,8 @@ function GatePrompt({ onAccepted, onCancel }: { onAccepted(): void; onCancel(): 
       </label>
       {failed && <p role="status">{t.community.sendFailed}</p>}
       <div className="flex gap-2 pt-1">
-        <button type="submit" className="rounded-md bg-navy px-4 py-2 font-semibold text-white hover:bg-navy-deep">{t.community.gateConfirm}</button>
-        <button type="button" onClick={onCancel} className="rounded-md border border-line px-4 py-2 font-semibold text-ink hover:bg-surface">{t.community.gateCancel}</button>
+        <button type="submit" className={btn("navy")}>{t.community.gateConfirm}</button>
+        <button type="button" onClick={onCancel} className={btn("outline")}>{t.community.gateCancel}</button>
       </div>
     </form>
   )

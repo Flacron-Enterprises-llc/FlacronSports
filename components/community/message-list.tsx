@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
+import { Flag, Send, ShieldOff } from "lucide-react"
+import { ErrorNotice } from "@/components/dashboard/controls"
+import { btn, Notice, Skeleton } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import type { ReportScope } from "@/lib/community/chat"
 import type { Reaction } from "@/lib/community/engagement"
@@ -42,6 +45,7 @@ const ERRORS: Record<string, "slowMode" | "streamLink" | "tooLong" | "locked" | 
 const EMOJI: Record<Reaction, string> = { like: "👍", love: "❤️", laugh: "😂", wow: "😮", fire: "🔥", sad: "😢" }
 const REACTIONS = Object.keys(EMOJI) as Reaction[]
 const REPORT_REASONS = ["spam", "abuse", "illegal_stream", "other"] as const
+const REFRESH_MS = 30_000
 
 function withReaction(message: Message, next: Reaction | null): Message {
   const reactions = { ...message.reactions }
@@ -62,11 +66,13 @@ export function MessageList({ scope, scopeId, path }: { scope: ReportScope; scop
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
   const [reporting, setReporting] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
 
   const load = useCallback(async (after: string | null) => {
     const url = after ? `${path}?cursor=${encodeURIComponent(after)}` : path
     const response = await authFetch(url).catch(() => null)
-    if (!response?.ok) return setNotice(t.community.loadFailed)
+    if (!response?.ok) return setFailed(true)
+    setFailed(false)
     const data = await response.json()
     setMessages((current) => (after ? [...current, ...data.messages] : data.messages))
     setCursor(data.nextCursor)
@@ -77,6 +83,14 @@ export function MessageList({ scope, scopeId, path }: { scope: ReportScope; scop
   useEffect(() => {
     load(null)
   }, [load, user])
+
+  // New messages arrive without a reload. Skipped once older pages are open, so the list keeps its place.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible" && navigator.onLine && messages.length <= 50) void load(null)
+    }, REFRESH_MS)
+    return () => clearInterval(timer)
+  }, [load, messages.length])
 
   const post = async () => {
     setBusy(true)
@@ -122,23 +136,20 @@ export function MessageList({ scope, scopeId, path }: { scope: ReportScope; scop
   return (
     <div>
       {state.notice && (
-        <aside className="mb-3 rounded-lg border border-line bg-surface-muted p-3 text-sm">
-          <p className="text-xs font-semibold text-ink-3">{t.community.pinned}</p>
-          <p className="mt-1 whitespace-pre-wrap break-words text-ink">{state.notice.text}</p>
-        </aside>
+        <Notice className="mb-3" role="note" title={t.community.pinned}><span className="whitespace-pre-wrap break-words">{state.notice.text}</span></Notice>
       )}
       {state.poll && <MatchPoll matchId={scopeId} poll={state.poll} signedIn={Boolean(user)} intercept={gate.intercept} onChange={(poll) => setState((current) => ({ ...current, poll }))} />}
       {scope === "match" && <ModeratorTools matchId={scopeId} hasNotice={Boolean(state.notice)} pollOpen={Boolean(state.poll?.open)} onChange={() => load(null)} />}
       {state.locked ? (
-        <p className="text-sm text-ink-2">{t.community.locked}</p>
+        <Notice tone="warning" role="status">{t.community.locked}</Notice>
       ) : user ? (
         <form onSubmit={send}>
-          <label className="block text-sm font-medium text-ink">
-            {t.community.message}
-            <textarea className="mt-1 w-full rounded-md border border-line bg-surface px-3 py-2 text-ink" rows={2} required maxLength={500} value={text} onChange={(e) => setText(e.target.value)} />
+          <label className="block">
+            <span className="sr-only">{t.community.message}</span>
+            <textarea className="fs-input block resize-y px-3 py-2 text-sm" rows={2} required maxLength={500} placeholder={t.community.message} value={text} onChange={(e) => setText(e.target.value)} />
           </label>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-            <button type="submit" disabled={busy} className="rounded-md bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-navy-deep disabled:opacity-60">{t.community.send}</button>
+            <button type="submit" disabled={busy} className={btn("navy", "sm")}><Send aria-hidden className="size-3.5" />{t.community.send}</button>
             <Link href={href("/community-guidelines")} className="text-xs font-semibold text-hot-text hover:underline">{t.community.guidelines}</Link>
           </div>
         </form>
@@ -147,13 +158,15 @@ export function MessageList({ scope, scopeId, path }: { scope: ReportScope; scop
       )}
       {gate.prompt}
       {notice && <p role="status" className="mt-2 text-sm text-ink">{notice}</p>}
+      {failed && <div className="mt-3"><ErrorNotice onRetry={() => load(null)}>{t.community.loadFailed}</ErrorNotice></div>}
+      {!loaded && !failed && <div role="status" aria-label={t.ui.loading} className="mt-3 space-y-2"><Skeleton className="h-14 w-full" /><Skeleton className="h-14 w-full" /></div>}
       {loaded && messages.length === 0 && <p className="mt-3 text-sm text-ink-2">{t.community.noMessages}</p>}
       <ul className="mt-3 space-y-2">
         {messages.map((message) => {
           const live = !message.removed && !message.formerMember
           return (
-            <li key={message.id} className="rounded-lg border border-line p-3 text-sm">
-              <p className="text-xs text-ink-3">{message.formerMember ? t.community.formerMember : message.displayName} · {time(message.createdAtUTC)}</p>
+            <li key={message.id} className={`fs-panel-in rounded-xl border p-3 text-sm ${message.mine ? "border-line-strong bg-surface-muted" : "border-line"}`}>
+              <p className="text-xs font-medium text-ink-2">{message.formerMember ? t.community.formerMember : message.displayName} · {time(message.createdAtUTC)}</p>
               <p className="mt-1 whitespace-pre-wrap break-words text-ink">{message.removed ? t.community.removed : message.formerMember ? t.community.formerMessage : message.text}</p>
               {live && (
                 <div className="mt-2 flex flex-wrap gap-1" role="group" aria-label={t.community.reactions}>
@@ -165,7 +178,7 @@ export function MessageList({ scope, scopeId, path }: { scope: ReportScope; scop
                       aria-pressed={message.myReaction === reaction}
                       aria-label={t.community.reactionNames[reaction]}
                       onClick={() => react(message.id, reaction)}
-                      className={`rounded-full border px-2 py-0.5 text-xs ${message.myReaction === reaction ? "border-hot-text bg-surface-muted text-ink" : "border-line text-ink-2 hover:bg-surface-muted"}`}
+                      className={`min-h-6 rounded-full border px-2 py-0.5 text-xs transition-colors ${message.myReaction === reaction ? "border-hot-text bg-surface-muted text-ink" : "border-line text-ink-2 hover:bg-surface-muted"}`}
                     >
                       {EMOJI[reaction]}{message.reactions[reaction] ? ` ${message.reactions[reaction]}` : ""}
                     </button>
@@ -173,11 +186,11 @@ export function MessageList({ scope, scopeId, path }: { scope: ReportScope; scop
                 </div>
               )}
               {user && !message.mine && live && (
-                <div className="mt-1 flex flex-wrap gap-3 text-xs">
-                  <button type="button" aria-expanded={reporting === message.id} className="font-semibold text-ink-2 hover:text-ink" onClick={() => setReporting(reporting === message.id ? null : message.id)}>{t.community.report}</button>
-                  <button type="button" className="font-semibold text-ink-2 hover:text-ink" onClick={() => flag("block", message.id)}>{t.community.block}</button>
+                <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs">
+                  <button type="button" aria-expanded={reporting === message.id} className="inline-flex min-h-6 items-center gap-1 font-semibold text-ink-2 hover:text-ink" onClick={() => setReporting(reporting === message.id ? null : message.id)}><Flag aria-hidden className="size-3" />{t.community.report}</button>
+                  <button type="button" className="inline-flex min-h-6 items-center gap-1 font-semibold text-ink-2 hover:text-ink" onClick={() => flag("block", message.id)}><ShieldOff aria-hidden className="size-3" />{t.community.block}</button>
                   {reporting === message.id && REPORT_REASONS.map((reason) => (
-                    <button key={reason} type="button" className="font-semibold text-hot-text hover:underline" onClick={() => flag("report", message.id, reason)}>{t.community.reportReasons[reason]}</button>
+                    <button key={reason} type="button" className="min-h-6 font-semibold text-hot-text hover:underline" onClick={() => flag("report", message.id, reason)}>{t.community.reportReasons[reason]}</button>
                   ))}
                 </div>
               )}
@@ -185,7 +198,7 @@ export function MessageList({ scope, scopeId, path }: { scope: ReportScope; scop
           )
         })}
       </ul>
-      {cursor && <button type="button" onClick={() => load(cursor)} className="mt-3 text-sm font-semibold text-hot-text hover:underline">{t.community.older}</button>}
+      {cursor && <button type="button" onClick={() => load(cursor)} className={btn("ghost", "sm", "mt-3")}>{t.community.older}</button>}
       {user && <BlockedPeople onChange={() => load(null)} />}
     </div>
   )

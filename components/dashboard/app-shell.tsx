@@ -1,35 +1,46 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
-  Bell, CreditCard, Home, LayoutDashboard, LogOut, Medal, Menu, MessageCircleQuestion, Newspaper, PlayCircle, Settings, Shield, Star, Trophy, Users, X,
+  ChevronDown, ChevronRight, Compass, CreditCard, Home, LayoutDashboard, LogOut, Medal, Menu, MessageCircleQuestion, Newspaper, PlayCircle, Settings, Shield, ShieldCheck, Sparkles, Star, Trophy, Users, X,
 } from "lucide-react"
+import { usePreferences } from "@/components/account/prefs-provider"
+import { CookiePreferencesButton } from "@/components/consent/consent-ui"
 import { Logo } from "@/components/site/brand"
+import { RevealObserver } from "@/components/site/motion"
+import { SportIcon } from "@/components/site/sport-icon"
+import { Meter, Skeleton } from "@/components/site/states"
 import { ThemeToggle } from "@/components/site/theme-toggle"
-import { AppTour } from "@/components/tour/app-tour"
-import { authFetch } from "@/lib/auth-fetch"
-import { PLANS, type PlanId } from "@/lib/billing/plans"
+import { AppTour, startTour } from "@/components/tour/app-tour"
+import { PLANS } from "@/lib/billing/plans"
 import { signOutUser } from "@/lib/firebase-auth"
 import { useAuthState } from "@/lib/hooks/useAuthUser"
 import { localePath } from "@/lib/i18n"
 import { POLICIES } from "@/lib/legal/content"
+import { SPORTS } from "@/lib/sports/types"
 import { useLocale } from "@/lib/use-locale"
-
-const COMMUNITY = process.env.NEXT_PUBLIC_COMMUNITY_ENABLED === "true"
+import { cn } from "@/lib/utils"
+import { AccountProvider, useAccount } from "./account-context"
+import { OfflineBanner, useFocusTrap, usePopover } from "./controls"
+import { BootLoader, NavProgress, useExit } from "./loading"
+import { NotificationBell } from "./notification-bell"
 
 function stripLocale(path: string): string {
   return path.replace(/^\/fr(?=\/|$)/, "") || "/"
 }
 
-interface Usage {
-  remaining: number
-  included: { limit: number }
+const isCurrent = (to: string, path: string) => (to === "/app" ? path === "/app" : path === to || path.startsWith(`${to}/`))
+
+function initials(name: string | null | undefined, email: string | null | undefined): string {
+  const parts = (name || email || "?").trim().split(/[\s@._-]+/).filter(Boolean)
+  return ((parts[0]?.[0] ?? "?") + (parts[1]?.[0] ?? "")).toUpperCase()
 }
 
-function useNav(role: string | null) {
+function useNav() {
   const { t } = useLocale()
+  const { role, community } = useAccount()
   return useMemo(() => {
     const groups = [
       {
@@ -41,18 +52,12 @@ function useNav(role: string | null) {
           { to: "/app/news", label: t.nav.news, icon: Newspaper },
         ],
       },
-      {
-        title: t.dash.follow,
-        items: [
-          { to: "/app/my-teams", label: t.nav.myTeams, icon: Star },
-          { to: "/app/notifications", label: t.dash.notifications, icon: Bell },
-        ],
-      },
+      { title: t.dash.follow, items: [{ to: "/app/my-teams", label: t.nav.myTeams, icon: Star }] },
       {
         title: t.dash.tools,
         items: [
           { to: "/app/assistant", label: t.nav.assistant, icon: MessageCircleQuestion },
-          ...(COMMUNITY ? [{ to: "/app/rooms", label: t.dash.rooms, icon: Users }, { to: "/app/predictions", label: t.dash.predictions, icon: Medal }] : []),
+          ...(community ? [{ to: "/app/rooms", label: t.dash.rooms, icon: Users }, { to: "/app/predictions", label: t.dash.predictions, icon: Medal }] : []),
         ],
       },
       {
@@ -65,62 +70,91 @@ function useNav(role: string | null) {
     ]
     if (role) groups.push({ title: t.dash.staff, items: [{ to: "/app/admin", label: t.dash.admin, icon: Shield }] })
     return groups
-  }, [t, role])
+  }, [t, role, community])
 }
 
-function Sidebar({ path, role, email, plan, usage, onNavigate }: { path: string; role: string | null; email: string | null; plan: PlanId; usage: Usage | null; onNavigate?: () => void }) {
+function Sidebar({ path, onClose }: { path: string; onClose?: () => void }) {
   const { t, href } = useLocale()
-  const router = useRouter()
-  const groups = useNav(role)
-  const used = usage ? Math.max(0, usage.included.limit - usage.remaining) : 0
-  const percent = usage && usage.included.limit > 0 ? Math.min(100, Math.round((used / usage.included.limit) * 100)) : 0
+  const { user, plan, balance, dayPassEnd, loaded } = useAccount()
+  const groups = useNav()
+  const name = user?.displayName ?? null
+  const email = user?.email ?? null
+  const included = balance?.included
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex h-16 items-center px-4"><Logo href={href("/app")} /></div>
-      <nav aria-label={t.nav.primary} className="flex-1 space-y-5 overflow-y-auto px-3 py-2">
+    <div className="fs-side relative flex h-full w-full flex-col overflow-hidden border-r border-[var(--sidebar-line)]">
+      <div className="flex h-16 shrink-0 items-center justify-between px-5">
+        <Logo reversed href={href("/app")} />
+        {onClose && (
+          <button type="button" aria-label={t.dash.closeMenu} onClick={onClose} className="inline-flex size-10 items-center justify-center rounded-lg text-white/80 hover:bg-white/10 hover:text-white">
+            <X aria-hidden className="size-5" />
+          </button>
+        )}
+      </div>
+
+      <nav aria-label={t.nav.primary} className="fs-noscrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-4">
         {groups.map((group) => (
-          <div key={group.title}>
-            <p className="px-3 text-xs font-semibold text-ink-3">{group.title}</p>
-            <ul className="mt-1 space-y-0.5">
-              {group.items.map(({ to, label, icon: Icon }) => {
-                const active = to === "/app" ? path === "/app" : path === to || path.startsWith(`${to}/`)
-                return (
-                  <li key={to}>
-                    <Link
-                      data-tour={to}
-                      href={href(to)}
-                      onClick={onNavigate}
-                      aria-current={active ? "page" : undefined}
-                      className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${active ? "bg-surface-muted text-ink" : "text-ink-2 hover:bg-surface-muted hover:text-ink"}`}
-                    >
-                      <Icon aria-hidden className={`size-[18px] ${active ? "text-hot-text" : ""}`} />
-                      {label}
-                    </Link>
-                  </li>
-                )
-              })}
+          <div key={group.title} className="mt-4 first:mt-1">
+            <p className="fs-side-label px-3 pb-1.5 text-[11px] font-semibold">{group.title}</p>
+            <ul className="space-y-0.5">
+              {group.items.map(({ to, label, icon: Icon }) => (
+                <li key={to}>
+                  <Link data-tour={to} href={href(to)} onClick={onClose} aria-current={isCurrent(to, path) ? "page" : undefined} className="fs-side-link relative flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-[13.5px] font-medium transition-colors duration-150">
+                    <Icon aria-hidden className="size-[17px] shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{label}</span>
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
         ))}
       </nav>
-      <div className="border-t border-line p-3">
-        <div className="rounded-xl bg-surface-muted p-3">
-          <p className="truncate text-sm font-medium text-ink">{email}</p>
-          <p className="mt-0.5 text-xs text-ink-2">{PLANS[plan].name} {t.dash.planLabel}</p>
-          {usage && (
-            <div className="mt-2">
-              <div className="h-1.5 overflow-hidden rounded-full bg-line" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} aria-label={t.dash.requests}>
-                <div className="h-full rounded-full bg-orange" style={{ width: `${percent}%` }} />
+
+      <div className="shrink-0 border-t border-[var(--sidebar-line)] p-3">
+        <div className="fs-side-card rounded-xl p-3.5">
+          <div className="flex items-center gap-2.5">
+            <span aria-hidden className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#1e5bb8] to-[#002961] font-display text-[13px] font-semibold text-white">{initials(name, email)}</span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-semibold text-white">{name ?? email}</p>
+              {loaded ? (
+                <p className="text-[11px] text-[var(--sidebar-ink)]">{PLANS[plan].name} {t.dash.planLabel}{dayPassEnd ? ` · ${t.ui.dayPassShort}` : ""}</p>
+              ) : (
+                <Skeleton className="mt-1 h-3 w-16 opacity-20" />
+              )}
+            </div>
+          </div>
+          {included && (
+            <div className="mt-3">
+              <div className="flex justify-between gap-2 text-[11px] text-[var(--sidebar-ink)]">
+                <span className="min-w-0 truncate">{t.ui.assistantAllowance}</span>
+                <span className="tabular text-white">{included.used}/{included.limit}</span>
               </div>
-              <p className="mt-1 text-xs text-ink-2">{usage.remaining} {t.dash.requests}</p>
+              <Meter value={included.used} max={included.limit} label={t.ui.assistantAllowance} tone="inverse" className="mt-1" />
             </div>
           )}
-          {plan === "free" && <Link href={href("/pricing")} onClick={onNavigate} className="mt-2 inline-block text-xs font-semibold text-hot-text underline-offset-2 hover:underline">{t.dash.upgrade}</Link>}
+          {loaded && plan === "free" && (
+            <Link href={href("/app/billing#plans")} onClick={onClose} className="mt-3 inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-orange px-3 text-[13px] font-semibold text-hot-on transition-colors hover:bg-orange-hover">
+              <Sparkles aria-hidden className="size-3.5" /> {t.dash.upgrade}
+            </Link>
+          )}
         </div>
-        <button type="button" onClick={() => signOutUser().then(() => router.push(href("/")))} className="mt-2 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-ink-2 hover:bg-surface-muted hover:text-ink">
-          <LogOut aria-hidden className="size-[18px]" /> {t.dash.signOut}
-        </button>
+      </div>
+    </div>
+  )
+}
+
+function Drawer({ open, onClose, path }: { open: boolean; onClose(): void; path: string }) {
+  const { t } = useLocale()
+  const mounted = useExit(open, 220)
+  const panel = useRef<HTMLDivElement>(null)
+  useFocusTrap(panel, open, onClose)
+  if (!mounted) return null
+  const closing = open ? undefined : true
+  return (
+    <div className="fixed inset-0 z-50 lg:hidden print:hidden">
+      <div aria-hidden data-closing={closing} onClick={onClose} className="fs-scrim absolute inset-0" />
+      <div ref={panel} role="dialog" aria-modal="true" aria-label={t.nav.menu} data-closing={closing} className="fs-drawer absolute inset-y-0 left-0 flex w-[min(86vw,var(--sidebar-w))] shadow-[var(--shadow-lg)]">
+        <Sidebar path={path} onClose={onClose} />
       </div>
     </div>
   )
@@ -139,10 +173,11 @@ function MobileTabs({ path }: { path: string }) {
     <nav aria-label={t.nav.menu} className="fs-glass fixed inset-x-0 bottom-0 z-30 border-t border-line pb-[env(safe-area-inset-bottom)] lg:hidden print:hidden">
       <ul className="grid grid-cols-5">
         {tabs.map(([to, label, Icon]) => {
-          const active = to === "/app" ? path === "/app" : path.startsWith(to)
+          const active = isCurrent(to, path)
           return (
             <li key={to}>
-              <Link data-tour={to} href={href(to)} aria-current={active ? "page" : undefined} className={`flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${active ? "text-hot-text" : "text-ink-2"}`}>
+              <Link data-tour={to} href={href(to)} aria-current={active ? "page" : undefined} className={cn("relative flex min-h-14 flex-col items-center justify-center gap-0.5 px-0.5 text-center text-[11px] font-medium leading-tight transition-colors", active ? "text-hot-text" : "text-ink-2")}>
+                <span aria-hidden className={cn("absolute inset-x-5 top-0 h-0.5 rounded-b-full bg-orange transition-transform duration-300 [transition-timing-function:var(--ease)]", active ? "scale-x-100" : "scale-x-0")} />
                 <Icon aria-hidden className="size-5" />
                 {label}
               </Link>
@@ -154,87 +189,202 @@ function MobileTabs({ path }: { path: string }) {
   )
 }
 
-/** Every product route needs a signed-in, verified account. Plans are enforced by the API. */
-export function AppShell({ children }: { children: React.ReactNode }) {
-  const { locale, t, href } = useLocale()
-  const router = useRouter()
-  const full = usePathname() ?? "/app"
-  const path = stripLocale(full)
-  const { user, ready } = useAuthState()
-  const [drawer, setDrawer] = useState(false)
-  const [plan, setPlan] = useState<PlanId>("free")
-  const [usage, setUsage] = useState<Usage | null>(null)
-  const [role, setRole] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!ready) return
-    if (!user) router.replace(href(`/signin?next=${encodeURIComponent(path)}`))
-    else if (!user.emailVerified) router.replace(href("/verify-email"))
-  }, [ready, user, router, href, path])
-
-  useEffect(() => {
-    if (!user?.emailVerified) return
-    authFetch("/api/billing/status").then((r) => (r.ok ? r.json() : null)).then((d) => d?.plan && setPlan(d.plan)).catch(() => undefined)
-    authFetch("/api/assistant").then((r) => (r.ok ? r.json() : null)).then((d) => d?.balance && setUsage(d.balance)).catch(() => undefined)
-    user.getIdTokenResult().then((r) => setRole(typeof r.claims.role === "string" ? r.claims.role : null)).catch(() => undefined)
-  }, [user])
-
-  useEffect(() => setDrawer(false), [path])
-
-  if (!ready || !user?.emailVerified) {
-    return (
-      <div className="grid min-h-dvh place-items-center" role="status">
-        <p className="text-sm text-ink-2">{t.dash.loading}</p>
-      </div>
-    )
-  }
-
-  const shared = { path, role, email: user.email, plan, usage }
-
+function Crumbs({ path }: { path: string }) {
+  const { t, href } = useLocale()
+  const roots: [string, string][] = [
+    ["/app/scores", t.nav.scores], ["/app/watch", t.nav.watch], ["/app/news", t.nav.news], ["/app/my-teams", t.nav.myTeams], ["/app/notifications", t.dash.notifications],
+    ["/app/assistant", t.nav.assistant], ["/app/rooms", t.dash.rooms], ["/app/predictions", t.dash.predictions], ["/app/billing", t.dash.billing], ["/app/settings", t.dash.settings], ["/app/admin", t.dash.admin],
+  ]
+  const details: [RegExp, string, string, string][] = [
+    [/^\/app\/match\//, "/app/scores", t.nav.scores, t.ui.matchCenter],
+    [/^\/app\/team\//, "/app/scores", t.nav.scores, t.ui.teamPage],
+    [/^\/app\/standings\//, "/app/scores", t.nav.scores, t.standings.title],
+    [/^\/app\/news\/.+/, "/app/news", t.nav.news, t.reports.label],
+    [/^\/app\/settings\/security/, "/app/settings", t.dash.settings, t.security.title],
+    [/^\/app\/rooms\/join/, "/app/rooms", t.dash.rooms, t.community.join],
+  ]
+  const detail = details.find(([pattern]) => pattern.test(path))
+  const current = detail?.[3] ?? roots.find(([to]) => path === to)?.[1] ?? t.dash.dashboard
   return (
-    <div className="min-h-dvh lg:pl-64">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-line bg-surface lg:block print:hidden">
-        <Sidebar {...shared} />
-      </aside>
+    <nav aria-label={t.ui.breadcrumb} className="hidden min-w-0 lg:block">
+      <ol className="flex items-center gap-1.5 text-sm">
+        {detail && (
+          <li className="flex items-center gap-1.5">
+            <Link href={href(detail[1])} className="text-ink-2 hover:text-ink">{detail[2]}</Link>
+            <ChevronRight aria-hidden className="size-3.5 text-ink-3" />
+          </li>
+        )}
+        <li aria-current="page" className="truncate font-display font-semibold text-ink">{current}</li>
+      </ol>
+    </nav>
+  )
+}
 
-      {drawer && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <button type="button" aria-label={t.dash.closeMenu} onClick={() => setDrawer(false)} className="absolute inset-0 bg-[#001a3f]/40" />
-          <aside className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-surface shadow-[var(--shadow-lg)]">
-            <button type="button" aria-label={t.dash.closeMenu} onClick={() => setDrawer(false)} className="absolute right-2 top-3 inline-flex size-10 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-muted">
-              <X aria-hidden className="size-5" />
-            </button>
-            <Sidebar {...shared} onNavigate={() => setDrawer(false)} />
-          </aside>
+function SportSwitcher() {
+  const { locale, t, href } = useLocale()
+  const params = useSearchParams()
+  const { open, setOpen, box, trigger } = usePopover()
+  const current = SPORTS.find((sport) => sport.id === params?.get("sport"))
+  const item = "flex min-h-10 items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-ink-2 hover:bg-surface-muted hover:text-ink"
+  return (
+    <div ref={box} className="relative hidden xl:block">
+      <button ref={trigger} type="button" aria-haspopup="true" aria-expanded={open} onClick={() => setOpen(!open)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-[13px] font-semibold text-ink-2 transition-colors hover:border-line-strong hover:text-ink">
+        {current && <SportIcon id={current.id} className="size-4" />}
+        {current ? current.name[locale] : t.scores.allSports}
+        <ChevronDown aria-hidden className={cn("size-3.5 transition-transform duration-200", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="fs-pop fs-noscrollbar absolute right-0 top-full z-40 mt-2 max-h-[70vh] w-60 overflow-y-auto rounded-xl border border-line bg-surface-raised p-1.5 shadow-[var(--shadow-lg)]">
+          <Link href={href("/app/scores")} onClick={() => setOpen(false)} className={item}>{t.scores.allSports}</Link>
+          {SPORTS.filter((sport) => sport.enabled).map((sport) => (
+            <Link key={sport.id} href={href(`/app/scores?sport=${sport.id}`)} onClick={() => setOpen(false)} aria-current={current?.id === sport.id ? "true" : undefined} className={item}>
+              <SportIcon id={sport.id} className="size-4 shrink-0" />{sport.name[locale]}
+            </Link>
+          ))}
         </div>
       )}
+    </div>
+  )
+}
 
-      <header className="fs-glass sticky top-0 z-20 flex h-16 items-center justify-between gap-2 border-b border-line px-4 sm:px-6 print:hidden">
-        <div className="flex items-center gap-2">
-          <button type="button" aria-label={t.dash.openMenu} aria-expanded={drawer} onClick={() => setDrawer(true)} className="inline-flex size-10 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-muted lg:hidden">
+function LanguageSwitch({ path }: { path: string }) {
+  const { locale, t } = useLocale()
+  const params = useSearchParams()
+  const { signedIn, update } = usePreferences()
+  const other = locale === "en" ? "fr" : "en"
+  const query = params?.toString()
+  return (
+    <Link
+      href={`${localePath(other, path)}${query ? `?${query}` : ""}`}
+      hrefLang={other}
+      aria-label={t.nav.language}
+      title={t.nav.language}
+      onClick={() => { if (signedIn) void update({ locale: other }) }}
+      className="inline-flex h-10 items-center rounded-lg px-2 text-[13px] font-semibold uppercase text-ink-2 transition-colors hover:bg-surface-muted hover:text-ink"
+    >
+      {other}
+    </Link>
+  )
+}
+
+function UserMenu() {
+  const { t, href } = useLocale()
+  const router = useRouter()
+  const { user, plan } = useAccount()
+  const { open, setOpen, box, trigger } = usePopover()
+  const name = user?.displayName ?? null
+  const email = user?.email ?? null
+  const item = "flex min-h-10 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-ink-2 transition-colors hover:bg-surface-muted hover:text-ink"
+  const close = () => setOpen(false)
+
+  useEffect(() => {
+    if (open) box.current?.querySelector<HTMLElement>("[data-menu] a")?.focus()
+  }, [open, box])
+
+  return (
+    <div ref={box} className="relative">
+      <button ref={trigger} type="button" aria-haspopup="true" aria-expanded={open} aria-label={t.ui.accountMenu} onClick={() => setOpen(!open)} className="flex items-center gap-1 rounded-full p-0.5 transition-colors hover:bg-surface-muted sm:pr-1.5">
+        <span aria-hidden className="inline-flex size-9 items-center justify-center rounded-full bg-gradient-to-br from-[#002961] to-[#1e5bb8] font-display text-[13px] font-semibold text-white ring-2 ring-surface">{initials(name, email)}</span>
+        <ChevronDown aria-hidden className={cn("hidden size-3.5 text-ink-3 transition-transform duration-200 sm:block", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div data-menu className="fs-pop absolute right-0 top-full z-40 mt-2 w-72 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-line bg-surface-raised p-1.5 shadow-[var(--shadow-lg)]">
+          <div className="px-3 pb-3 pt-2">
+            <p className="truncate text-sm font-semibold text-ink">{name ?? t.nav.account}</p>
+            <p className="truncate text-xs text-ink-2">{email}</p>
+            <p className="mt-1 text-xs font-medium text-ink-2">{PLANS[plan].name} {t.dash.planLabel}</p>
+          </div>
+          <div className="border-t border-line py-1.5">
+            <Link href={href("/app/settings")} onClick={close} className={item}><Settings aria-hidden className="size-4" />{t.dash.settings}</Link>
+            <Link href={href("/app/settings/security")} onClick={close} className={item}><ShieldCheck aria-hidden className="size-4" />{t.security.title}</Link>
+            <Link href={href("/app/billing")} onClick={close} className={item}><CreditCard aria-hidden className="size-4" />{t.dash.billing}</Link>
+            <button type="button" onClick={() => { close(); startTour() }} className={item}><Compass aria-hidden className="size-4" />{t.tour.replay}</button>
+            <CookiePreferencesButton className={item} />
+          </div>
+          <div className="border-t border-line pt-1.5">
+            <button type="button" onClick={() => signOutUser().then(() => router.push(href("/")))} className={item}><LogOut aria-hidden className="size-4" />{t.dash.signOut}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TopBar({ path, drawer, onMenu }: { path: string; drawer: boolean; onMenu(): void }) {
+  const { t, href } = useLocale()
+  return (
+    <header className="fs-glass sticky top-0 z-20 border-b border-line print:hidden">
+      <div className="mx-auto flex h-16 w-full max-w-[1360px] items-center justify-between gap-2 px-4 sm:px-6 lg:px-10">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <button type="button" data-tour="menu" aria-label={t.dash.openMenu} aria-expanded={drawer} onClick={onMenu} className="-ml-2 inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-muted lg:hidden">
             <Menu aria-hidden className="size-5" />
           </button>
           <span className="lg:hidden"><Logo href={href("/app")} /></span>
+          <Crumbs path={path} />
         </div>
-        <div className="flex items-center gap-1">
-          <Link href={localePath(locale === "en" ? "fr" : "en", path)} hrefLang={locale === "en" ? "fr" : "en"} className="rounded-md px-2 py-2 text-sm font-medium text-ink-2 hover:text-ink">{t.nav.language}</Link>
+        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+          <Suspense fallback={null}>
+            <SportSwitcher />
+            <LanguageSwitch path={path} />
+          </Suspense>
           <ThemeToggle />
-          <Link href={href("/app/notifications")} aria-label={t.dash.notifications} className="inline-flex size-10 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-muted hover:text-ink">
-            <Bell aria-hidden className="size-[18px]" />
-          </Link>
+          <NotificationBell />
+          <UserMenu />
         </div>
-      </header>
+      </div>
+    </header>
+  )
+}
 
-      <div id="main-area" className="pb-20 lg:pb-8">{children}</div>
-
-      <footer className="hidden px-6 pb-6 text-xs text-ink-3 lg:block print:hidden">
-        <ul className="flex flex-wrap gap-x-4 gap-y-1">
-          {POLICIES.map((policy) => <li key={policy.slug}><Link className="hover:text-ink" href={href(`/${policy.slug}`)}>{policy.label}</Link></li>)}
-        </ul>
-      </footer>
-
+function Frame({ path, children }: { path: string; children: React.ReactNode }) {
+  const { href } = useLocale()
+  const [drawer, setDrawer] = useState(false)
+  useEffect(() => setDrawer(false), [path])
+  return (
+    <div className="min-h-dvh bg-bg lg:pl-[var(--sidebar-w)]">
+      <NavProgress />
+      <RevealObserver />
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[var(--sidebar-w)] lg:flex print:hidden"><Sidebar path={path} /></aside>
+      <Drawer open={drawer} onClose={() => setDrawer(false)} path={path} />
+      <div className="flex min-h-dvh min-w-0 flex-col">
+        <TopBar path={path} drawer={drawer} onMenu={() => setDrawer(true)} />
+        <OfflineBanner />
+        <div className="flex-1 pb-20 lg:pb-4">{children}</div>
+        <footer className="hidden px-10 pb-6 text-xs text-ink-3 lg:block print:hidden">
+          <ul className="mx-auto flex max-w-[1280px] flex-wrap gap-x-4 gap-y-1">
+            {POLICIES.map((policy) => <li key={policy.slug}><Link className="hover:text-ink" href={href(`/${policy.slug}`)}>{policy.label}</Link></li>)}
+          </ul>
+        </footer>
+      </div>
       <MobileTabs path={path} />
       <AppTour />
     </div>
+  )
+}
+
+/** Every product route needs a signed-in, verified account. Plans are enforced by the API. */
+export function AppShell({ children, community }: { children: React.ReactNode; community: boolean }) {
+  const { t, href } = useLocale()
+  const router = useRouter()
+  const path = stripLocale(usePathname() ?? "/app")
+  const { user, ready } = useAuthState()
+  const { ready: prefsReady } = usePreferences()
+  const gateOpen = ready && Boolean(user?.emailVerified)
+  const workspaceReady = gateOpen && prefsReady
+  const showBoot = useExit(!workspaceReady, 340)
+
+  useEffect(() => {
+    if (!ready) return
+    if (!user) router.replace(href(`/signin?next=${encodeURIComponent(path + window.location.search)}`))
+    else if (!user.emailVerified) router.replace(href("/verify-email"))
+  }, [ready, user, router, href, path])
+
+  if (!gateOpen || !user) return <BootLoader status={t.dash.loading} />
+
+  return (
+    <AccountProvider user={user} community={community}>
+      {showBoot && <BootLoader status={t.dash.loading} leaving={workspaceReady} />}
+      <Frame path={path}>{children}</Frame>
+    </AccountProvider>
   )
 }

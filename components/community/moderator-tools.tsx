@@ -1,12 +1,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { btn } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { useLocale } from "@/lib/use-locale"
 
-const FIELD = "mt-1 w-full rounded-md border border-line bg-surface px-3 py-2 text-ink"
-const BUTTON = "rounded-md border border-line px-3 py-1.5 text-sm font-semibold text-ink hover:bg-surface-muted"
+const FIELD = "fs-input mt-1 px-3 py-2 text-sm"
+const BUTTON = btn("outline", "sm")
 
 /** Shown to staff only for convenience. The moderation route checks the role and second factor. */
 export function ModeratorTools({ matchId, hasNotice, pollOpen, onChange }: { matchId: string; hasNotice: boolean; pollOpen: boolean; onChange(): void }) {
@@ -40,7 +41,7 @@ export function ModeratorTools({ matchId, hasNotice, pollOpen, onChange }: { mat
   const lines = options.split("\n").map((line) => line.trim()).filter(Boolean)
 
   return (
-    <details className="mb-3 rounded-lg border border-line p-3 text-sm">
+    <details className="mb-3 rounded-xl border border-line p-3 text-sm">
       <summary className="cursor-pointer font-semibold text-ink">{t.community.modTools}</summary>
       <div className="mt-3 space-y-3">
         <label className="block font-medium text-ink">{t.admin.reason}<input className={FIELD} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} /></label>

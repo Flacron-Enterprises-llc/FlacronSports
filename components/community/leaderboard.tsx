@@ -1,6 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { ErrorNotice } from "@/components/dashboard/controls"
+import { Skeleton } from "@/components/site/states"
 import { useLocale } from "@/lib/use-locale"
 
 interface Entry {
@@ -12,21 +14,32 @@ interface Entry {
 export function Leaderboard() {
   const { t } = useLocale()
   const [entries, setEntries] = useState<Entry[] | null>(null)
+  const [failed, setFailed] = useState(false)
 
-  useEffect(() => {
-    fetch("/api/predictions/leaderboard")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => setEntries(data?.entries ?? []))
-      .catch(() => setEntries([]))
+  const load = useCallback(async () => {
+    setFailed(false)
+    const response = await fetch("/api/predictions/leaderboard").catch(() => null)
+    if (!response?.ok) return setFailed(true)
+    setEntries(((await response.json()) as { entries: Entry[] }).entries ?? [])
   }, [])
 
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  if (failed) return <ErrorNotice onRetry={load}>{t.ui.leaderboardFailed}</ErrorNotice>
+  if (!entries) return <div role="status" aria-label={t.ui.loading} className="space-y-2"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-5/6" /><Skeleton className="h-4 w-2/3" /></div>
+  if (entries.length === 0) return <p className="text-sm text-ink-2">{t.community.noPoints}</p>
+
   return (
-    <div>
-      <h3 className="font-semibold text-ink">{t.community.leaderboard}</h3>
-      {entries?.length === 0 && <p className="mt-1 text-sm text-ink-2">{t.community.noPoints}</p>}
-      <ol className="mt-2 space-y-1 text-sm text-ink-2">
-        {entries?.map((entry, index) => <li key={index}>{entry.rank}. {entry.displayName} · {entry.points}</li>)}
-      </ol>
-    </div>
+    <ol className="divide-y divide-line text-sm">
+      {entries.map((entry, index) => (
+        <li key={index} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
+          <span className="tabular w-6 shrink-0 text-right font-semibold text-ink-2">{entry.rank}</span>
+          <span className="min-w-0 flex-1 truncate font-medium text-ink">{entry.displayName}</span>
+          <span className="tabular shrink-0 font-semibold text-ink">{entry.points}</span>
+        </li>
+      ))}
+    </ol>
   )
 }

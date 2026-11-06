@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { Meter } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import { useLocale } from "@/lib/use-locale"
 
@@ -35,18 +36,19 @@ export function MatchPoll({
   }
 
   return (
-    <section aria-label={t.community.pollTitle} className="mb-3 rounded-lg border border-line p-3 text-sm">
-      <p className="text-xs font-semibold text-ink-3">{t.community.pollTitle}</p>
+    <section aria-label={t.community.pollTitle} className="mb-3 rounded-xl border border-line p-3 text-sm">
+      <p className="text-xs font-semibold text-ink-2">{t.community.pollTitle}</p>
       <p className="mt-1 font-semibold text-ink">{poll.question}</p>
       <ul className="mt-2 space-y-1.5">
         {poll.options.map((option, index) => (
-          <li key={option.text}>
+          <li key={option.text} className="fs-panel-in">
             {showResults ? (
-              <p className={poll.myVote === index ? "font-semibold text-ink" : "text-ink-2"}>
-                {option.text} · {total ? Math.round((option.votes / total) * 100) : 0}%
-              </p>
+              <div className={poll.myVote === index ? "font-semibold text-ink" : "text-ink-2"}>
+                <div className="flex justify-between gap-3"><span className="min-w-0">{option.text}</span><span className="tabular shrink-0">{total ? Math.round((option.votes / total) * 100) : 0}%</span></div>
+                <Meter value={option.votes} max={Math.max(total, 1)} label={option.text} className="mt-1" />
+              </div>
             ) : (
-              <button type="button" onClick={() => vote(index)} className="w-full rounded-md border border-line px-3 py-1.5 text-left font-medium text-ink hover:bg-surface-muted">{option.text}</button>
+              <button type="button" onClick={() => vote(index)} className="min-h-9 w-full rounded-lg border border-line px-3 py-1.5 text-left font-medium text-ink transition-colors hover:bg-surface-muted">{option.text}</button>
             )}
           </li>
         ))}

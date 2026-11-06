@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
-import { EmptyState, PageHeader } from "@/components/site/states"
+import { Shield } from "lucide-react"
+import { AppPage, EmptyState, PageHeader } from "@/components/site/states"
 import { EventCard, FeedNotice } from "@/components/sports/event-card"
 import { FavoriteStar } from "@/components/sports/parts"
 import { pageContext } from "@/lib/page-context"
@@ -37,23 +38,22 @@ export default async function TeamPage({ params, searchParams }: Props) {
 
   const list = (heading: string, events: SportEvent[]) =>
     events.length > 0 && (
-      <section className="mt-6">
-        <h2 className="text-lg font-semibold text-ink">{heading}</h2>
-        <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <section aria-label={heading} className="mb-7">
+        <h2 className="text-[17px] font-semibold text-ink">{heading}</h2>
+        <div className="fs-stagger mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {events.map((event) => <EventCard key={event.id} event={event} t={t} href={href} timeMode="datetime" />)}
         </div>
       </section>
     )
 
   return (
-    <main id="main" className="mx-auto max-w-7xl px-4 sm:px-6">
-      <PageHeader title={displayName} lead={t.team.lead} />
-      <FavoriteStar team={displayName} />
+    <AppPage>
+      <PageHeader title={displayName} lead={t.team.lead} icon={<Shield aria-hidden />} actions={<span className="rounded-lg border border-line bg-surface"><FavoriteStar team={displayName} /></span>} />
       {list(t.team.upcoming, upcoming)}
       {list(t.team.recent, recent)}
-      {feed.state !== "unavailable" && !team && <EmptyState title={t.team.notFound} body={t.team.notFoundBody} action={{ href: href("/app/scores"), label: t.team.browse }} />}
-      {feed.state !== "unavailable" && team && upcoming.length + recent.length === 0 && <EmptyState title={t.team.noFixtures} body={t.team.noFixturesBody} action={{ href: href("/app/scores"), label: t.team.browse }} />}
+      {feed.state !== "unavailable" && !team && <EmptyState icon={<Shield aria-hidden />} title={t.team.notFound} body={t.team.notFoundBody} action={{ href: href(`/app/scores?q=${encodeURIComponent(name)}`), label: t.team.browse }} />}
+      {feed.state !== "unavailable" && team && upcoming.length + recent.length === 0 && <EmptyState icon={<Shield aria-hidden />} title={t.team.noFixtures} body={t.team.noFixturesBody} action={{ href: href("/app/scores"), label: t.team.browse }} />}
       <div className="mt-4"><FeedNotice feed={{ ...feed, events: [] }} t={t} /></div>
-    </main>
+    </AppPage>
   )
 }

@@ -1,3 +1,5 @@
+import React from "react"
+
 import type { SportId } from "@/lib/sports/types"
 
 const GLYPHS: Record<SportId, React.ReactNode> = {

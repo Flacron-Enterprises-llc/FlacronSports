@@ -4,12 +4,13 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Check } from "lucide-react"
 import { authFetch } from "@/lib/auth-fetch"
-import { startCheckout } from "@/lib/billing-client"
+import { billingMessage, startCheckout } from "@/lib/billing-client"
 import { PLANS, type BillingInterval, type PaidPlanId, type PlanId } from "@/lib/billing/plans"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { useLocale } from "@/lib/use-locale"
 
-export function PlanCards() {
+/** With `onPick` the card changes an existing subscription instead of opening checkout. */
+export function PlanCards({ onPick, currentInterval }: { onPick?: (plan: PaidPlanId, interval: BillingInterval) => void; currentInterval?: BillingInterval | null }) {
   const { locale, t, href } = useLocale()
   const user = useAuthUser()
   const [interval, setInterval] = useState<BillingInterval>("monthly")
@@ -33,7 +34,7 @@ export function PlanCards() {
     try {
       await startCheckout({ plan, interval })
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t.account.failed)
+      setError(billingMessage((failure as { code?: string }).code, t))
       setPending(null)
     }
   }
@@ -91,9 +92,11 @@ export function PlanCards() {
                   </li>
                 ))}
               </ul>
-              {current === id ? (
+              {current === id && (!onPick || !currentInterval || currentInterval === interval) ? (
                 <p className="rounded-md border border-line py-2 text-center text-sm font-semibold text-ink-2">{t.pricing.current}</p>
-              ) : id === "free" ? (
+              ) : id !== "free" && onPick ? (
+                <button type="button" onClick={() => onPick(id, interval)} className="rounded-md bg-orange py-2 text-sm font-semibold text-[#0a1a33] hover:bg-orange-hover">{`${t.pricing.choose} ${plan.name}`}</button>
+              ) : id === "free" && onPick ? null : id === "free" ? (
                 <Link href={href(user ? "/app/billing" : "/signup")} className="rounded-md border border-line py-2 text-center text-sm font-semibold text-ink hover:bg-surface-muted">{t.pricing.free}</Link>
               ) : user ? (
                 <button type="button" disabled={pending !== null} onClick={() => buy(id)} className="rounded-md bg-orange py-2 text-sm font-semibold text-[#0a1a33] hover:bg-orange-hover disabled:opacity-60">

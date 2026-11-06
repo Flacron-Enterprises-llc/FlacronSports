@@ -6,7 +6,7 @@ import { ConsentProvider } from "@/components/consent/consent-provider"
 import { CookieConsent } from "@/components/consent/consent-ui"
 import { PreferencesProvider } from "@/components/account/prefs-provider"
 import { ServiceWorker } from "@/components/site/service-worker"
-import { isLocale, LOCALES } from "@/lib/i18n"
+import { getDictionary, isLocale, LOCALES } from "@/lib/i18n"
 import "../globals.css"
 
 const sora = localFont({ src: "../../fonts/Sora-Variable.ttf", variable: "--font-sora", weight: "100 800", display: "swap" })
@@ -48,7 +48,7 @@ export default async function RootLayout({ children, params }: { children: React
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body className="min-h-dvh antialiased">
-        <a href="#main" className="skip-link">Skip to content</a>
+        <a href="#main" className="skip-link">{getDictionary(locale).ui.skip}</a>
         <ConsentProvider>
           <PreferencesProvider>{children}</PreferencesProvider>
           <CookieConsent />

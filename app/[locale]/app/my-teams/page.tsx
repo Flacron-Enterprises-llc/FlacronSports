@@ -1,16 +1,19 @@
-import type { Metadata } from "next"
+import { Star } from "lucide-react"
 import { MyTeams } from "@/components/account/my-teams"
-import { PageHeader } from "@/components/site/states"
-import { pageContext, type LocaleParams } from "@/lib/page-context"
+import { AppPage, PageHeader } from "@/components/site/states"
+import { pageContext, titled, type LocaleParams } from "@/lib/page-context"
+import { getEvents } from "@/lib/sports/service"
 
-export const metadata: Metadata = { title: "My Teams", robots: { index: false } }
+export const dynamic = "force-dynamic"
+export const generateMetadata = titled((t) => t.myTeams.title, { robots: { index: false } })
 
 export default async function MyTeamsPage({ params }: LocaleParams) {
   const { t } = await pageContext(params)
+  const feed = await getEvents()
   return (
-    <main id="main" className="mx-auto max-w-3xl px-4 sm:px-6">
-      <PageHeader title={t.myTeams.title} lead={t.myTeams.lead} />
-      <MyTeams />
-    </main>
+    <AppPage width="md">
+      <PageHeader title={t.myTeams.title} lead={t.myTeams.lead} icon={<Star aria-hidden />} />
+      <MyTeams feed={feed} />
+    </AppPage>
   )
 }

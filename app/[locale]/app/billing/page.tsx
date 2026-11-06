@@ -1,17 +1,17 @@
 import { Suspense } from "react"
-import type { Metadata } from "next"
+import { CreditCard } from "lucide-react"
 import { AccountPanel } from "@/components/account/account-panel"
-import { PageHeader } from "@/components/site/states"
-import { pageContext, type LocaleParams } from "@/lib/page-context"
+import { AppPage, PageHeader } from "@/components/site/states"
+import { pageContext, titled, type LocaleParams } from "@/lib/page-context"
 
-export const metadata: Metadata = { title: "Account", robots: { index: false } }
+export const generateMetadata = titled((t) => t.dash.billing, { robots: { index: false } })
 
-export default async function DashboardPage({ params }: LocaleParams) {
+export default async function Page({ params }: LocaleParams) {
   const { t } = await pageContext(params)
   return (
-    <main id="main" className="mx-auto max-w-3xl px-4 sm:px-6">
-      <PageHeader title={t.account.title} />
+    <AppPage width="md">
+      <PageHeader title={t.dash.billing} lead={t.ui.billingLead} icon={<CreditCard aria-hidden />} />
       <Suspense><AccountPanel /></Suspense>
-    </main>
+    </AppPage>
   )
 }

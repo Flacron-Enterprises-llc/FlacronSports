@@ -12,6 +12,7 @@ const BACKEND_TIMEOUT_MS = 20_000
 const PROVIDER_GAP_MS = 3000
 const RATE_LIMIT_COOLDOWN_MS = 60_000
 const VISITOR_MAX_WAIT_MS = 6000
+const VISITOR_BUDGET_MS = 8000
 const SNAPSHOT_FRESH_MS = 45 * 60_000
 // Other days refresh in rotation, so their snapshots are older between visits.
 const CALENDAR_FRESH_MS = 2 * 3_600_000
@@ -94,7 +95,7 @@ async function writeSnapshot(path: string, data: unknown, at: number): Promise<v
  * provider, so traffic cannot trip its rate limit. On any failure the last good
  * answer is kept and reported as stale, including after a restart.
  */
-async function load<T>(path: string, refresh = false, snapshotFreshMs = SNAPSHOT_FRESH_MS): Promise<{ data: T; stale: boolean }> {
+async function load<T>(path: string, refresh = false, snapshotFreshMs = SNAPSHOT_FRESH_MS, storedOnly = false): Promise<{ data: T; stale: boolean }> {
   const cached = memory.get(path)
   const now = Date.now()
   if (!refresh && cached && now - cached.at < FRESH_MS) return { data: cached.data as T, stale: false }
@@ -104,6 +105,9 @@ async function load<T>(path: string, refresh = false, snapshotFreshMs = SNAPSHOT
     memory.set(path, { data: snapshot.data, at: now })
     return { data: snapshot.data as T, stale: false }
   }
+  // An older answer now beats a slow one. The scheduled job is what brings it up to date.
+  if (snapshot && now - snapshot.at < STALE_LIMIT_MS) return { data: snapshot.data as T, stale: true }
+  if (storedOnly) throw new ApiError(503, "provider_unavailable", "Sports data is temporarily unavailable")
 
   try {
     const data = await request<T>(path, refresh)
@@ -132,10 +136,10 @@ async function fetchJson<T>(path: string): Promise<T> {
   return (await load<T>(path)).data
 }
 
-async function eventsForSport(sport: SportDefinition, date: string, refresh = false): Promise<{ events: SportEvent[]; stale: boolean }> {
+async function eventsForSport(sport: SportDefinition, date: string, refresh = false, storedOnly = false): Promise<{ events: SportEvent[]; stale: boolean }> {
   const query = new URLSearchParams({ d: date, s: sport.providerKey as string })
   const nearToday = Math.abs(Date.parse(date) - Date.parse(utcDate())) <= 86_400_000
-  const { data, stale } = await load<{ events: RawEvent[] | null }>(`eventsday.php?${query}`, refresh, nearToday ? SNAPSHOT_FRESH_MS : CALENDAR_FRESH_MS)
+  const { data, stale } = await load<{ events: RawEvent[] | null }>(`eventsday.php?${query}`, refresh, nearToday ? SNAPSHOT_FRESH_MS : CALENDAR_FRESH_MS, storedOnly)
   // The sport is rechecked per record, so a stray row can never be filed under the wrong sport.
   return { events: rowsToEvents(data.events, sport), stale }
 }
@@ -227,16 +231,20 @@ export async function fromBackend<T>(path: string): Promise<T | null> {
 export async function getEvents(options: { date?: string; sport?: SportId; refresh?: boolean } = {}): Promise<EventFeed> {
   const date = options.date ?? utcDate()
   const query = new URLSearchParams({ date, pageSize: "500", ...(options.sport ? { sport: options.sport } : {}) })
-  const remote = options.refresh ? null : await fromBackend<EventFeed>(`/api/matches?${query}`).catch(() => null)
-  if (remote) return remote
   const sports = enabledSports().filter((sport) => !options.sport || sport.id === options.sport)
   const fetchedAt = new Date().toISOString()
   const base = { source: PROVIDER_NAME, fetchedAt, limited: apiKey().limited }
+  // The frontend never calls the provider itself: its own retry would outlast the page timeout.
+  if (process.env.API_ORIGIN && !options.refresh) {
+    return (await fromBackend<EventFeed>(`/api/matches?${query}`).catch(() => null)) ?? { ...base, state: "unavailable", events: [] }
+  }
 
   // One at a time: every sport at once is what trips the provider's rate limit.
   const succeeded: Awaited<ReturnType<typeof eventsForSport>>[] = []
+  const deadline = Date.now() + VISITOR_BUDGET_MS
   for (const sport of sports) {
-    await eventsForSport(sport, date, options.refresh).then((result) => succeeded.push(result)).catch(() => undefined)
+    const storedOnly = !options.refresh && Date.now() > deadline
+    await eventsForSport(sport, date, options.refresh, storedOnly).then((result) => succeeded.push(result)).catch(() => undefined)
   }
 
   if (sports.length > 0 && succeeded.length === 0) return { ...base, state: "unavailable", events: [] }

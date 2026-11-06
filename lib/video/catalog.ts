@@ -7,7 +7,7 @@ import { evaluateViewing, type ViewingResult, type VideoSource } from "./viewing
  * permission to show it, so anything else is left out and logged for review.
  */
 const APPROVED_CHANNELS = new Set([
-  "nba", "nfl", "nhl", "mlb", "wnba", "mls", "ufc", "pfl", "f1", "formula1", "motogp", "pgatour", "lpga", "atptour", "wta", "icc",
+  "nba", "nfl", "nhl", "mlb", "wnba", "mls", "khl", "nbl", "basketballcl", "espncfb", "ufc", "pfl", "f1", "formula1", "motogp", "pgatour", "lpga", "atptour", "wta", "icc",
   "premierleague", "laliga", "laligaeasports", "bundesliga", "seriea", "ligue1", "uefa", "fifa", "cafonline", "concacaf", "conmebol",
   "tntsportsar", "tntsportsbr", "tntsportsuk", "espnfc", "espn", "skysports", "skysportsfootball", "skysportspremierleague", "beinsports", "dazn", "cbssportsgolazo", "nbcsports",
 ])

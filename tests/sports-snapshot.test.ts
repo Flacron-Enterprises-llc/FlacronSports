@@ -51,10 +51,22 @@ describe("feed snapshots", () => {
     await getEvents({ ...request, refresh: true })
     clearFeedCache()
     vi.setSystemTime(Date.now() + 2 * 3_600_000)
-    vi.stubGlobal("fetch", async () => limited())
+    const fetcher = vi.fn(async () => limited())
+    vi.stubGlobal("fetch", fetcher)
     const feed = await getEvents(request)
     expect(feed.state).toBe("stale")
     expect(feed.events).toHaveLength(1)
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it("the frontend reports the feed as unavailable instead of calling the provider itself", async () => {
+    vi.stubEnv("API_ORIGIN", "https://backend.example")
+    const fetcher = vi.fn(async () => new Response("", { status: 500 }))
+    vi.stubGlobal("fetch", fetcher)
+    const feed = await getEvents(request)
+    vi.unstubAllEnvs()
+    expect(feed.state).toBe("unavailable")
+    expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
   it("refresh goes to the provider even with a fresh snapshot", async () => {

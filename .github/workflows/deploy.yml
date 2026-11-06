@@ -131,6 +131,8 @@ jobs:
     needs: deploy-frontend
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    # Keep this tag equal to the installed @playwright/test version.
+    container: mcr.microsoft.com/playwright:v1.51.1-noble
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -138,7 +140,6 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium webkit
       - run: npx playwright test
         env:
           E2E_BASE_URL: ${{ vars.APP_BASE_URL }}

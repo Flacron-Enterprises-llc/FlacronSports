@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
-import { ApiError, apiErrorResponse, requireVerifiedUser } from "@/lib/api-auth"
+import { ApiError, apiErrorResponse, requireSwitch, requireVerifiedUser } from "@/lib/api-auth"
 import { audit } from "@/lib/audit"
 import { getEntitlementRecord } from "@/lib/billing/firestore-store"
 import { isBillingInterval, isPaidPlan, priceIdFor } from "@/lib/billing/plans"
+import { applyPlanChange } from "@/lib/billing/plan-change"
 import { getStripe } from "@/lib/billing/stripe-client"
 import { rateLimit } from "@/lib/rate-limit"
 
@@ -12,6 +13,7 @@ export const runtime = "nodejs"
 export async function POST(request: Request) {
   try {
     const user = await requireVerifiedUser(request)
+    requireSwitch("FEATURE_PAYMENTS")
     rateLimit(`change-plan:${user.uid}`, 5, 60_000)
     const { plan, interval } = await request.json().catch(() => ({}))
     if (!isPaidPlan(plan) || !isBillingInterval(interval)) throw new ApiError(400, "invalid_plan", "Choose a valid plan")
@@ -25,15 +27,8 @@ export async function POST(request: Request) {
     }
     if (record.plan === plan && record.interval === interval) throw new ApiError(409, "same_plan", "You are already on this plan")
 
-    const stripe = getStripe()
-    const subscription = await stripe.subscriptions.retrieve(record.stripeSubscriptionId)
-    await stripe.subscriptions.update(subscription.id, {
-      items: [{ id: subscription.items.data[0].id, price }],
-      proration_behavior: "create_prorations",
-      cancel_at_period_end: false,
-      metadata: { ...subscription.metadata, plan, interval },
-    })
-    await audit("billing.plan_changed", user.uid, { plan, interval })
+    const { chargedNow } = await applyPlanChange(getStripe(), record, { plan, interval }, price)
+    await audit("billing.plan_changed", user.uid, { plan, interval, chargedNow })
 
     // The webhook writes the entitlement; this response does not grant anything.
     return NextResponse.json({ success: true })

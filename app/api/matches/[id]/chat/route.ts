@@ -5,7 +5,7 @@ import { assertId, cleanMessage, displayNameOf, MATCH_ID } from "@/lib/community
 import { getMatchChatState } from "@/lib/community/engagement"
 import { requireEvent } from "@/lib/community/events"
 import { firestoreDocDb } from "@/lib/doc-db"
-import { clientIp, rateLimit } from "@/lib/rate-limit"
+import { rateLimit } from "@/lib/rate-limit"
 import { requireSubscriber } from "@/lib/billing/require-plan"
 
 export const dynamic = "force-dynamic"
@@ -16,12 +16,13 @@ type Context = { params: Promise<{ id: string }> }
 export async function GET(request: Request, { params }: Context) {
   try {
     requireFeature("COMMUNITY_ENABLED")
-    rateLimit(`chat-read:${clientIp(request)}`, 120, 60_000)
+    const viewer = await requireUser(request)
+    await requireSubscriber(viewer.uid)
+    rateLimit(`chat-read:${viewer.uid}`, 120, 60_000)
     const matchId = assertId((await params).id, MATCH_ID)
-    const viewer = request.headers.has("authorization") ? await requireUser(request) : null
     const cursor = new URL(request.url).searchParams.get("cursor")
     const db = firestoreDocDb()
-    const viewerUid = viewer?.uid ?? null
+    const viewerUid = viewer.uid
     const [list, state] = await Promise.all([listMessages(db, { scope: "match", scopeId: matchId, viewerUid, cursor }), getMatchChatState(db, matchId, viewerUid)])
     return NextResponse.json({ ...list, ...state })
   } catch (error) {

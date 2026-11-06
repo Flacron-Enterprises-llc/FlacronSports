@@ -3,10 +3,11 @@
 
 import { getDictionary, type Dictionary, type Locale } from "@/lib/i18n"
 import { eventTitle, hasResult, resultLine } from "@/lib/sports/presentation"
+import type { Standings } from "@/lib/sports/service"
 import type { EventFeed, SportEvent, SportId } from "@/lib/sports/types"
 import { REFERENCE, REFERENCE_REVIEWED_UTC, type ReferenceEntry } from "./reference"
 
-export type AnswerKind = "fixtures" | "result" | "rule" | "no_data" | "unavailable" | "declined" | "unknown"
+export type AnswerKind = "fixtures" | "result" | "live" | "standings" | "rule" | "no_data" | "unavailable" | "declined" | "unknown"
 
 export interface AnswerItem {
   matchId: string
@@ -17,10 +18,21 @@ export interface AnswerItem {
   score: string | null
 }
 
+/** Rows the source left blank stay null, and are shown as missing rather than zero. */
+export interface AnswerTable {
+  leagueId: string
+  league: string
+  season: string | null
+  rows: { rank: number | null; team: string; played: number | null; points: number | null; asked: boolean }[]
+  /** How many teams the full table holds, when this shows only part of it. */
+  total: number
+}
+
 export interface AssistantAnswer {
   kind: AnswerKind
   text: string
   items: AnswerItem[]
+  table?: AnswerTable
   notes: string[]
   sources: { label: string; url: string | null }[]
   asOfUTC: string | null
@@ -30,27 +42,32 @@ export interface AssistantAnswer {
 
 export interface AssistantSources {
   getEvents(options: { date?: string; sport?: SportId }): Promise<EventFeed>
-  getTeamFixtures(name: string): Promise<{ team: { name: string } | null; recent: SportEvent[]; feed: Omit<EventFeed, "events"> }>
+  getTeamFixtures(name: string): Promise<{ team: { name: string } | null; recent: SportEvent[]; upcoming?: SportEvent[]; feed: Omit<EventFeed, "events"> }>
+  getStandings(leagueId: string): Promise<Standings>
 }
 
 const MAX_ITEMS = 10
 const RESULT_LOOKBACK_DAYS = 7
+const TABLE_ROWS = 10
+const MAX_TABLES_TRIED = 3
 
 // "paris" alone is the city and "cote" is Cote d'Ivoire, so neither can mean betting here.
-const PREDICTION = /\b(predict\w*|forecast\w*|odds|bet|bets|betting|wager|tips?|who(?:'ll| will) win|will \w+(?: \w+){0,3} win|pronosti\w*|paris sportifs?|pari|parier|qui (?:va gagner|gagnera)|va-t-(?:il|elle) gagner)\b/
+const PREDICTION = /\b(predict\w*|forecast\w*|odds|bet|bets|betting|wager|tips?|chances?|favou?rites? to|guarantee\w*|who(?:'ll| will|'s going to| is going to) (?:win|finish|go down)|going to (?:win|lose)|will \w+(?: \w+){0,3} (?:win|lose|finish|qualify)|pronosti\w*|paris sportifs?|pari|parier|garanti\w*|favoris? pour|qui (?:va gagner|gagnera)|va-t-(?:il|elle) (?:gagner|perdre))\b/
+const LIVE = /\b(live|right now|on now|playing now|en direct|en ce moment|actuellement)\b/
 const RESULT = /\b(results?|resultats?|latest|last|recent|score|scores|won|lost|beat|dernier|derniere|derniers|gagne|perdu)\b/
 const FIXTURES = /\b(today|tonight|fixtures?|schedule|schedules|playing|plays|play|games?|matches|match|aujourd'hui|aujourd hui|ce soir|calendrier|programme|joue|jouent|rencontres?|matchs?)\b/
 const RULE = /\b(rules?|regles?|explain|explique\w*|what is|what's|whats|what are|meaning|c'est quoi|qu'est-ce|definition)\b/
-const STANDINGS = /\b(standings?|table|classement)\b/
+const STANDINGS = /\b(standings?|table|league position|classement|classe)\b/
 
 const STOP_WORDS = new Set(
   `a an the of for in on at to is are was were do does did has have had will what whats when where which who how
    me my show tell give please s t get about with from vs and or
    today tonight fixtures fixture schedule schedules playing plays play game games matches match latest last recent
-   result results score scores won lost beat team
+   result results score scores won lost beat team standing standings table position rank live now right currently
    le la les l de du des d un une au aux en et ou a est sont que qui quel quelle quels quelles quand ou comment
    mon ma mes moi donne montre dis pour avec sur
-   aujourd hui ce soir jour calendrier programme joue jouent rencontre rencontres matchs resultat resultats dernier derniere derniers gagne perdu equipe`
+   aujourd hui ce soir jour calendrier programme joue jouent rencontre rencontres matchs resultat resultats dernier derniere derniers gagne perdu equipe
+   classement classe direct moment actuellement`
     .split(/\s+/)
     .filter(Boolean),
 )
@@ -106,6 +123,21 @@ function toItem(event: SportEvent, withScore: boolean, t: Dictionary): AnswerIte
 const fill = (template: string, values: Record<string, string | number>) =>
   template.replace(/\{(\w+)\}/g, (_, key: string) => String(values[key] ?? ""))
 
+/** The top of the table, plus the row asked about when it sits lower down. */
+function tableView(leagueId: string, standings: Standings, asked: (team: string) => boolean): AnswerTable {
+  const top = standings.rows.slice(0, TABLE_ROWS)
+  const extra = standings.rows.slice(TABLE_ROWS).filter((row) => asked(row.team))
+  return {
+    leagueId,
+    league: standings.league ?? "",
+    season: standings.season,
+    total: standings.rows.length,
+    rows: [...top, ...extra].map(({ rank, team, played, points }) => ({ rank, team, played, points, asked: asked(team) })),
+  }
+}
+
+const competitionsIn = (events: SportEvent[]) => events.flatMap((event) => (event.competition.id ? [event.competition.id] : []))
+
 export async function answerQuestion(raw: string, locale: Locale, sources: AssistantSources, now: Date): Promise<AssistantAnswer> {
   const t = getDictionary(locale)
   const copy = t.assistant
@@ -130,7 +162,69 @@ export async function answerQuestion(raw: string, locale: Locale, sources: Assis
     charged: true,
   })
   if (reference && RULE.test(question)) return rule(reference)
-  if (STANDINGS.test(question)) return refused("unknown", copy.noStandings)
+
+  if (STANDINGS.test(question)) {
+    if (topic.length < 3) return refused("unknown", copy.needTeam)
+    const asked = (team: string) => nameMatches(team, topic, question)
+    const team = await sources.getTeamFixtures(topic).catch(() => null)
+    const candidates = team?.team ? competitionsIn([...team.recent, ...(team.upcoming ?? [])]) : []
+    let lastFeed: EventFeed | null = null
+    for (let day = 0; candidates.length === 0 && day < RESULT_LOOKBACK_DAYS; day += 1) {
+      const feed = await sources.getEvents({ date: new Date(now.getTime() - day * 86_400_000).toISOString().slice(0, 10) })
+      if (feed.state === "unavailable") continue
+      lastFeed = feed
+      candidates.push(...competitionsIn(feed.events.filter((event) => fixtureMatches(event, topic, question))))
+    }
+    if (candidates.length === 0) {
+      if (!lastFeed && !team?.team) return refused("unavailable", copy.unavailable)
+      return { ...empty, kind: "no_data", text: copy.noStandingsFound, ...(lastFeed ? feedSource(lastFeed) : {}), charged: true }
+    }
+
+    // A team's latest game can be a cup with no table, so each competition gets a turn.
+    let unavailable = false
+    let found: { id: string; standings: Standings } | null = null
+    for (const id of [...new Set(candidates)].slice(0, MAX_TABLES_TRIED)) {
+      const standings = await sources.getStandings(id)
+      if (standings.state === "unavailable") unavailable = true
+      if (standings.state !== "ok" || !standings.rows.length) continue
+      found ??= { id, standings }
+      if (standings.rows.some((row) => asked(row.team))) {
+        found = { id, standings }
+        break
+      }
+    }
+    if (!found) return unavailable ? refused("unavailable", copy.unavailable) : { ...empty, kind: "no_data", text: copy.noStandingsFound, charged: true }
+
+    const { id, standings } = found
+    return {
+      ...empty,
+      kind: "standings",
+      text: fill(copy.standingsFound, { league: standings.league ?? "" }),
+      table: tableView(id, standings, asked),
+      notes: [...(standings.limited ? [t.standings.limited] : []), copy.factsNote],
+      sources: [{ label: t.reports.verifiedData, url: null }],
+      asOfUTC: standings.sourceUpdatedAt ?? standings.fetchedAt,
+      charged: true,
+    }
+  }
+
+  // Before results: "Arsenal live score" must not answer with their last finished game.
+  if (LIVE.test(question)) {
+    const feed = await sources.getEvents({ date: now.toISOString().slice(0, 10) })
+    if (feed.state === "unavailable") return refused("unavailable", copy.unavailable)
+    // A stale feed may still say live about a game that ended, and that must not be repeated.
+    if (feed.state === "stale") return { ...empty, kind: "no_data", text: copy.liveStale, notes: feedNotes(feed), ...feedSource(feed), charged: true }
+    const live = feed.events.filter((event) => event.status === "live" && (topic.length < 3 || fixtureMatches(event, topic, question)))
+    if (live.length === 0) return { ...empty, kind: "no_data", text: copy.noLive, notes: feedNotes(feed), ...feedSource(feed), charged: true }
+    return {
+      kind: "live",
+      text: fill(copy.liveFound, { count: live.length }),
+      items: live.slice(0, MAX_ITEMS).map((event) => toItem(event, true, t)),
+      notes: feedNotes(feed),
+      ...feedSource(feed),
+      charged: true,
+    }
+  }
 
   if (RESULT.test(question)) {
     if (topic.length < 3) return refused("unknown", copy.needTeam)

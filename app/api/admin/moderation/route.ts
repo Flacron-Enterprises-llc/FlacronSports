@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { ApiError, apiErrorResponse, requireRole } from "@/lib/api-auth"
+import { staffRevokeInvite } from "@/lib/admin/rooms"
 import { audit } from "@/lib/audit"
 import { assertId, MATCH_ID, MESSAGE_ID, ROOM_ID } from "@/lib/community/content"
 import { closePoll, createPoll, MAX_POLL_OPTIONS, setPinnedNotice } from "@/lib/community/engagement"
@@ -21,6 +22,7 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("remove_message"), scope: SCOPE, scopeId: z.string().max(64), messageId: z.string().max(64), reason: REASON, reportId: REPORT_ID }),
   z.object({ action: z.literal("sanction"), uid: z.string().min(1).max(128).regex(/^[\w-]+$/), type: z.enum(["mute", "suspend"]), hours: z.number().int().min(1).max(8760), reason: REASON }),
   z.object({ action: z.literal("lock"), scope: SCOPE, scopeId: z.string().max(64), locked: z.boolean(), reason: REASON }),
+  z.object({ action: z.literal("revoke_invite"), roomId: z.string().max(64), reason: REASON }),
   z.object({ action: z.literal("resolve_report"), reportId: z.string().min(1).max(200), reason: REASON }),
   z.object({ action: z.literal("pin_notice"), matchId: MATCH, text: z.string().trim().min(1).max(500), reason: REASON }),
   z.object({ action: z.literal("clear_notice"), matchId: MATCH, reason: REASON }),
@@ -61,6 +63,10 @@ export async function POST(request: Request) {
       const id = scopeId(body.scope, body.scopeId)
       await setLock(db, { scope: body.scope, scopeId: id, locked: body.locked, reason: body.reason, actorUid: user.uid }, now)
       await audit(body.locked ? "moderation.room_locked" : "moderation.room_unlocked", user.uid, { scope: body.scope, scopeId: id, reason: body.reason })
+    } else if (body.action === "revoke_invite") {
+      const roomId = assertId(body.roomId, ROOM_ID)
+      const { revoked } = await staffRevokeInvite(db, { roomId, actorUid: user.uid, reason: body.reason }, now)
+      await audit("moderation.invite_revoked", user.uid, { roomId, revoked, reason: body.reason })
     } else if (body.action === "pin_notice" || body.action === "clear_notice") {
       const matchId = assertId(body.matchId, MATCH_ID)
       await setPinnedNotice(db, user, { matchId, text: body.action === "pin_notice" ? body.text : null }, now)

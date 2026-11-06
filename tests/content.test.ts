@@ -12,6 +12,7 @@ import { runIsolated } from "@/lib/jobs/tick"
 import { DEFAULT_PREFERENCES, type Preferences } from "@/lib/me/preferences-defaults"
 import { buildDigest, digestEmail, isDeliveryHour, runNewsletter } from "@/lib/newsletter/digest"
 import { unsubscribeToken, verifyUnsubscribeToken } from "@/lib/newsletter/token"
+import { fakeDb } from "./fake-db"
 import { normalizeStandings } from "@/lib/sports/service"
 import type { SportEvent } from "@/lib/sports/types"
 
@@ -67,6 +68,7 @@ function memoryDb() {
         get: (ref: Ref) => ref.get(),
         create: (ref: Ref, value: Record<string, unknown>) => void store.set(ref.key, value),
         set: (ref: Ref, value: Record<string, unknown>) => void store.set(ref.key, value),
+        update: (ref: Ref, patch: Record<string, unknown>) => void store.set(ref.key, { ...store.get(ref.key), ...patch }),
       }),
   }
   return { db: db as unknown as Firestore, store }
@@ -149,7 +151,10 @@ describe("report storage", () => {
   it("never lets a rerun overwrite an editor correction, even with new source data", async () => {
     const { db, store } = memoryDb()
     await saveReport(db, buildReport(event(), "en", "t", NOW))
-    await applyCorrection(db, "tsdb-1-result-en", { body: "Final score: Harbor City 3, Ridge United 1.", note: "Provider score was wrong." }, NOW)
+    const editor = fakeDb()
+    for (const [path, value] of store) editor.put(path, value)
+    await applyCorrection(editor.db, "tsdb-1-result-en", { body: "Final score: Harbor City 3, Ridge United 1.", note: "Provider score was wrong.", actorUid: "editor" }, NOW)
+    for (const [path, value] of editor.docs) store.set(path, value)
 
     expect(await saveReport(db, buildReport(event(), "en", "t", NOW))).toBe("locked")
     const changed = event({ score: { kind: "team", home: 5, away: 5 } })
@@ -270,6 +275,13 @@ describe("alert delivery", () => {
     expect(send).not.toHaveBeenCalled()
     expect(store.get(`notifications/${notificationId("u1", "tsdb-1", "final")}`)).toMatchObject({ emailStatus: "not_requested" })
   })
+  it("sends a start alert for a game with a bell, even with no favorites and start alerts off", async () => {
+    const { db } = memoryDb()
+    const soon = event({ id: "tsdb-9", status: "scheduled", score: { kind: "none" }, scheduledStartUTC: new Date(NOW.getTime() + 5 * 60_000).toISOString() })
+    const reminded = prefs({ favorites: [], reminders: [{ eventId: "tsdb-9", title: "Game", startUTC: soon.scheduledStartUTC }], alerts: { ...DEFAULT_PREFERENCES.alerts, types: ["final"] } })
+    expect((await runAlerts(deps({ db, events: [soon], users: [{ uid: "u1", prefs: reminded }] }))).created).toBe(1)
+    expect((await runAlerts(deps({ db, events: [soon], users: [{ uid: "u2", prefs: prefs({ favorites: [] }) }] }))).created).toBe(0)
+  })
   it("defers a final alert during quiet hours so a later tick can deliver it", async () => {
     const { db, store } = memoryDb()
     const user = { uid: "u1", prefs: alertPrefs({ quietStart: 17, quietEnd: 19 }) }
@@ -359,14 +371,39 @@ describe("newsletter", () => {
     await runNewsletter({ ...deps(db, send), users: [{ uid: "u2", prefs: prefs() }] })
     expect(send).not.toHaveBeenCalled()
   })
-  it("does not retry a failed send, so it can never double-mail", async () => {
+  it("never resends when it cannot tell whether SES took the message", async () => {
     const { db, store } = memoryDb()
-    const send = vi.fn(async () => { throw new Error("SES down") })
+    const send = vi.fn(async () => { throw new Error("socket hang up") })
     const base = deps(db, send as never)
     expect((await runNewsletter(base)).failed).toBe(1)
-    await runNewsletter(base)
+    expect((await runNewsletter(base)).duplicate).toBe(1)
     expect(send).toHaveBeenCalledTimes(1)
-    expect(store.get("newsletter_sends/u1_2026-11-05")).toMatchObject({ status: "failed" })
+    expect(store.get("newsletter_sends/u1_2026-11-05")).toMatchObject({ status: "unknown" })
+  })
+  it("retries a send SES refused on the next tick, then sends only once", async () => {
+    const { db, store } = memoryDb()
+    const send = vi.fn(async () => true)
+    send.mockRejectedValueOnce(Object.assign(new Error("SES down"), { $metadata: { httpStatusCode: 503 } }))
+    const base = deps(db, send)
+    expect((await runNewsletter(base)).failed).toBe(1)
+    expect((await runNewsletter({ ...base, now: new Date("2026-11-05T08:15:00Z") })).sent).toBe(1)
+    expect((await runNewsletter({ ...base, now: new Date("2026-11-05T08:30:00Z") })).duplicate).toBe(1)
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(store.get("newsletter_sends/u1_2026-11-05")).toMatchObject({ status: "sent", attempts: 2 })
+  })
+  it("stops retrying after three attempts", async () => {
+    const { db } = memoryDb()
+    const send = vi.fn(async () => false)
+    const base = deps(db, send)
+    for (let tick = 0; tick < 4; tick += 1) await runNewsletter(base)
+    expect(send).toHaveBeenCalledTimes(3)
+  })
+  it("does not claim a send left in progress, which may have gone out", async () => {
+    const { db, store } = memoryDb()
+    store.set("newsletter_sends/u1_2026-11-05", { status: "sending", attempts: 1 })
+    const send = vi.fn(async () => true)
+    expect((await runNewsletter(deps(db, send))).duplicate).toBe(1)
+    expect(send).not.toHaveBeenCalled()
   })
   it("sends nothing and claims nothing when there is no verified content", async () => {
     const { db, store } = memoryDb()

@@ -5,7 +5,7 @@ import { firestoreDocDb } from "@/lib/doc-db"
 import { exportMatchSummary, getPdfRenderer } from "@/lib/exports/service"
 import { rateLimit } from "@/lib/rate-limit"
 import { getEvent } from "@/lib/sports/service"
-import { requireSubscriber } from "@/lib/billing/require-plan"
+import { requireSubscriberOrPurchase } from "@/lib/billing/require-plan"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -13,7 +13,7 @@ export const runtime = "nodejs"
 export async function POST(request: Request) {
   try {
     const user = await requireVerifiedUser(request)
-    await requireSubscriber(user.uid)
+    await requireSubscriberOrPurchase(user.uid, "export")
     rateLimit(`pdf-export:${user.uid}`, 10, 60_000)
 
     const render = getPdfRenderer()

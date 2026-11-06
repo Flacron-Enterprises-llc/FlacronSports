@@ -5,10 +5,12 @@
 import type { DocDb } from "@/lib/doc-db"
 import { messagesPath, matchParticipantPath, reactionPath, type ReportScope, type StoredMessage } from "./chat"
 import { FORMER_MEMBER } from "./content"
+import { groupInvitePath, groupMemberPath, groupOwnerPath, groupPath, type Group, type GroupMember } from "./groups"
 import type { PollVote, StoredReaction } from "./engagement"
 import { acceptancePath, type Acceptance } from "./gate"
 import type { CommunityReport } from "./moderation"
 import type { Prediction } from "./predictions"
+import type { ReferralAccount, ReferralClaim } from "./referrals"
 import { invitePath, memberPath, roomPath, type Member, type Room } from "./rooms"
 
 type Chat = { scope: ReportScope; scopeId: string }
@@ -43,17 +45,31 @@ export async function exportCommunityData(db: Pick<DocDb, "get" | "query">, uid:
   const pollVotes = await db.query<PollVote>("poll_votes", { where: [["uid", uid]] })
   const blocks = await db.get<BlockDoc>(`user_blocks/${uid}`)
   const acceptance = await db.get<Acceptance>(acceptancePath(uid))
+  const groupMemberships = await db.query<GroupMember>("prediction_group_members", { where: [["uid", uid]] })
+  const groups = await Promise.all(groupMemberships.map(async (member) => ({ member, group: await db.get<Group>(groupPath(member.groupId)) })))
+  const badges = await db.get<{ badges: string[] }>(`community_badges/${uid}`)
+  const referral = await db.get<ReferralAccount>(`referral_accounts/${uid}`)
+  const referredBy = await db.query<ReferralClaim>("referral_claims", { where: [["uid", uid]] })
 
   return {
     messages: messages.map(({ scope, scopeId, row }) => ({ scope, scopeId, text: row.text, createdAtUTC: row.createdAtUTC, removedByModerator: row.removed })),
-    rooms: rooms.map(({ member, room }) => ({
+    rooms: rooms.filter(({ member }) => member.kind !== "club").map(({ member, room }) => ({
       name: room?.name ?? null,
       matchId: room?.matchId ?? null,
       role: member.role,
       membership: member.status,
       joinedAtUTC: member.joinedAtUTC,
     })),
-    predictions: predictions.map(({ matchId, home, away, createdAtUTC, settled, voided, points }) => ({ matchId, home, away, createdAtUTC, settled, voided, points })),
+    fanClubs: rooms.filter(({ member }) => member.kind === "club").map(({ member, room }) => ({ name: room?.name ?? null, membership: member.status, joinedAtUTC: member.joinedAtUTC })),
+    predictions: predictions.map(({ matchId, kind = "score", home = null, away = null, winner = null, podium = null, createdAtUTC, settled, voided, points }) => ({ matchId, kind, home, away, winner, podium, createdAtUTC, settled, voided, points })),
+    predictionGroups: groups.map(({ member, group }) => ({ name: group?.name ?? null, role: member.role, membership: member.status, joinedAtUTC: member.joinedAtUTC })),
+    badges: badges?.badges ?? [],
+    referrals: {
+      points: referral?.points ?? 0,
+      awards: referral?.awards ?? 0,
+      code: referral?.code ?? null,
+      joinedThroughInvite: referredBy.map(({ status, claimedAtUTC }) => ({ status, claimedAtUTC })),
+    },
     reactions: reactions.map(({ scope, scopeId, reaction, createdAtUTC }) => ({ scope, scopeId, reaction, createdAtUTC })),
     pollVotes: pollVotes.map(({ matchId, option, createdAtUTC }) => ({ matchId, option, createdAtUTC })),
     blockedPeople: (blocks?.blocked ?? []).map((blockedUid) => blocks?.names?.[blockedUid] ?? "Fan"),
@@ -114,9 +130,39 @@ export async function eraseCommunityData(db: DocDb, uid: string): Promise<void> 
     await db.set(`user_blocks/${row.id}`, { blocked: row.blocked.filter((blockedUid) => blockedUid !== uid), names })
   }
 
+  const owned = await db.query<Group>("prediction_groups", { where: [["ownerUid", uid]] })
+  for (const group of owned) {
+    await db.transaction(async (tx) => {
+      if (group.inviteHash) tx.set(groupInvitePath(group.inviteHash), { groupId: group.id, revoked: true })
+      tx.set(groupPath(group.id), { ownerUid: "", name: "", status: "closed", inviteHash: null }, { merge: true })
+    })
+  }
+  const groupMemberships = await db.query<GroupMember>("prediction_group_members", { where: [["uid", uid]] })
+  for (const member of groupMemberships) {
+    await db.transaction(async (tx) => {
+      const group = await tx.get<Group>(groupPath(member.groupId))
+      const current = await tx.get<GroupMember>(groupMemberPath(member.groupId, uid))
+      if (group?.status === "active" && current?.status === "active") {
+        tx.set(groupPath(member.groupId), { memberCount: Math.max(1, group.memberCount - 1) }, { merge: true })
+      }
+      tx.delete(groupMemberPath(member.groupId, uid))
+    })
+  }
+
+  const referral = await db.get<ReferralAccount>(`referral_accounts/${uid}`)
+  const claims = [
+    ...(await db.query<ReferralClaim>("referral_claims", { where: [["uid", uid]] })),
+    ...(await db.query<ReferralClaim>("referral_claims", { where: [["referrerUid", uid]] })),
+  ]
+
   const predictions = await db.query<Prediction>("predictions", { where: [["uid", uid]] })
   const votes = await db.query<PollVote>("poll_votes", { where: [["uid", uid]] })
   await Promise.all([
+    ...claims.map((row) => db.delete(`referral_claims/${row.id}`)),
+    ...(referral ? [db.delete(`referral_links/${referral.code}`)] : []),
+    db.delete(`referral_accounts/${uid}`),
+    db.delete(`community_badges/${uid}`),
+    db.delete(groupOwnerPath(uid)),
     ...predictions.map((row) => db.delete(`predictions/${row.id}`)),
     ...votes.map((row) => db.delete(`poll_votes/${row.id}`)),
     ...matches.map((row) => db.delete(matchParticipantPath(row.matchId, uid))),

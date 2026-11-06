@@ -1,7 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
-import { Activity, ExternalLink, FileText, LayoutList, MessagesSquare, PlayCircle, Radio } from "lucide-react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { Activity, ExternalLink, LayoutList, ListChecks, MessagesSquare, PlayCircle, Radio, Users } from "lucide-react"
 import { usePreferences } from "@/components/account/prefs-provider"
 import { ErrorNotice, Tabs } from "@/components/dashboard/controls"
 import { btn, Panel, Skeleton } from "@/components/site/states"
@@ -9,36 +9,44 @@ import { useLocale } from "@/lib/use-locale"
 import type { MatchViewing } from "@/lib/video/catalog"
 import { HighlightPlayer } from "@/components/video/highlight-player"
 
-type TabId = "overview" | "details" | "result" | "viewing" | "community"
+type TabId = "overview" | "updates" | "statistics" | "participants" | "chat"
 
-export function MatchTabs({ overview, details, result, viewing, community }: { overview: React.ReactNode; details?: React.ReactNode; result?: React.ReactNode; viewing: React.ReactNode; community?: React.ReactNode }) {
+export function MatchTabs({ overview, updates, statistics, participants, chat }: { overview: React.ReactNode; updates: React.ReactNode; statistics: React.ReactNode; participants: React.ReactNode; chat?: React.ReactNode }) {
   const { t } = useLocale()
   const [tab, setTab] = useState<TabId>("overview")
   const icon = "size-4"
   const tabs = [
     { value: "overview" as const, label: t.match.overview, icon: <LayoutList aria-hidden className={icon} /> },
-    ...(details ? [{ value: "details" as const, label: t.match.details, icon: <Activity aria-hidden className={icon} /> }] : []),
-    ...(result ? [{ value: "result" as const, label: t.event.result, icon: <FileText aria-hidden className={icon} /> }] : []),
-    { value: "viewing" as const, label: t.match.viewing, icon: <PlayCircle aria-hidden className={icon} /> },
-    ...(community ? [{ value: "community" as const, label: t.community.title, icon: <MessagesSquare aria-hidden className={icon} /> }] : []),
+    { value: "updates" as const, label: t.match.liveUpdates, icon: <ListChecks aria-hidden className={icon} /> },
+    { value: "statistics" as const, label: t.match.statistics, icon: <Activity aria-hidden className={icon} /> },
+    { value: "participants" as const, label: t.match.participants, icon: <Users aria-hidden className={icon} /> },
+    ...(chat ? [{ value: "chat" as const, label: t.match.chat, icon: <MessagesSquare aria-hidden className={icon} /> }] : []),
   ]
   return (
     <Tabs<TabId> value={tab} onChange={setTab} tabs={tabs} label={t.ui.matchCenter}>
       {tab === "overview" && overview}
-      {tab === "details" && details}
-      {tab === "result" && result}
-      {tab === "viewing" && viewing}
-      {tab === "community" && community}
+      {tab === "updates" && updates}
+      {tab === "statistics" && statistics}
+      {tab === "participants" && participants}
+      {tab === "chat" && chat}
     </Tabs>
   )
 }
 
+interface ViewingState {
+  matchId: string
+  result: MatchViewing | null
+  state: "idle" | "loading" | "failed"
+  check(): Promise<void>
+}
+
+const ViewingContext = createContext<ViewingState | null>(null)
+
 /** Viewing is checked for this browser's country at request time. Low-data mode checks only when asked. */
-export function ViewingPanel({ matchId, title }: { matchId: string; title: string }) {
-  const { t } = useLocale()
+export function ViewingProvider({ matchId, children }: { matchId: string; children: React.ReactNode }) {
   const { prefs, ready } = usePreferences()
   const [result, setResult] = useState<MatchViewing | null>(null)
-  const [state, setState] = useState<"idle" | "loading" | "failed">("idle")
+  const [state, setState] = useState<ViewingState["state"]>("idle")
 
   const check = useCallback(async () => {
     setState("loading")
@@ -52,6 +60,43 @@ export function ViewingPanel({ matchId, title }: { matchId: string; title: strin
     if (ready !== false && !prefs.lowData) void check()
   }, [check, prefs.lowData, ready])
 
+  const value = useMemo(() => ({ matchId, result, state, check }), [matchId, result, state, check])
+  return <ViewingContext.Provider value={value}>{children}</ViewingContext.Provider>
+}
+
+function useViewing(): ViewingState {
+  const value = useContext(ViewingContext)
+  if (!value) throw new Error("useViewing needs a ViewingProvider")
+  return value
+}
+
+/** Sits above everything else when there is something to play, and takes no room when there is not. */
+export function MatchPlayer({ title }: { title: string }) {
+  const { t } = useLocale()
+  const { prefs } = usePreferences()
+  const { matchId, result, state, check } = useViewing()
+
+  if (result?.video) {
+    return (
+      <section aria-label={t.match.viewing} className="fs-rise mt-4">
+        <div className="mx-auto max-w-3xl"><HighlightPlayer matchId={matchId} title={title} channel={result.video.channel} /></div>
+      </section>
+    )
+  }
+  if (result || !prefs.lowData) return null
+  return (
+    <section aria-label={t.match.viewing} className="fs-rise mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4">
+      <p className="min-w-0 flex-1 text-sm leading-6 text-ink-2">{t.ui.lowDataVideo}</p>
+      <button type="button" onClick={check} disabled={state === "loading"} className={btn("navy", "md")}><PlayCircle aria-hidden className="size-4" /> {t.ui.checkViewing}</button>
+    </section>
+  )
+}
+
+export function ViewingPanel() {
+  const { t } = useLocale()
+  const { prefs } = usePreferences()
+  const { result, state, check } = useViewing()
+
   const official = result?.options.find((option) => option.action === "official_broadcaster" && option.url)
   const following = result?.options.some((option) => option.action === "follow_live")
 
@@ -59,15 +104,10 @@ export function ViewingPanel({ matchId, title }: { matchId: string; title: strin
     <Panel title={t.match.viewing} icon={<PlayCircle aria-hidden />}>
       {state === "failed" && <ErrorNotice onRetry={check}>{t.ui.viewingFailed}</ErrorNotice>}
       {state === "loading" && <div role="status" aria-label={t.ui.loading} className="space-y-2"><Skeleton className="h-4 w-3/4" /><Skeleton className="h-4 w-1/2" /></div>}
-      {state === "idle" && !result && prefs.lowData && (
-        <div>
-          <p className="text-sm leading-6 text-ink-2">{t.ui.lowDataVideo}</p>
-          <button type="button" onClick={check} className={btn("navy", "md", "mt-3")}><PlayCircle aria-hidden className="size-4" /> {t.ui.checkViewing}</button>
-        </div>
-      )}
+      {state === "idle" && !result && prefs.lowData && <p className="text-sm leading-6 text-ink-2">{t.ui.lowDataVideo}</p>}
       {state === "idle" && result && (
         <div className="space-y-3">
-          {result.video && <div className="max-w-xl"><HighlightPlayer matchId={matchId} title={title} channel={result.video.channel} /></div>}
+          {result.video && <p className="text-sm leading-6 text-ink-2">{t.match.videoAtTop}</p>}
           {result.broadcasts.length > 0 && (
             <div>
               <h3 className="text-sm font-semibold text-ink">{t.ui.officialBroadcaster}</h3>

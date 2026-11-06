@@ -2,7 +2,7 @@
 
 import { ApiError } from "@/lib/api-auth"
 import type { DocDb } from "@/lib/doc-db"
-import { chatPath, messagesPath, type ReportScope, type Sanction, type StoredMessage } from "./chat"
+import { chatPath, messagesPath, readSanction, type ReportScope, type Sanction, type StoredMessage } from "./chat"
 
 export interface CommunityReport {
   scope: ReportScope
@@ -31,10 +31,17 @@ export function removeMessage(db: DocDb, input: { scope: ReportScope; scopeId: s
   })
 }
 
-export async function sanctionUser(db: DocDb, input: { uid: string; type: Sanction["type"]; hours: number; reason: string; actorUid: string }, now: Date) {
+/** One record per person, so a mute must not replace a suspension that outlasts it. The result gives the end that applies. */
+export function sanctionUser(db: DocDb, input: { uid: string; type: Sanction["type"]; hours: number; reason: string; actorUid: string }, now: Date) {
   const untilUTC = new Date(now.getTime() + input.hours * 3_600_000).toISOString()
-  await db.set(`community_sanctions/${input.uid}`, { type: input.type, untilUTC, reason: input.reason, by: input.actorUid, createdAtUTC: now.toISOString() })
-  return { untilUTC }
+  return db.transaction(async (tx) => {
+    const existing = await readSanction(tx, input.uid)
+    if (input.type === "mute" && existing?.type === "suspend" && Date.parse(existing.untilUTC) >= Date.parse(untilUTC)) {
+      return { untilUTC: existing.untilUTC }
+    }
+    tx.set(`community_sanctions/${input.uid}`, { type: input.type, untilUTC, reason: input.reason, by: input.actorUid, createdAtUTC: now.toISOString() })
+    return { untilUTC }
+  })
 }
 
 export async function setLock(db: DocDb, input: { scope: ReportScope; scopeId: string; locked: boolean; reason: string; actorUid: string }, now: Date) {

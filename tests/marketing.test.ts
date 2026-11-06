@@ -39,7 +39,8 @@ describe("marketing site", () => {
     expect(copy).not.toMatch(/TheSportsDB|Stripe|Firebase|AWS|Amazon|\bSES\b|\bUTC\b|sandbox|\bAPI\b/)
   })
   it("never fetches sports data from a marketing page", () => {
-    for (const path of source) expect(readFileSync(path, "utf8"), path).not.toMatch(/lib\/sports\/service|components\/sports\//)
+    // A share card is one game a member chose to share, not a browsable sports page.
+    for (const path of source.filter((item) => !item.replace(/\\/g, "/").includes("/share/"))) expect(readFileSync(path, "utf8"), path).not.toMatch(/lib\/sports\/service|components\/sports\//)
   })
   it("links into the product only through the signed-in dashboard link", () => {
     const linked = source.filter((path) => /["'`]\/app[/"'`]/.test(readFileSync(path, "utf8")))

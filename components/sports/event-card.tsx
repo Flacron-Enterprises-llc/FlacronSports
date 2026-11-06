@@ -5,10 +5,11 @@ import { SportIcon } from "@/components/site/sport-icon"
 import { Notice } from "@/components/site/states"
 import type { Dictionary } from "@/lib/i18n"
 import { eventTitle, hasResult, isDuel, rowValues } from "@/lib/sports/presentation"
-import type { EventFeed, EventStatus, SportEvent } from "@/lib/sports/types"
+import type { EventConclusion, EventFeed, EventStatus, SportEvent } from "@/lib/sports/types"
 import { cn } from "@/lib/utils"
+import { EventActions } from "./event-actions"
 import { Classification, ResultNote } from "./event-result"
-import { Crest, FavoriteStar, LocalTime, ScoreValue, SpoilerReveal, SpoilerScope } from "./parts"
+import { Crest, FavoriteStar, LocalTime, ScoreValue, SpoilerReveal, SpoilerScope, SpoilerText } from "./parts"
 
 const TONE: Record<EventStatus, string> = {
   live: "fs-chip-live border",
@@ -21,11 +22,12 @@ const TONE: Record<EventStatus, string> = {
   unknown: "bg-surface-muted text-ink-2",
 }
 
-export function StatusLabel({ status, t }: { status: EventStatus; t: Dictionary }) {
+export function StatusLabel({ status, conclusion, t }: { status: EventStatus; conclusion?: EventConclusion; t: Dictionary }) {
   return (
     <span className={cn("inline-flex shrink-0 items-center gap-1.5 rounded-full border-transparent px-2 py-0.5 text-[11.5px] font-semibold", TONE[status])}>
       {status === "live" && <span aria-hidden className="fs-live-dot size-1.5 rounded-full bg-live" />}
       {t.status[status]}
+      {conclusion && status === "finished" && <SpoilerText>· {t.status.conclusions[conclusion]}</SpoilerText>}
     </span>
   )
 }
@@ -61,7 +63,7 @@ export function EventCard({ event, t, href, timeMode = "time" }: { event: SportE
           </span>
           <span className="flex shrink-0 items-center gap-1.5">
             {event.clock && <span className="tabular text-xs font-semibold text-ink-2">{event.clock}&prime;</span>}
-            <StatusLabel status={event.status} t={t} />
+            <StatusLabel status={event.status} conclusion={event.conclusion} t={t} />
           </span>
         </div>
         {!teams && <p className="mt-2 text-xs text-ink-3">{t.event.types[event.eventType]}</p>}
@@ -99,7 +101,10 @@ export function EventCard({ event, t, href, timeMode = "time" }: { event: SportE
         {hasResult(event) && <div className="mt-3"><SpoilerReveal label={t.spoiler.revealResult} /></div>}
         <div className="mt-auto pt-3">
           <div className="flex items-center justify-between gap-2 border-t border-line pt-3 text-xs text-ink-2">
-            {event.scheduledStartUTC && !event.dateOnly ? <LocalTime iso={event.scheduledStartUTC} mode={timeMode} /> : <span>{t.match.tbd}</span>}
+            <span className="flex min-w-0 items-center gap-1">
+              {event.scheduledStartUTC && !event.dateOnly ? <LocalTime iso={event.scheduledStartUTC} mode={timeMode} /> : <span>{t.match.tbd}</span>}
+              <EventActions event={event} />
+            </span>
             <Link href={href(`/app/match/${event.id}`)} className="inline-flex min-h-6 items-center gap-1 font-semibold text-hot-text underline-offset-2 hover:underline">
               {t.match.overview}<span className="sr-only">: {eventTitle(event)}</span>
               <ArrowRight aria-hidden className="size-3.5" />

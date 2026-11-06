@@ -119,6 +119,17 @@ export function requireFeature(flag: string): void {
   if (process.env[flag] !== "true") throw new ApiError(503, "feature_disabled", "This feature is not enabled")
 }
 
+export type KillSwitch = "FEATURE_VIDEO" | "FEATURE_GENERATED_PUBLISHING" | "FEATURE_PAYMENTS"
+
+/** Unlike requireFeature, these are on unless set to "false", so a missing variable cannot take a live feature down. */
+export function featureOn(flag: KillSwitch): boolean {
+  return process.env[flag] !== "false"
+}
+
+export function requireSwitch(flag: KillSwitch): void {
+  if (!featureOn(flag)) throw new ApiError(503, "feature_disabled", "This feature is not enabled")
+}
+
 export function apiErrorResponse(error: unknown): NextResponse {
   if (error instanceof ApiError) {
     return NextResponse.json({ success: false, code: error.code, error: error.message }, { status: error.status })

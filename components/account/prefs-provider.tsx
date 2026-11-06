@@ -17,9 +17,12 @@ interface PrefsValue {
   update(patch: Partial<Preferences>): Promise<boolean>
   /** Runs one at a time from the latest list, so two quick stars cannot overwrite each other. */
   toggleFavorite(name: string): Promise<FavoriteResult>
+  /** Same queue, for any list: the patch is built from the latest saved state. */
+  mutate(build: (current: Preferences) => Partial<Preferences>): Promise<MutateResult>
 }
 
 export type FavoriteResult = "added" | "removed" | "limit" | "failed"
+export type MutateResult = "saved" | "limit" | "failed"
 
 const PrefsContext = createContext<PrefsValue | null>(null)
 
@@ -112,9 +115,31 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
     [user],
   )
 
+  const mutate = useCallback(
+    (build: (current: Preferences) => Partial<Preferences>) => {
+      const run = async (): Promise<MutateResult> => {
+        const patch = build(latest.current)
+        if (!user) return "failed"
+        const response = await authFetch("/api/me/preferences", { method: "PUT", body: JSON.stringify(patch) }).catch(() => null)
+        if (!response?.ok) {
+          const data = await response?.json().catch(() => null)
+          return data?.code === "favorites_limit" ? "limit" : "failed"
+        }
+        const next = (await response.json()) as Preferences
+        latest.current = next
+        setPrefs(next)
+        return "saved"
+      }
+      const result = queue.current.then(run, run)
+      queue.current = result
+      return result
+    },
+    [user],
+  )
+
   // Derived, so a just-signed-in user is never ready on guest defaults.
   const ready = user ? loadedUid === user.uid : guestReady
-  const value = useMemo(() => ({ prefs, ready, signedIn: Boolean(user), update, toggleFavorite }), [prefs, ready, user, update, toggleFavorite])
+  const value = useMemo(() => ({ prefs, ready, signedIn: Boolean(user), update, toggleFavorite, mutate }), [prefs, ready, user, update, toggleFavorite, mutate])
   return <PrefsContext.Provider value={value}>{children}</PrefsContext.Provider>
 }
 

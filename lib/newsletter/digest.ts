@@ -10,8 +10,8 @@ import { unsubscribeToken } from "./token"
 
 export const NEWSLETTER_SENDS = "newsletter_sends"
 export const DELIVERY_HOUR = 8
-const ALREADY_EXISTS = 6
 const MAX_ROWS = 12
+const MAX_SEND_ATTEMPTS = 3
 
 export function isDeliveryHour(now: Date, timeZone: string): boolean {
   return localClock(now, timeZone).hour === DELIVERY_HOUR
@@ -106,6 +106,28 @@ export interface NewsletterCounts {
   failed: number
 }
 
+/** True only when SES answered with a refusal, which proves nothing was sent. A timeout proves nothing. */
+export const provenUnsent = (error: unknown): boolean => ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode ?? 0) >= 400
+
+/**
+ * First claim of the day, or a retry of a send that provably did not go out. "sending"
+ * and "unknown" are never claimed again: that copy may already be in the inbox.
+ */
+function claimSend(db: Firestore, uid: string, localDate: string, locale: Locale, now: Date): Promise<boolean> {
+  const ref = db.collection(NEWSLETTER_SENDS).doc(sendId(uid, localDate))
+  return db.runTransaction(async (tx) => {
+    const stored = await tx.get(ref)
+    if (!stored.exists) {
+      tx.create(ref, { uid, localDate, status: "sending", attempts: 1, locale, createdAt: now.toISOString() })
+      return true
+    }
+    const { status, attempts = 1 } = stored.data() as { status: string; attempts?: number }
+    if (status !== "failed" || attempts >= MAX_SEND_ATTEMPTS) return false
+    tx.update(ref, { status: "sending", attempts: attempts + 1 })
+    return true
+  })
+}
+
 // Bounces and complaints are dropped by the SES account suppression list, so no
 // address tracking is kept here.
 export async function runNewsletter(deps: NewsletterDeps): Promise<NewsletterCounts> {
@@ -130,20 +152,17 @@ export async function runNewsletter(deps: NewsletterDeps): Promise<NewsletterCou
       if (!email) throw new Error("Unsubscribe signing is not configured")
 
       const localDate = localClock(now, prefs.timeZone).date
-      const ref = db.collection(NEWSLETTER_SENDS).doc(sendId(uid, localDate))
-      try {
-        await ref.create({ uid, localDate, status: "sending", locale: prefs.locale, createdAt: now.toISOString() })
-      } catch (error) {
-        if ((error as { code?: number }).code === ALREADY_EXISTS) {
-          counts.duplicate += 1
-          continue
-        }
-        throw error
+      if (!(await claimSend(db, uid, localDate, prefs.locale, now))) {
+        counts.duplicate += 1
+        continue
       }
       // Claimed before sending: a crash here costs one digest, never a second copy.
-      const sent = await deps.send(email).catch(() => false)
-      await ref.update({ status: sent ? "sent" : "failed" })
-      counts[sent ? "sent" : "failed"] += 1
+      const status = await deps.send(email).then(
+        (sent) => (sent ? "sent" : "failed"),
+        (error: unknown) => (provenUnsent(error) ? "failed" : "unknown"),
+      )
+      await db.collection(NEWSLETTER_SENDS).doc(sendId(uid, localDate)).update({ status })
+      counts[status === "sent" ? "sent" : "failed"] += 1
     } catch (error) {
       counts.failed += 1
       console.error("Newsletter delivery failed", error instanceof Error ? error.message : "unknown")

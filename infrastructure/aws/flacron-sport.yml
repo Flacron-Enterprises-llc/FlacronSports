@@ -64,6 +64,22 @@ Parameters:
     Type: String
   AmplifyAppId:
     Type: String
+  # Switches for spec section 9. Anything other than "false" leaves a feature on.
+  FeatureVideo:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+  FeatureGeneratedPublishing:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+  FeaturePayments:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+  RoundupHourUtc:
+    Type: String
+    Default: "6"
 
 Resources:
   Repository:
@@ -202,6 +218,10 @@ Resources:
             - { Name: SES_REGION, Value: !Ref AWS::Region }
             - { Name: JOBS_ENABLED, Value: "true" }
             - { Name: COMMUNITY_ENABLED, Value: "true" }
+            - { Name: FEATURE_VIDEO, Value: !Ref FeatureVideo }
+            - { Name: FEATURE_GENERATED_PUBLISHING, Value: !Ref FeatureGeneratedPublishing }
+            - { Name: FEATURE_PAYMENTS, Value: !Ref FeaturePayments }
+            - { Name: ROUNDUP_HOUR_UTC, Value: !Ref RoundupHourUtc }
             - { Name: EMAIL_FROM, Value: !Sub "FlacronSport <noreply@${EmailIdentity}>" }
             - { Name: STRIPE_PRICE_BASIC_MONTHLY, Value: !Ref PriceBasicMonthly }
             - { Name: STRIPE_PRICE_BASIC_ANNUAL, Value: !Ref PriceBasicAnnual }
@@ -351,8 +371,32 @@ Resources:
                 Action: events:InvokeApiDestination
                 Resource: !GetAtt JobsApiDestination.Arn
 
-  # API destinations time out at 5 seconds and retry on timeout. A tick can run
-  # longer and keeps running on the task, so retries would only stack up work.
+  # Holds ticks that could not be delivered after every retry.
+  JobsDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: flacron-sport-jobs-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  JobsDeadLetterPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref JobsDeadLetterQueue]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: events.amazonaws.com }
+            Action: sqs:SendMessage
+            Resource: !GetAtt JobsDeadLetterQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt JobsRule.Arn
+
+  # API destinations give up at 5 seconds, so the tick route answers 202 at once and
+  # finishes on the task. A retry therefore means the tick truly could not start, and
+  # stopping inside ten minutes keeps a retry from meeting the next scheduled run.
   JobsRule:
     Type: AWS::Events::Rule
     Properties:
@@ -364,8 +408,10 @@ Resources:
           Arn: !GetAtt JobsApiDestination.Arn
           RoleArn: !GetAtt JobsRuleRole.Arn
           RetryPolicy:
-            MaximumRetryAttempts: 0
-            MaximumEventAgeInSeconds: 60
+            MaximumRetryAttempts: 3
+            MaximumEventAgeInSeconds: 600
+          DeadLetterConfig:
+            Arn: !GetAtt JobsDeadLetterQueue.Arn
 
   Alerts:
     Type: AWS::SNS::Topic
@@ -422,7 +468,7 @@ Resources:
     Type: AWS::Logs::MetricFilter
     Properties:
       LogGroupName: !Ref LogGroup
-      FilterPattern: '?"Job reports failed" ?"Job alerts failed" ?"Job newsletter failed" ?"Job predictions failed"'
+      FilterPattern: '?"Job reports failed" ?"Job alerts failed" ?"Job newsletter failed" ?"Job predictions failed" ?"Job recaps failed" ?"Job previews failed" ?"Job roundup failed" ?"Job calendar failed" ?"Job clips failed" ?"Tick aborted"'
       MetricTransformations:
         - { MetricName: JobFailures, MetricNamespace: FlacronSport, MetricValue: "1", DefaultValue: 0 }
 
@@ -468,6 +514,23 @@ Resources:
       Period: 900
       EvaluationPeriods: 2
       DatapointsToAlarm: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref Alerts]
+
+  JobsDeadLetterAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: flacron-sport-jobs-undelivered
+      AlarmDescription: A scheduled job could not be delivered after every retry
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - { Name: QueueName, Value: !GetAtt JobsDeadLetterQueue.QueueName }
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
       Threshold: 1
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching

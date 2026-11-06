@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { viewingFor } from "@/lib/video/catalog"
+import { allowedClips, viewingFor } from "@/lib/video/catalog"
 import { storedClips } from "@/lib/video/scorebat"
 
 export const dynamic = "force-dynamic"
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const clip = params.get("clip")
   if (clip !== null) {
     if (!/^[0-9a-f]{16}$/.test(clip)) return NextResponse.json({ error: "Invalid clip" }, { status: 400 })
-    const found = (await storedClips()).find((item) => item.id === clip)
+    const found = (await allowedClips(await storedClips())).find((item) => item.id === clip)
     return NextResponse.json({ video: found ? { embedUrl: found.embedUrl } : null, checkedAt: new Date().toISOString() })
   }
   const match = params.get("match") ?? ""

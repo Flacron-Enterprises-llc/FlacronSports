@@ -9,9 +9,10 @@ const prefs = vi.hoisted(() => ({ spoilerMode: false }))
 Object.assign(globalThis, { React })
 
 vi.mock("@/lib/firebase-admin", () => ({ getAdminAuth: () => null, getAdminDb: () => null }))
-vi.mock("@/components/account/prefs-provider", () => ({
-  usePreferences: () => ({ prefs: { spoilerMode: prefs.spoilerMode, favorites: [], timeZone: "UTC" }, signedIn: false, update: async () => true }),
-}))
+vi.mock("@/components/account/prefs-provider", async () => {
+  const { DEFAULT_PREFERENCES } = await import("@/lib/me/preferences-defaults")
+  return { usePreferences: () => ({ prefs: { ...DEFAULT_PREFERENCES, spoilerMode: prefs.spoilerMode, favorites: [], timeZone: "UTC" }, signedIn: false, update: async () => true }) }
+})
 vi.mock("@/lib/use-locale", async () => {
   const { getDictionary } = await import("@/lib/i18n")
   return { useLocale: () => ({ locale: "en", t: getDictionary("en"), href: (path: string) => path }) }
@@ -173,9 +174,9 @@ describe("scores come only from the source", () => {
     expect(normalize(race, sports.motorsport).score).toEqual({
       kind: "classification",
       entries: [
-        { position: 1, name: "Ari Stone", team: "Alpha Racing", time: "2:20:28.772" },
-        { position: 2, name: "Ben Ash", team: "Beta Team", time: "+0.799" },
-        { position: 3, name: "Cal Reed", team: "Gamma Team", time: "+4.006" },
+        { position: 1, name: "Ari Stone", team: "Alpha Racing", time: "2:20:28.772", laps: 71, grid: 5 },
+        { position: 2, name: "Ben Ash", team: "Beta Team", time: "+0.799", laps: 71, grid: 5 },
+        { position: 3, name: "Cal Reed", team: "Gamma Team", time: "+4.006", laps: 71, grid: 5 },
       ],
     })
     const entries = parseClassification(riders.strResult)

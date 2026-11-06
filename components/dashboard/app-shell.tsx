@@ -2,11 +2,12 @@
 
 import { HouseAd } from "./house-ad"
 import { PaywallGate } from "./paywall"
-import { Suspense, useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, useEffect, useId, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
-  ChevronDown, ChevronRight, Compass, CreditCard, Home, LayoutDashboard, LogOut, Medal, Menu, GitCompareArrows, MessageCircleQuestion, Newspaper, PlayCircle, Settings, Shield, ShieldCheck, Sparkles, Star, Trophy, Users, X,
+  Bookmark, ChevronDown, ChevronRight, Compass, CreditCard, Home, LayoutDashboard, LayoutGrid, LogOut, Medal, Menu, GitCompareArrows, MessageCircleQuestion, Newspaper, PlayCircle, Search, Settings, Shield, ShieldCheck, Sparkles, Star, Trophy, Users, X,
+  Flag,
 } from "lucide-react"
 import { usePreferences } from "@/components/account/prefs-provider"
 import { CookiePreferencesButton } from "@/components/consent/consent-ui"
@@ -21,6 +22,7 @@ import { signOutUser } from "@/lib/firebase-auth"
 import { useAuthState } from "@/lib/hooks/useAuthUser"
 import { localePath } from "@/lib/i18n"
 import { POLICIES } from "@/lib/legal/content"
+import { sportSwitchPath } from "@/lib/sports/sport-link"
 import { SPORTS } from "@/lib/sports/types"
 import { useLocale } from "@/lib/use-locale"
 import { cn } from "@/lib/utils"
@@ -54,13 +56,20 @@ function useNav() {
           { to: "/app/news", label: t.nav.news, icon: Newspaper },
         ],
       },
-      { title: t.dash.follow, items: [{ to: "/app/my-teams", label: t.nav.myTeams, icon: Star }] },
+      {
+        title: t.dash.follow,
+        items: [
+          { to: "/app/my-teams", label: t.nav.myTeams, icon: Star },
+          { to: "/app/board", label: t.discover.boardNav, icon: LayoutGrid },
+          { to: "/app/news/saved", label: t.discover.saved, icon: Bookmark },
+        ],
+      },
       {
         title: t.dash.tools,
         items: [
           { to: "/app/assistant", label: t.nav.assistant, icon: MessageCircleQuestion },
           { to: "/app/compare", label: t.compare.title, icon: GitCompareArrows },
-          ...(community ? [{ to: "/app/rooms", label: t.dash.rooms, icon: Users }, { to: "/app/predictions", label: t.dash.predictions, icon: Medal }] : []),
+          ...(community ? [{ to: "/app/rooms", label: t.dash.rooms, icon: Users }, { to: "/app/predictions", label: t.dash.predictions, icon: Medal }, { to: "/app/clubs", label: t.community.clubsTitle, icon: Flag }] : []),
         ],
       },
       {
@@ -195,16 +204,21 @@ function MobileTabs({ path }: { path: string }) {
 function Crumbs({ path }: { path: string }) {
   const { t, href } = useLocale()
   const roots: [string, string][] = [
-    ["/app/scores", t.nav.scores], ["/app/watch", t.nav.watch], ["/app/news", t.nav.news], ["/app/my-teams", t.nav.myTeams], ["/app/notifications", t.dash.notifications],
-    ["/app/assistant", t.nav.assistant], ["/app/compare", t.compare.title], ["/app/rooms", t.dash.rooms], ["/app/predictions", t.dash.predictions], ["/app/billing", t.dash.billing], ["/app/settings", t.dash.settings], ["/app/admin", t.dash.admin],
+    ["/app/scores", t.nav.scores], ["/app/watch", t.nav.watch], ["/app/news", t.nav.news], ["/app/my-teams", t.nav.myTeams], ["/app/notifications", t.dash.notifications], ["/app/search", t.discover.searchTitle], ["/app/board", t.discover.boardTitle],
+    ["/app/assistant", t.nav.assistant], ["/app/compare", t.compare.title], ["/app/rooms", t.dash.rooms], ["/app/predictions", t.dash.predictions], ["/app/clubs", t.community.clubsTitle], ["/app/billing", t.dash.billing], ["/app/settings", t.dash.settings], ["/app/admin", t.dash.admin],
   ]
   const details: [RegExp, string, string, string][] = [
     [/^\/app\/match\//, "/app/scores", t.nav.scores, t.ui.matchCenter],
     [/^\/app\/team\//, "/app/scores", t.nav.scores, t.ui.teamPage],
     [/^\/app\/standings\//, "/app/scores", t.nav.scores, t.standings.title],
+    [/^\/app\/player\//, "/app/search", t.discover.searchTitle, t.discover.players],
+    [/^\/app\/news\/saved/, "/app/news", t.nav.news, t.discover.saved],
     [/^\/app\/news\/.+/, "/app/news", t.nav.news, t.reports.label],
     [/^\/app\/settings\/security/, "/app/settings", t.dash.settings, t.security.title],
     [/^\/app\/rooms\/join/, "/app/rooms", t.dash.rooms, t.community.join],
+    [/^\/app\/predictions\/join/, "/app/predictions", t.dash.predictions, t.community.joinGroup],
+    [/^\/app\/clubs\//, "/app/clubs", t.community.clubsTitle, t.community.clubChat],
+    [/^\/app\/billing\/invite/, "/app/billing", t.dash.billing, t.community.inviteTitle],
   ]
   const detail = details.find(([pattern]) => pattern.test(path))
   const current = detail?.[3] ?? roots.find(([to]) => path === to)?.[1] ?? t.dash.dashboard
@@ -223,24 +237,46 @@ function Crumbs({ path }: { path: string }) {
   )
 }
 
-function SportSwitcher() {
+function TopSearch({ className }: { className?: string }) {
+  const { t, href } = useLocale()
+  const router = useRouter()
+  const params = useSearchParams()
+  const id = useId()
+  const sport = params?.get("sport")
+  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const q = String(new FormData(event.currentTarget).get("q") ?? "").trim()
+    const query = new URLSearchParams({ ...(q ? { q } : {}), ...(sport ? { sport } : {}) }).toString()
+    router.push(href(`/app/search${query ? `?${query}` : ""}`))
+  }
+  return (
+    <form role="search" onSubmit={submit} className={cn("relative min-w-0", className)}>
+      <label htmlFor={id} className="sr-only">{t.discover.searchLabel}</label>
+      <Search aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
+      <input key={params?.get("q") ?? ""} id={id} type="search" name="q" maxLength={80} defaultValue={params?.get("q") ?? ""} placeholder={t.discover.searchPlaceholder} className="fs-input h-9 w-full pl-8 pr-2 text-[13px]" />
+    </form>
+  )
+}
+
+function SportSwitcher({ path, className }: { path: string; className?: string }) {
   const { locale, t, href } = useLocale()
   const params = useSearchParams()
   const { open, setOpen, box, trigger } = usePopover()
+  const linkTo = (sport: string | null) => href(sportSwitchPath(path, params?.toString() ?? "", sport))
   const current = SPORTS.find((sport) => sport.id === params?.get("sport"))
   const item = "flex min-h-10 items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-ink-2 hover:bg-surface-muted hover:text-ink"
   return (
-    <div ref={box} className="relative hidden xl:block">
-      <button ref={trigger} type="button" aria-haspopup="true" aria-expanded={open} onClick={() => setOpen(!open)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-[13px] font-semibold text-ink-2 transition-colors hover:border-line-strong hover:text-ink">
+    <div ref={box} className={cn("relative", className)}>
+      <button ref={trigger} type="button" aria-haspopup="true" aria-expanded={open} onClick={() => setOpen(!open)} className="inline-flex h-9 max-w-44 items-center gap-2 whitespace-nowrap rounded-lg border border-line bg-surface px-3 text-[13px] font-semibold text-ink-2 transition-colors hover:border-line-strong hover:text-ink">
         {current && <SportIcon id={current.id} className="size-4" />}
         {current ? current.name[locale] : t.scores.allSports}
         <ChevronDown aria-hidden className={cn("size-3.5 transition-transform duration-200", open && "rotate-180")} />
       </button>
       {open && (
         <div className="fs-pop fs-noscrollbar absolute right-0 top-full z-40 mt-2 max-h-[70vh] w-60 overflow-y-auto rounded-xl border border-line bg-surface-raised p-1.5 shadow-[var(--shadow-lg)]">
-          <Link href={href("/app/scores")} onClick={() => setOpen(false)} className={item}>{t.scores.allSports}</Link>
+          <Link href={linkTo(null)} onClick={() => setOpen(false)} className={item}>{t.scores.allSports}</Link>
           {SPORTS.filter((sport) => sport.enabled).map((sport) => (
-            <Link key={sport.id} href={href(`/app/scores?sport=${sport.id}`)} onClick={() => setOpen(false)} aria-current={current?.id === sport.id ? "true" : undefined} className={item}>
+            <Link key={sport.id} href={linkTo(sport.id)} onClick={() => setOpen(false)} aria-current={current?.id === sport.id ? "true" : undefined} className={item}>
               <SportIcon id={sport.id} className="size-4 shrink-0" />{sport.name[locale]}
             </Link>
           ))}
@@ -325,15 +361,22 @@ function TopBar({ path, drawer, onMenu }: { path: string; drawer: boolean; onMen
           <span className="lg:hidden"><Logo href={href("/app")} /></span>
           <Crumbs path={path} />
         </div>
+        <Suspense fallback={null}><TopSearch className="mx-2 hidden max-w-xs flex-1 sm:block" /></Suspense>
         <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
           <Suspense fallback={null}>
-            <SportSwitcher />
+            <SportSwitcher path={path} className="hidden sm:block" />
             <LanguageSwitch path={path} />
           </Suspense>
           <ThemeToggle />
           <NotificationBell />
           <UserMenu />
         </div>
+      </div>
+      <div className="flex items-center gap-2 border-t border-line px-4 py-2 sm:hidden">
+        <Suspense fallback={null}>
+          <TopSearch className="flex-1" />
+          <SportSwitcher path={path} />
+        </Suspense>
       </div>
     </header>
   )

@@ -7,6 +7,7 @@ import { getStripe } from "@/lib/billing/stripe-client"
 import { eraseCommunityData } from "@/lib/community/account"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin"
+import { userOwnedRecords } from "@/lib/me/records"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -25,7 +26,8 @@ export async function DELETE(request: Request) {
     }
 
     const { alerts, sends } = await userMessageRecords(db, user.uid)
-    await Promise.all([...alerts, ...sends].map((doc) => doc.ref.delete()))
+    const { compareViews, follows, assistantUsage, savedReports, calendarSubscriptions, calendarFeeds } = await userOwnedRecords(db, user.uid)
+    await Promise.all([...alerts, ...sends, ...compareViews, ...follows, ...assistantUsage, ...savedReports, ...calendarSubscriptions, ...calendarFeeds].map((doc) => doc.ref.delete()))
     await eraseCommunityData(firestoreDocDb(), user.uid)
     await db.collection("user_preferences").doc(user.uid).delete()
     await db.collection("users").doc(user.uid).delete()

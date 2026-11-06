@@ -68,6 +68,10 @@ export async function storedClips(now: number = Date.now()): Promise<StoredClip[
   return clips
 }
 
+/** Newest first, so a same-day clip is never cut off behind older ones. Undated clips go last. */
+export const newestFirst = <T extends Pick<Clip, "dateUTC">>(clips: T[]): T[] =>
+  [...clips].sort((a, b) => (b.dateUTC ?? "").localeCompare(a.dateUTC ?? ""))
+
 /** Called by the scheduled job only. The error never carries the address, which holds the token. */
 export async function refreshClips(now: number = Date.now()): Promise<string> {
   const token = process.env.SCOREBAT_TOKEN

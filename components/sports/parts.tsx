@@ -126,6 +126,12 @@ export function SpoilerReveal({ label }: { label: string }) {
   )
 }
 
+/** A short detail that hints at the result. It simply stays away until the result is shown. */
+export function SpoilerText({ children }: { children: React.ReactNode }) {
+  const { hidden, pending } = useSpoiler()
+  return hidden || pending ? null : <>{children}</>
+}
+
 /** For anything that states a result. `quiet` leaves the control to a SpoilerReveal nearby. */
 export function SpoilerGuard({ label, children, quiet }: { label: string; children: React.ReactNode; quiet?: boolean }) {
   const { hidden, pending, reveal } = useSpoiler()

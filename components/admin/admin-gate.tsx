@@ -1,75 +1,25 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Gauge, ShieldAlert, Wallet } from "lucide-react"
-import { ErrorNotice, Tabs } from "@/components/dashboard/controls"
+import { Gauge, Newspaper, Radar, ScrollText, ShieldAlert, Wallet } from "lucide-react"
+import { Tabs } from "@/components/dashboard/controls"
 import { btn, EmptyState, ListSkeleton, Notice } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import type { MoneyLine } from "@/lib/admin/billing-health"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { useLocale } from "@/lib/use-locale"
+import { CommunityTab } from "./community-tab"
+import { CoverageTab } from "./coverage-tab"
+import { EditorialTab } from "./editorial-tab"
+import { OperationsTab } from "./operations-tab"
+import { CARD, Fact, FIELD, Status, useAdminData } from "./shared"
 
 type Role = "moderator" | "editor" | "admin"
-type Tab = "operations" | "moderation" | "billing"
+type Tab = "operations" | "coverage" | "editorial" | "moderation" | "community" | "billing"
 
-const TABS: Record<Role, Tab[]> = { admin: ["operations", "moderation", "billing"], moderator: ["moderation"], editor: [] }
-const CARD = "rounded-xl border border-line bg-surface p-4 shadow-[var(--shadow-sm)]"
-const FIELD = "fs-input h-10 px-3 text-sm"
-
-function useAdminData<T>(path: string) {
-  const [data, setData] = useState<T | null>(null)
-  const [failed, setFailed] = useState(false)
-  const load = useCallback(() => {
-    setFailed(false)
-    authFetch(path)
-      .then(async (response) => {
-        if (!response.ok) throw new Error("request failed")
-        setData(await response.json())
-      })
-      .catch(() => setFailed(true))
-  }, [path])
-  useEffect(load, [load])
-  return { data, failed, load }
-}
-
-function Status({ failed, loaded, onRetry }: { failed: boolean; loaded: boolean; onRetry(): void }) {
-  const { t } = useLocale()
-  if (failed) return <ErrorNotice onRetry={onRetry}>{t.admin.loadFailed}</ErrorNotice>
-  return loaded ? null : <div role="status" aria-label={t.admin.loading}><ListSkeleton rows={3} /></div>
-}
-
-function Fact({ label, value }: { label: string; value: string | number }) {
-  return <div className={CARD}><dt className="text-sm text-ink-2">{label}</dt><dd className="mt-1 text-lg font-semibold text-ink tabular">{value}</dd></div>
-}
-
-interface Operations {
-  feed: { state: string; source: string; fetchedAt: string; limited: boolean; events: number }
-  jobs: { enabled: boolean; lastReportGeneratedAt: string | null; reportsReadable: boolean }
-}
-
-function OperationsTab() {
-  const { t, locale } = useLocale()
-  const { data, failed, load } = useAdminData<Operations>("/api/admin/operations")
-  const when = (iso: string) => new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso))
-  return (
-    <div className="space-y-4">
-      <Status failed={failed} loaded={Boolean(data)} onRetry={load} />
-      {data && (
-        <>
-          <dl className="fs-stagger grid gap-3 sm:grid-cols-2">
-            <Fact label={t.admin.feedState} value={`${t.ui.feedStates[data.feed.state as keyof typeof t.ui.feedStates] ?? t.ui.feedStates.unavailable}${data.feed.limited ? ` (${t.admin.limitedFeed})` : ""}`} />
-            <Fact label={t.admin.feedEvents} value={data.feed.events} />
-            <Fact label={t.feed.updated} value={when(data.feed.fetchedAt)} />
-            <Fact label={t.admin.jobsEnabled} value={data.jobs.enabled ? t.admin.yes : t.admin.no} />
-            <Fact label={t.admin.lastReport} value={data.jobs.lastReportGeneratedAt ? when(data.jobs.lastReportGeneratedAt) : t.admin.none} />
-          </dl>
-          <p className="text-sm text-ink-2">{t.admin.jobsNote}</p>
-        </>
-      )}
-    </div>
-  )
-}
+const TABS: Record<Role, Tab[]> = { admin: ["operations", "coverage", "editorial", "moderation", "community", "billing"], moderator: ["moderation", "community"], editor: ["editorial"] }
+const TAB_ICONS = { operations: Gauge, coverage: Radar, editorial: Newspaper, moderation: ShieldAlert, community: ScrollText, billing: Wallet }
 
 interface Report {
   id: string
@@ -114,6 +64,7 @@ function ModerationTab() {
               <button type="button" className={button} onClick={() => act({ action: "sanction", uid: report.targetUid, type: "mute", hours })}>{t.admin.mute}</button>
               <button type="button" className={button} onClick={() => act({ action: "sanction", uid: report.targetUid, type: "suspend", hours })}>{t.admin.suspend}</button>
               <button type="button" className={button} onClick={() => act({ action: "lock", scope: report.scope, scopeId: report.scopeId, locked: true })}>{t.admin.lock}</button>
+              {report.scope === "room" && <button type="button" className={button} onClick={() => act({ action: "revoke_invite", roomId: report.scopeId })}>{t.admin.community.revoke}</button>}
               <button type="button" className={button} onClick={() => act({ action: "resolve_report", reportId: report.id })}>{t.admin.resolve}</button>
             </div>
           </li>
@@ -174,7 +125,7 @@ function BillingTab() {
 }
 
 function TabIcon({ id }: { id: Tab }) {
-  const Icon = id === "operations" ? Gauge : id === "moderation" ? ShieldAlert : Wallet
+  const Icon = TAB_ICONS[id]
   return <Icon aria-hidden className="size-4" />
 }
 
@@ -206,13 +157,15 @@ export function AdminGate() {
   }
 
   const tabs = TABS[role]
-  if (tabs.length === 0) return <Notice role="status">{t.admin.editorNote}</Notice>
 
   return (
     <div>
       <Tabs<Tab> value={tab ?? tabs[0]} onChange={setTab} tabs={tabs.map((id) => ({ value: id, label: t.admin.tabs[id], icon: <TabIcon id={id} /> }))} label={t.admin.title}>
         {(tab ?? tabs[0]) === "operations" && <OperationsTab />}
+        {(tab ?? tabs[0]) === "coverage" && <CoverageTab />}
+        {(tab ?? tabs[0]) === "editorial" && <EditorialTab />}
         {(tab ?? tabs[0]) === "moderation" && <ModerationTab />}
+        {(tab ?? tabs[0]) === "community" && <CommunityTab />}
         {(tab ?? tabs[0]) === "billing" && <BillingTab />}
       </Tabs>
     </div>

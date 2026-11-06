@@ -65,3 +65,11 @@ There is no free plan. The owner chose a full paywall: an account can sign in, p
 Scores, Watch and report data stay public on their own API routes, because the frontend renders them on the server without a user token. The dashboard screen is what hides them from an account with no plan.
 
 Stripe test prices were created for all six prices and the old Plus and Premium prices were archived. Live prices still need creating when Stripe goes live.
+
+Owner confirmed on 2026-11-06: everything in the product needs a plan. This overrides the spec's "let visitors browse before registration" and "do not paywall public embeds". Scores, Watch, highlights, news and every other dashboard feature sit behind the plan; the marketing site and legal pages stay public. Whether the paid wall is allowed around YouTube and ScoreBat embeds is an open question for the owner to confirm against those terms.
+
+## D-035: A failed renewal ends access at the renewal date
+
+This replaces the three day grace in D-010. The spec says failed renewals keep access only through the period already paid, and Stripe moves the period end forward before the renewal is paid, so grace on that date kept access far too long. The billing page still shows the card prompt.
+
+Public share cards stay outside the plan wall: a member chooses one game to share, and the score shows only if they chose to reveal it.

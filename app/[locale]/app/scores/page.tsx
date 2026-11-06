@@ -1,20 +1,24 @@
 import Link from "next/link"
-import { ChevronLeft, ChevronRight, Search, Trophy, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Globe2, Search, Trophy, X } from "lucide-react"
 import { SportIcon } from "@/components/site/sport-icon"
 import { AppPage, btn, EmptyState, PageHeader } from "@/components/site/states"
 import { DateJump } from "@/components/sports/date-jump"
 import { FeedNotice } from "@/components/sports/event-card"
 import { CompetitionGroupSection } from "@/components/sports/competition-group"
+import { FavoritesFilter } from "@/components/sports/favorites-filter"
+import { FilterSelect } from "@/components/sports/filter-select"
 import { LiveRefresh } from "@/components/sports/parts"
 import { pageContext, titled } from "@/lib/page-context"
+import { isAfricanEvent } from "@/lib/sports/africa"
 import { enabledSports, getEvents, utcDate } from "@/lib/sports/service"
 import { groupByCompetition, pageOfGroups } from "@/lib/sports/priority"
+import { competitionOptions, filterScores, parseFollowFilter } from "@/lib/sports/score-filters"
 import type { EventStatus, SportId } from "@/lib/sports/types"
 import { cn } from "@/lib/utils"
 
 export const generateMetadata = titled((t) => t.scores.title)
 
-type Search = { sport?: string; status?: string; date?: string; q?: string; page?: string }
+type Search = { sport?: string; status?: string; date?: string; q?: string; page?: string; competition?: string; fav?: string; favl?: string; region?: string }
 type Props = { params: Promise<{ locale: string }>; searchParams: Promise<Search> }
 
 const TABS = [
@@ -39,8 +43,12 @@ export default async function ScoresPage({ params, searchParams }: Props) {
   const q = (search.q ?? "").trim().slice(0, 80)
 
   const feed = await getEvents({ date, sport })
-  const needle = q.toLowerCase()
-  const matching = feed.events.filter((event) => !needle || [event.competition.name, event.eventName ?? "", ...event.participants.map((participant) => participant.name)].some((text) => text.toLowerCase().includes(needle)))
+  // Built from the whole day, so choosing one competition leaves the others in the list.
+  const competitions = competitionOptions(feed.events)
+  const competition = competitions.find((option) => option.key === search.competition)?.key
+  const following = parseFollowFilter(search.fav, search.favl)
+  const africa = search.region === "africa"
+  const matching = filterScores(feed.events, { q, competition, following }).filter((event) => !africa || isAfricanEvent(event))
   const inTab = (key: (typeof TABS)[number]) => matching.filter((event) => !key[1] || (key[1] as readonly EventStatus[]).includes(event.status))
   const events = inTab(tab)
   const pages = Math.max(1, Math.ceil(events.length / PAGE_SIZE))
@@ -51,7 +59,7 @@ export default async function ScoresPage({ params, searchParams }: Props) {
 
   const link = (overrides: Search) => {
     const query = new URLSearchParams()
-    const merged = { sport, status: search.status, date: search.date, q: q || undefined, ...overrides }
+    const merged = { sport, status: search.status, date: search.date, q: q || undefined, competition, fav: search.fav, favl: search.favl, region: search.region, ...overrides }
     for (const [key, value] of Object.entries(merged)) if (value && value !== "all") query.set(key, value)
     const text = query.toString()
     return href(text ? `/app/scores?${text}` : "/app/scores")
@@ -63,6 +71,13 @@ export default async function ScoresPage({ params, searchParams }: Props) {
   const strip = [-3, -2, -1, 0, 1, 2, 3].map((offset) => shiftDate(date, offset))
   const chip = (active: boolean) =>
     cn("inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-[13px] font-medium transition-colors", active ? "border-navy bg-navy text-white dark:border-brand dark:bg-brand dark:text-brand-on" : "border-line bg-surface text-ink-2 hover:border-line-strong hover:text-ink")
+
+  const hiddenFilters = (
+    <>
+      {search.fav && <input type="hidden" name="fav" value={search.fav} />}
+      {search.favl && <input type="hidden" name="favl" value={search.favl} />}
+    </>
+  )
 
   return (
     <AppPage>
@@ -94,6 +109,8 @@ export default async function ScoresPage({ params, searchParams }: Props) {
           {sport && <input type="hidden" name="sport" value={sport} />}
           {search.status && <input type="hidden" name="status" value={search.status} />}
           {search.date && <input type="hidden" name="date" value={search.date} />}
+          {competition && <input type="hidden" name="competition" value={competition} />}
+          {hiddenFilters}
           <label htmlFor="scores-q" className="sr-only">{t.scores.search}</label>
           <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
           <input id="scores-q" type="search" name="q" defaultValue={q} placeholder={t.scores.search} className="fs-input h-10 pl-9 pr-24 text-sm" />
@@ -116,12 +133,31 @@ export default async function ScoresPage({ params, searchParams }: Props) {
           })}
         </nav>
         <div className="fs-noscrollbar mt-2 flex gap-1.5 overflow-x-auto">
-          <Link href={link({ sport: undefined })} aria-current={!sport ? "true" : undefined} className={chip(!sport)}>{t.scores.allSports}</Link>
+          <Link href={link({ sport: undefined, competition: undefined })} aria-current={!sport ? "true" : undefined} className={chip(!sport)}>{t.scores.allSports}</Link>
+          <Link href={link({ region: africa ? undefined : "africa", competition: undefined })} aria-pressed={africa} className={chip(africa)}><Globe2 aria-hidden className="size-3.5" />{t.discover.africaFilter}</Link>
           {enabledSports().map((item) => (
-            <Link key={item.id} href={link({ sport: item.id })} aria-current={sport === item.id ? "true" : undefined} className={chip(sport === item.id)}>
+            <Link key={item.id} href={link({ sport: item.id, competition: undefined })} aria-current={sport === item.id ? "true" : undefined} className={chip(sport === item.id)}>
               <SportIcon id={item.id} className="size-3.5" />{item.name[locale]}
             </Link>
           ))}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          {competitions.length > 0 && (
+            <form className="flex min-w-0 items-center gap-2">
+              {sport && <input type="hidden" name="sport" value={sport} />}
+              {search.status && <input type="hidden" name="status" value={search.status} />}
+              {search.date && <input type="hidden" name="date" value={search.date} />}
+              {q && <input type="hidden" name="q" value={q} />}
+              {hiddenFilters}
+              <label htmlFor="scores-competition" className="sr-only">{t.scores.competition}</label>
+              <FilterSelect id="scores-competition" name="competition" value={competition ?? ""} className="fs-input h-9 w-full max-w-72 px-2 text-sm sm:w-72">
+                <option value="">{t.scores.allCompetitions}</option>
+                {competitions.map((option) => <option key={option.key} value={option.key}>{option.name}</option>)}
+              </FilterSelect>
+              <noscript><button type="submit" className={btn("outline", "sm")}>{t.scores.apply}</button></noscript>
+            </form>
+          )}
+          <FavoritesFilter />
         </div>
       </div>
 
@@ -138,7 +174,7 @@ export default async function ScoresPage({ params, searchParams }: Props) {
         </nav>
       )}
       {events.length === 0 && feed.state !== "unavailable" && (
-        <EmptyState className="mt-5" icon={<Trophy aria-hidden />} title={t.scores.empty} body={t.ui.scoresEmptyBody} action={q || sport || search.status ? { href: dated(date).split("?")[0] + (date !== today ? `?date=${date}` : ""), label: t.ui.clearFilters } : undefined} />
+        <EmptyState className="mt-5" icon={<Trophy aria-hidden />} title={following ? t.scores.noFavorites : t.scores.empty} body={following ? t.scores.noFavoritesBody : t.ui.scoresEmptyBody} action={q || sport || search.status || competition || africa ? { href: dated(date).split("?")[0] + (date !== today ? `?date=${date}` : ""), label: t.ui.clearFilters } : undefined} />
       )}
       <div className="mt-5"><FeedNotice feed={feed} t={t} /></div>
     </AppPage>

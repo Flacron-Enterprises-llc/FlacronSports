@@ -1,16 +1,21 @@
 import { createHash } from "node:crypto"
 import type { Firestore } from "firebase-admin/firestore"
+import { ApiError, featureOn } from "@/lib/api-auth"
+import type { DocDb } from "@/lib/doc-db"
 import { getAdminDb } from "@/lib/firebase-admin"
 import { getDictionary, LOCALES, type Locale } from "@/lib/i18n"
 import { eventTitle, resultLine } from "@/lib/sports/presentation"
 import type { EventScore, SportEvent } from "@/lib/sports/types"
+import { visibleReports } from "./news"
 
 export const REPORTS_COLLECTION = "reports"
+export const REPORT_VERSIONS = "report_versions"
+export const MAX_VERSIONS = 10
 /** Bump whenever the wording in TEMPLATES changes. */
 export const TEMPLATE_VERSION = "result-template-v1"
 
 export type ReportStatus = "draft" | "validated" | "published" | "corrected" | "rejected"
-export type ReportType = "result"
+export type ReportType = "result" | "recap" | "preview" | "roundup"
 
 export interface ReportSource {
   provider: string
@@ -45,6 +50,24 @@ export interface Report {
   publishedAt: string | null
   /** locale#publishedAt, set only while public. See listPublishedReports. */
   feedKey: string | null
+  /** The match facts behind a recap, so the job can skip games that have not changed. */
+  factsVersion?: string
+  /** How many earlier versions an editor can roll back to. */
+  previousVersions?: number
+}
+
+/** What a rollback restores. Kept out of `reports`, whose documents are served publicly. */
+export interface ReportVersion {
+  title: string
+  body: string
+  status: ReportStatus
+  correctionNote: string | null
+  withheldReason: string | null
+  publishedAt: string | null
+  feedKey: string | null
+  savedAt: string
+  savedBy: string
+  action: string
 }
 
 export type SaveOutcome = "created" | "replaced" | "duplicate" | "locked" | "kept" | "queued"
@@ -57,9 +80,9 @@ const TEMPLATES: Record<Locale, { title: string; body: string; eventTitle: strin
 }
 
 const PUBLIC: ReportStatus[] = ["published", "corrected"]
-const fill = (template: string, values: Record<string, string>) => template.replace(/\{(\w+)\}/g, (_, key: string) => values[key])
+export const fill = (template: string, values: Record<string, string>) => template.replace(/\{(\w+)\}/g, (_, key: string) => values[key])
 
-function eventDate(iso: string, locale: Locale): string {
+export function eventDate(iso: string, locale: Locale): string {
   return new Intl.DateTimeFormat(TEMPLATES[locale].dateLocale, { dateStyle: "long", timeZone: "UTC" }).format(new Date(iso))
 }
 
@@ -90,14 +113,24 @@ export function sourceVersion(event: SportEvent): string {
   return createHash("sha256").update(JSON.stringify(facts)).digest("hex").slice(0, 16)
 }
 
+/** Longest first, so a name inside a longer one cannot leave digits behind. */
+export function numbersGrounded(body: string, names: string[], allowed: Iterable<string>): boolean {
+  const known = new Set(allowed)
+  const rest = [...names].sort((a, b) => b.length - a.length).reduce((text, name) => (name ? text.split(name).join(" ") : text), body)
+  return (rest.match(/\d+/g) ?? []).every((number) => known.has(number))
+}
+
+export const eventNames = (event: SportEvent) => [...event.participants.map((item) => item.name), event.competition.name, ...(event.eventName ? [event.eventName] : [])]
+
+export function eventNumbers(event: SportEvent, locale: Locale): string[] {
+  const date = event.scheduledStartUTC ? eventDate(event.scheduledStartUTC, locale).match(/\d+/g) ?? [] : []
+  return [...(JSON.stringify(event.score).match(/\d+/g) ?? []), ...date]
+}
+
 /** Every number in the text must come from the event, whatever its teams are called. */
 export function isGrounded(body: string, event: SportEvent, locale: Locale): boolean {
   if (event.score.kind === "none" || !event.scheduledStartUTC) return false
-  const stated = JSON.stringify(event.score).match(/\d+/g) ?? []
-  const allowed = new Set([...stated, ...(eventDate(event.scheduledStartUTC, locale).match(/\d+/g) ?? [])])
-  const names = [...event.participants.map((item) => item.name), event.competition.name, ...(event.eventName ? [event.eventName] : [])]
-  const rest = names.reduce((text, name) => text.split(name).join(" "), body)
-  return (rest.match(/\d+/g) ?? []).every((number) => allowed.has(number))
+  return numbersGrounded(body, eventNames(event), eventNumbers(event, locale))
 }
 
 export function buildReport(event: SportEvent, locale: Locale, fetchedAt: string, now: Date = new Date()): Report {
@@ -135,6 +168,13 @@ export function buildReport(event: SportEvent, locale: Locale, fetchedAt: string
   return { ...base, status: "validated", title: fill(team ? template.title : template.eventTitle, values), body, withheldReason: null, publishedAt: null, feedKey: null }
 }
 
+export function versionOf(report: Report, action: string, by: string, at: string): ReportVersion {
+  const { title, body, status, correctionNote, withheldReason, publishedAt, feedKey } = report
+  return { title, body, status, correctionNote: correctionNote ?? null, withheldReason: withheldReason ?? null, publishedAt: publishedAt ?? null, feedKey: feedKey ?? null, savedAt: at, savedBy: by, action }
+}
+
+export const nextVersions = (stored: { versions?: ReportVersion[] } | null | undefined, version: ReportVersion) => [...(stored?.versions ?? []), version].slice(-MAX_VERSIONS)
+
 const publishNow = (report: Report): Report => ({
   ...report,
   status: "published",
@@ -151,17 +191,34 @@ const editorOwned = (report: Report) => report.status === "corrected" || Boolean
  */
 export function saveReport(db: Firestore, report: Report): Promise<SaveOutcome> {
   const ref = db.collection(REPORTS_COLLECTION).doc(report.id)
-  const ready = report.status === "validated" ? publishNow(report) : report
+  const history = db.collection(REPORT_VERSIONS).doc(report.id)
+  // With publishing off, validated text waits for an editor instead of going public.
+  const automatic = featureOn("FEATURE_GENERATED_PUBLISHING")
+  const ready = report.status === "validated" && automatic ? publishNow(report) : report
 
   return db.runTransaction(async (tx) => {
     const snapshot = await tx.get(ref)
     if (!snapshot.exists) {
+      // A withdrawal only ever applies to a preview that was already written.
+      if (report.type === "preview" && !report.title) return "kept"
       tx.create(ref, ready)
       return "created"
     }
     const existing = snapshot.data() as Report
     if (editorOwned(existing)) return "locked"
-    if (existing.jobKey === report.jobKey) return "duplicate"
+    if (existing.jobKey === report.jobKey) {
+      if (existing.status !== "validated" || !automatic) return "duplicate"
+      tx.set(ref, publishNow(existing))
+      return "replaced"
+    }
+
+    if (report.type === "preview") {
+      // A preview states no result, so a new kickoff simply updates it, and a game
+      // that will not take place comes down rather than wait for a person.
+      const live = report.title && ready.status === "published" && existing.publishedAt
+      tx.set(ref, live ? { ...ready, publishedAt: existing.publishedAt, feedKey: existing.feedKey } : ready)
+      return "replaced"
+    }
 
     const contested = existing.status === "published" || existing.withheldReason === "source_changed"
     if (!report.title) {
@@ -172,7 +229,11 @@ export function saveReport(db: Firestore, report: Report): Promise<SaveOutcome> 
     }
     if (contested) {
       // The facts changed after publication, so a person decides which is right.
-      tx.set(ref, { ...report, status: "draft", withheldReason: "source_changed", generatedAt: existing.generatedAt })
+      // What was public is kept, so they can put it back.
+      const stored = (await tx.get(history)).data() as { versions?: ReportVersion[] } | undefined
+      const versions = existing.status === "published" ? nextVersions(stored, versionOf(existing, "source_changed", "job", report.generatedAt)) : (stored?.versions ?? [])
+      tx.set(history, { versions })
+      tx.set(ref, { ...report, status: "draft", withheldReason: "source_changed", generatedAt: existing.generatedAt, previousVersions: versions.length })
       return "queued"
     }
     tx.set(ref, ready)
@@ -201,17 +262,22 @@ export async function runReports(db: Firestore, events: SportEvent[], fetchedAt:
 }
 
 /** The editor path: replaces the text, records the note, and locks out the job. */
-export async function applyCorrection(db: Firestore, id: string, correction: { body: string; note: string }, now: Date = new Date()): Promise<void> {
-  const ref = db.collection(REPORTS_COLLECTION).doc(id)
-  await db.runTransaction(async (tx) => {
-    const snapshot = await tx.get(ref)
-    if (!snapshot.exists) throw new Error("Report not found")
-    const report = snapshot.data() as Report
+export async function applyCorrection(db: DocDb, id: string, correction: { body: string; title?: string; note: string; actorUid: string }, now: Date = new Date()): Promise<void> {
+  const path = `${REPORTS_COLLECTION}/${id}`
+  const historyPath = `${REPORT_VERSIONS}/${id}`
+  await db.transaction(async (tx) => {
+    const report = await tx.get<Report>(path)
+    if (!report) throw new ApiError(404, "not_found", "Report not found")
+    const stored = await tx.get<{ versions?: ReportVersion[] }>(historyPath)
+    const title = correction.title ?? report.title
+    if (!title) throw new ApiError(400, "title_required", "This report has no title yet, so a correction needs one")
     const stamp = now.toISOString()
     const publishedAt = report.publishedAt ?? stamp
-    tx.set(ref, {
-      ...report, status: "corrected", body: correction.body, correctionNote: correction.note,
-      withheldReason: null, editedAt: stamp, updatedAt: stamp, publishedAt, feedKey: `${report.locale}#${publishedAt}`,
+    const versions = nextVersions(stored, versionOf(report, "corrected", correction.actorUid, stamp))
+    tx.set(historyPath, { versions })
+    tx.set(path, {
+      ...report, status: "corrected", title, body: correction.body, correctionNote: correction.note,
+      withheldReason: null, editedAt: stamp, updatedAt: stamp, publishedAt, feedKey: `${report.locale}#${publishedAt}`, previousVersions: versions.length,
     })
   })
 }
@@ -232,7 +298,7 @@ async function fromBackend<T>(path: string): Promise<T | null> {
   return response.json() as Promise<T>
 }
 
-export async function listPublishedReports(locale: Locale, limit = 100): Promise<ReportList> {
+export async function listPublishedReports(locale: Locale, limit = 200): Promise<ReportList> {
   const remote = await fromBackend<ReportList>(`/api/reports?locale=${locale}`).catch(() => ({ state: "unavailable", reports: [] }) as ReportList)
   if (remote) return remote
   const db = getAdminDb()
@@ -246,7 +312,7 @@ export async function listPublishedReports(locale: Locale, limit = 100): Promise
       .orderBy("feedKey", "desc")
       .limit(limit)
       .get()
-    return { state: "ok", reports: snapshot.docs.map((doc) => doc.data() as Report).filter((report) => PUBLIC.includes(report.status)) }
+    return { state: "ok", reports: visibleReports(snapshot.docs.map((doc) => doc.data() as Report).filter((report) => PUBLIC.includes(report.status))) }
   } catch (error) {
     console.error("Report listing failed", error instanceof Error ? error.message : "unknown")
     return { state: "unavailable", reports: [] }

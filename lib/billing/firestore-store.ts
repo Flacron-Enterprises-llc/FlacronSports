@@ -74,6 +74,9 @@ export const firestoreBillingStore: BillingStore = {
           merge: true,
         })
       }
+      if (mutation.audit) {
+        tx.set(firestore.collection("audit_logs").doc(), { ...mutation.audit, at: new Date().toISOString() })
+      }
       if (mutation.quarantine) {
         tx.set(firestore.collection(BILLING_COLLECTIONS.quarantine).doc(event.id), {
           ...mutation.quarantine,

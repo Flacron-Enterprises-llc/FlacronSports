@@ -3,7 +3,7 @@
 // showing a wrong one. Provider prose is never kept: it can name other publishers,
 // and one sampled card contradicted itself, so only checked facts leave this file.
 
-import type { ClassificationEntry, CombatMethod, EventScore, SetLine } from "./types"
+import type { ClassificationEntry, CombatMethod, EventScore, ScoreBreakdown, ScoreSegment, SetLine, SportId } from "./types"
 
 type Sets = Extract<EventScore, { kind: "sets" }>
 type Combat = Omit<Extract<EventScore, { kind: "combat" }>, "kind">
@@ -134,7 +134,8 @@ function grandPrixRow(row: string): ClassificationEntry | null {
   const cells = row.split("\t").map((cell) => cell.trim())
   if (!/^\d+$/.test(cells[1] ?? "") || !/^\d+$/.test(cells[4] ?? "")) return null
   const name = withoutNation(cells[2])
-  return name && cells[3] ? { position: Number(cells[0]), name, team: cells[3], time: finishTime(cells[5]) } : null
+  if (!name || !cells[3]) return null
+  return { position: Number(cells[0]), name, team: cells[3], time: finishTime(cells[5]), laps: Number(cells[4]), grid: /^\d+$/.test(cells[6] ?? "") ? Number(cells[6]) : null }
 }
 
 /** Slash-marked table: position, /rider, /team, /time. */
@@ -156,6 +157,110 @@ export function parseClassification(text: string | null | undefined): Classifica
   const entries = body.map(reader)
   if (entries.length < 3 || entries.some((entry, index) => entry?.position !== index + 1)) return null
   return entries as ClassificationEntry[]
+}
+
+const numbers = (row: string | undefined) => (/^\d+(?:\s+\d+)*$/.test(row ?? "") ? (row as string).split(/\s+/).map(Number) : null)
+const rowsOf = (text: string) => text.split(/<br\s*\/?>/i).map((row) => row.trim())
+const sum = (values: (number | null)[]) => values.reduce<number>((total, value) => total + (value ?? 0), 0)
+
+interface Sides {
+  home: string
+  away: string
+  homeScore: number
+  awayScore: number
+}
+
+/** "Name Quarters:" then one row per side. Baseball adds a hits and errors line. */
+function sideRows(text: string, heading: string, { home, away }: Sides) {
+  const rows = rowsOf(text)
+  const read = (name: string) => {
+    const at = rows.indexOf(`${name} ${heading}:`)
+    const values = at === -1 ? null : numbers(rows[at + 1])
+    const totals = at === -1 ? null : rows[at + 2]?.match(/^Hits: (\d+) - Errors: (\d+)$/)
+    return values ? { values, hits: totals ? Number(totals[1]) : null, errors: totals ? Number(totals[2]) : null } : null
+  }
+  const [first, second] = [read(home), read(away)]
+  return first && second ? { first, second } : null
+}
+
+function quarters(text: string, sides: Sides): ScoreBreakdown | null {
+  const parsed = sideRows(text, "Quarters", sides)
+  if (!parsed) return null
+  const { first, second } = parsed
+  const played = first.values.length
+  // Some college games are written as halves in the second and fourth slots, which would read as scoreless quarters.
+  if (played !== second.values.length || played < 4 || first.values.some((value, index) => value === 0 && second.values[index] === 0)) return null
+  if (sum(first.values) !== sides.homeScore || sum(second.values) !== sides.awayScore) return null
+  return {
+    segments: first.values.map((home, index) => ({
+      kind: index < 4 ? "quarter" : "overtime",
+      number: index < 4 ? index + 1 : index - 3,
+      home,
+      away: second.values[index],
+    })),
+  }
+}
+
+/** A home side that did not bat in the last inning has no value there, not a zero. */
+function innings(text: string, sides: Sides): ScoreBreakdown | null {
+  const parsed = sideRows(text, "Innings", sides)
+  if (!parsed) return null
+  const { first, second } = parsed
+  if (sum(first.values) !== sides.homeScore || sum(second.values) !== sides.awayScore) return null
+  const played = Math.max(first.values.length, second.values.length)
+  const segments = Array.from({ length: played }, (_, index): ScoreSegment => ({ kind: "inning", number: index + 1, home: first.values[index] ?? null, away: second.values[index] ?? null }))
+  const pair = (home: number | null, away: number | null) => (home === null || away === null ? {} : { home, away })
+  const hits = pair(first.hits, second.hits)
+  const errors = pair(first.errors, second.errors)
+  return { segments, ...("home" in hits ? { hits: hits as { home: number; away: number } } : {}), ...("home" in errors ? { errors: errors as { home: number; away: number } } : {}) }
+}
+
+/** "Name First:" then "home away" under each heading. The source spells "Forth", and a blank heading has no score. */
+function headedPairs(text: string, headings: string[], { home }: Sides): ([number, number] | null)[] | null {
+  const rows = rowsOf(text)
+  if (rows[0] !== `${home} ${headings[0]}:`) return null
+  return headings.map((heading, index) => {
+    const at = index === 0 ? 0 : rows.findIndex((row) => row.replace(/:$/, "") === heading)
+    const values = at === -1 ? null : numbers(rows[at + 1])
+    return values?.length === 2 ? [values[0], values[1]] : null
+  })
+}
+
+const QUARTER_HEADINGS = ["Quarter 1", "Quarter 2", "Quarter 3", "Quarter 4", "Overtime"]
+const HALF_HEADINGS = ["First Half", "Second Half", "Overtime"]
+const SET_HEADINGS = ["First", "Second", "Third", "Forth", "Fifth"]
+
+/** Regular periods must all be there and add up to the score, so a partial row hides rather than misleads. */
+function regularPairs(text: string, headings: string[], kind: "quarter" | "half", sides: Sides): ScoreBreakdown | null {
+  const pairs = headedPairs(text, headings, sides)
+  if (!pairs || pairs.slice(0, -1).some((pair) => !pair)) return null
+  const segments = pairs.flatMap((pair, index): ScoreSegment[] => {
+    if (!pair) return []
+    const overtime = index === headings.length - 1
+    return [{ kind: overtime ? "overtime" : kind, number: overtime ? 1 : index + 1, home: pair[0], away: pair[1] }]
+  })
+  if (sum(segments.map((item) => item.home)) !== sides.homeScore || sum(segments.map((item) => item.away)) !== sides.awayScore) return null
+  return { segments }
+}
+
+/** The total counts sets won. A set the source left blank keeps its place, empty. */
+function volleyballSets(text: string, sides: Sides): ScoreBreakdown | null {
+  const pairs = headedPairs(text, SET_HEADINGS, sides)
+  if (!pairs) return null
+  const last = pairs.reduce((found, pair, index) => (pair ? index : found), -1)
+  if (last < 2) return null
+  const segments = pairs.slice(0, last + 1).map((pair, index): ScoreSegment => ({ kind: "set", number: index + 1, home: pair?.[0] ?? null, away: pair?.[1] ?? null }))
+  const won = (side: "home" | "away", other: "home" | "away") => segments.filter((item) => (item[side] ?? 0) > (item[other] ?? 0)).length
+  return won("home", "away") <= sides.homeScore && won("away", "home") <= sides.awayScore ? { segments } : null
+}
+
+export function parseBreakdown(text: string | null | undefined, sport: SportId, sides: Sides): ScoreBreakdown | null {
+  if (!text) return null
+  if (sport === "basketball") return quarters(text, sides)
+  if (sport === "baseball") return innings(text, sides)
+  if (sport === "american-football") return regularPairs(text, QUARTER_HEADINGS, "quarter", sides)
+  if (sport === "rugby") return regularPairs(text, HALF_HEADINGS, "half", sides)
+  return sport === "volleyball" ? volleyballSets(text, sides) : null
 }
 
 const shortSide = (name: string) => name.replace(/\s+Cricket$/i, "")

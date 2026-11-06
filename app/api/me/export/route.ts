@@ -6,6 +6,7 @@ import { exportCommunityData } from "@/lib/community/account"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { getAdminDb } from "@/lib/firebase-admin"
 import { getPreferences } from "@/lib/me/preferences"
+import { userOwnedRecords } from "@/lib/me/records"
 import { rateLimit } from "@/lib/rate-limit"
 
 export const dynamic = "force-dynamic"
@@ -21,6 +22,7 @@ export async function GET(request: Request) {
     const payments = await db.collection("billing_payments").where("uid", "==", user.uid).get()
     const { alerts, sends } = await userMessageRecords(db, user.uid)
     const purchases = await db.collection("billing_purchases").where("uid", "==", user.uid).get()
+    const { compareViews, follows, assistantUsage, savedReports, calendarSubscriptions } = await userOwnedRecords(db, user.uid)
     const body = {
       exportedAt: new Date().toISOString(),
       account: { uid: user.uid, email: user.email },
@@ -31,6 +33,12 @@ export async function GET(request: Request) {
       purchases: purchases.docs.map((doc) => doc.data()),
       ...(await exportCommunityData(firestoreDocDb(), user.uid)),
       newsletterSends: sends.map((doc) => doc.data()),
+      compareViews: compareViews.map((doc) => doc.data()),
+      follows: follows.map((doc) => doc.data()),
+      assistantUsage: assistantUsage.map((doc) => doc.data()),
+      savedReports: savedReports.map((doc) => doc.data()),
+      // The hash is left out: it identifies the feed and says nothing about the member.
+      calendarSubscription: calendarSubscriptions.map((doc) => ({ createdAtUTC: doc.data().createdAtUTC })),
     }
     return new NextResponse(JSON.stringify(body, null, 2), {
       headers: { "Content-Type": "application/json", "Content-Disposition": 'attachment; filename="flacronsport-data.json"' },

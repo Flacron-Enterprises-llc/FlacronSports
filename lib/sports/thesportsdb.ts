@@ -1,5 +1,5 @@
-import { parseCard, parseClassification, parseCombatResult, parseCricketOutcome, parseCricketOvers, parseTennisDraw, parseTennisResult } from "./results"
-import type { EventScore, EventStatus, Innings, Participant, SportEvent, SportId } from "./types"
+import { parseBreakdown, parseCard, parseClassification, parseCombatResult, parseCricketOutcome, parseCricketOvers, parseTennisDraw, parseTennisResult } from "./results"
+import type { EventConclusion, EventScore, EventStatus, Innings, Participant, SportEvent, SportId } from "./types"
 
 export const PROVIDER_NAME = "TheSportsDB"
 
@@ -35,7 +35,7 @@ export interface RawEvent {
   strProgress?: string | null
 }
 
-const FINISHED = new Set(["FT", "AET", "PEN", "AOT", "MATCH FINISHED", "FINISHED"])
+const FINISHED = new Set(["FT", "AET", "PEN", "AOT", "AP", "AWD", "WO", "MATCH FINISHED", "FINISHED"])
 const LIVE = new Set(["1H", "2H", "HT", "ET", "BT", "P", "Q1", "Q2", "Q3", "Q4", "OT", "LIVE", "IN PLAY"])
 const SCHEDULED = new Set(["NS", "NOT STARTED", "TBD", ""])
 
@@ -48,11 +48,33 @@ export function normalizeStatus(raw: RawEvent): EventStatus {
   if (FINISHED.has(status)) return "finished"
   if (LIVE.has(status) || LIVE_PERIOD.test(status)) return "live"
   if (SCHEDULED.has(status)) return "scheduled"
-  if (status === "PST" || status === "POSTPONED") return "postponed"
+  if (status === "PST" || status === "POST" || status === "POSTPONED") return "postponed"
   if (status === "CANC" || status === "CANCELLED" || status === "CANCELED") return "canceled"
   if (status === "SUSP" || status === "INT" || status === "INTERRUPTED") return "interrupted"
   if (status === "ABD" || status === "ABANDONED") return "abandoned"
   return "unknown"
+}
+
+const CONCLUSIONS: Record<string, EventConclusion> = { AET: "extra-time", AOT: "overtime", PEN: "penalties", AWD: "awarded", WO: "walkover" }
+
+/** "AP" is the same state as "PEN", and hockey calls it a shootout. */
+function conclusionOf(raw: RawEvent, sportId: SportId): EventConclusion | null {
+  const status = (raw.strStatus ?? "").trim().toUpperCase()
+  if (status === "AP") return sportId === "ice-hockey" ? "shootout" : "penalties"
+  return CONCLUSIONS[status] ?? null
+}
+
+export type PeriodKey = "first-half" | "second-half" | "half-time" | "extra-time" | "extra-break" | "shootout" | "overtime" | "quarter" | "period" | "inning"
+
+/** The running period of a live game, in a form the page can translate. Raw codes never reach a visitor. */
+export function currentPeriod(status: string | null | undefined): { key: PeriodKey; number?: number } | null {
+  const code = (status ?? "").trim().toUpperCase()
+  const fixed: Record<string, PeriodKey> = { "1H": "first-half", "2H": "second-half", HT: "half-time", ET: "extra-time", BT: "extra-break", P: "shootout", OT: "overtime" }
+  if (fixed[code]) return { key: fixed[code] }
+  const numbered = code.match(/^(Q|P|IN|ET)(\d{1,2})$/)
+  if (!numbered) return null
+  const number = Number(numbered[2])
+  return { key: numbered[1] === "Q" ? "quarter" : numbered[1] === "P" ? "period" : numbered[1] === "IN" ? "inning" : "extra-time", number }
 }
 
 function parseScore(value: string | number | null | undefined): number | null {
@@ -201,6 +223,14 @@ function motorsportFields(raw: RawEvent, now: Date) {
   }
 }
 
+function finish(raw: RawEvent, sportId: SportId): Pick<SportEvent, "conclusion" | "shootout"> {
+  const conclusion = conclusionOf(raw, sportId)
+  if (!conclusion) return {}
+  const [home, away] = [parseScore(raw.intHomeScoreExtra), parseScore(raw.intAwayScoreExtra)]
+  const decided = conclusion === "penalties" || conclusion === "shootout"
+  return { conclusion, ...(decided && home !== null && away !== null ? { shootout: { home, away } } : {}) }
+}
+
 export function normalizeEvent(raw: RawEvent, sportId: SportId, now: Date = new Date()): SportEvent {
   const shared = {
     id: `tsdb-${raw.idEvent}`,
@@ -233,5 +263,9 @@ export function normalizeEvent(raw: RawEvent, sportId: SportId, now: Date = new 
   const status = settledStatus(raw, now)
   const clock = status === "live" && raw.strProgress ? raw.strProgress : null
   // The score follows what the source stated: a game it never started has no score, however old.
-  return { ...shared, ...teams, status, score: normalizeScore(raw, normalizeStatus(raw)), ...(clock ? { clock } : {}) }
+  const score = normalizeScore(raw, normalizeStatus(raw))
+  const breakdown = status === "finished" && score.kind === "team"
+    ? parseBreakdown(raw.strResult, sportId, { home: teams.participants[0].name, away: teams.participants[1].name, homeScore: score.home, awayScore: score.away })
+    : null
+  return { ...shared, ...teams, status, score, ...(clock ? { clock } : {}), ...finish(raw, sportId), ...(breakdown ? { breakdown } : {}) }
 }

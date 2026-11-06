@@ -17,6 +17,8 @@ export type QuarantineReason =
   | "missing_firebase_uid"
   | "unknown_price"
   | "missing_payment"
+  | "duplicate_subscription"
+  | "unlinked_refund"
 
 export interface LedgerEntry {
   collection: "billing_payments" | "billing_refunds"
@@ -32,6 +34,8 @@ export interface EventMutation {
   purchase?: BillingPurchase
   /** Applied to the purchase paid by this payment, if there is one. */
   purchaseRefund?: { paymentId: string; full: boolean; refundedAtUTC: string }
+  /** Written with the event claim, so an access change is never left unrecorded. */
+  audit?: { action: string; actorUid: string; detail: Record<string, string | number | boolean | null> }
 }
 
 export interface CommitResult {
@@ -53,6 +57,12 @@ export interface WebhookDeps {
   retrieveCheckoutSession(id: string): Promise<Stripe.Checkout.Session>
   /** Resolves ownership for objects that carry no app metadata, such as refunded charges. */
   ownsCustomer?(customerId: string): Promise<boolean>
+  /** Charges no longer name their invoice, so a refund finds it through the payment. */
+  invoiceForPayment?(paymentIntentId: string): Promise<Stripe.Invoice | null>
+  listSubscriptions?(customerId: string): Promise<Stripe.Subscription[]>
+  cancelSubscription?(id: string): Promise<void>
+  /** Runs after the payment is on record, and again on redelivery, so it must be idempotent. */
+  onPaidInvoice?(uid: string, invoiceId: string): Promise<unknown>
   allowLivemode?: boolean
   env?: Record<string, string | undefined>
 }
@@ -96,6 +106,7 @@ export function projectSubscription(
       status: subscription.status as StripeSubscriptionStatus,
       stripeCustomerId: idOf(subscription.customer) as string,
       stripeSubscriptionId: subscription.id,
+      currentPeriodStart: item.current_period_start,
       currentPeriodEnd: item.current_period_end,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
       lastEventCreated: eventCreated,
@@ -183,6 +194,74 @@ async function projectPurchase(
   }
 }
 
+const SYSTEM_ACTOR = "system:stripe"
+
+/**
+ * Only a charge for time still running ends access: refunding last month's invoice
+ * leaves the paid current period alone. Canceling in Stripe, not just here, is what
+ * stops the next webhook from restoring the subscription or a renewal from charging.
+ */
+async function endRefundedSubscription(
+  charge: Stripe.Charge,
+  paymentId: string | null,
+  event: Stripe.Event,
+  deps: WebhookDeps,
+): Promise<Pick<EventMutation, "entitlement" | "audit" | "quarantine">> {
+  if (!deps.invoiceForPayment || !deps.cancelSubscription) return {}
+  const invoice = paymentId ? await deps.invoiceForPayment(paymentId) : null
+  const subscriptionId = invoice ? subscriptionIdFromInvoice(invoice) : null
+  if (!invoice || !subscriptionId) return { quarantine: { reason: "unlinked_refund", objectId: charge.id } }
+
+  const subscription = await deps.retrieveSubscription(subscriptionId)
+  const projected = projectSubscription(subscription, event.created, deps.env)
+  if ("quarantine" in projected) return { quarantine: { reason: projected.quarantine, objectId: subscription.id } }
+
+  const { record } = projected
+  const detail = { targetUid: record.uid, stripeSubscriptionId: subscription.id, stripeChargeId: charge.id, stripeInvoiceId: invoice.id ?? null }
+  if (!invoice.lines.data.some((line) => line.period.end > event.created)) {
+    return { audit: { action: "billing.refund_past_period", actorUid: SYSTEM_ACTOR, detail } }
+  }
+  if (subscription.status !== "canceled" && subscription.status !== "incomplete_expired") await deps.cancelSubscription(subscription.id)
+  return {
+    entitlement: { ...record, status: "canceled", cancelAtPeriodEnd: false },
+    audit: { action: "billing.refund_ended_access", actorUid: SYSTEM_ACTOR, detail },
+  }
+}
+
+const paying = (subscription: Stripe.Subscription) => subscription.status === "active" || subscription.status === "trialing"
+
+/**
+ * Two checkouts can both be paid. Every webhook keeps the oldest paying subscription,
+ * so both deliveries agree whichever order they arrive in. The charge stands until
+ * support refunds it, which the quarantine record is there to prompt.
+ */
+async function settleDuplicate(
+  subscription: Stripe.Subscription,
+  record: EntitlementRecord,
+  deps: WebhookDeps,
+): Promise<Pick<EventMutation, "entitlement" | "audit" | "quarantine"> | null> {
+  if (!deps.listSubscriptions || !deps.cancelSubscription) return null
+  const rivals = (await deps.listSubscriptions(record.stripeCustomerId)).filter(
+    (item) => item.id !== subscription.id && paying(item) && item.metadata?.app_id === APP_ID && item.metadata?.firebase_uid === record.uid,
+  )
+  const candidates = paying(subscription) ? [subscription, ...rivals] : rivals
+  const keeper = candidates.sort((a, b) => a.created - b.created || a.id.localeCompare(b.id))[0]
+  if (!keeper || keeper.id === subscription.id) return null
+
+  if (subscription.status !== "canceled") await deps.cancelSubscription(subscription.id)
+  // Stamped now, not with this event's time: the cancellation's own webhook may land first.
+  const kept = projectSubscription(keeper, Math.floor(Date.now() / 1000), deps.env)
+  return {
+    entitlement: "record" in kept ? kept.record : undefined,
+    quarantine: { reason: "duplicate_subscription", objectId: subscription.id },
+    audit: {
+      action: "billing.duplicate_subscription_canceled",
+      actorUid: SYSTEM_ACTOR,
+      detail: { targetUid: record.uid, canceled: subscription.id, kept: keeper.id },
+    },
+  }
+}
+
 export async function processStripeEvent(event: Stripe.Event, deps: WebhookDeps): Promise<WebhookOutcome> {
   const meta = { id: event.id, type: event.type, created: event.created }
 
@@ -212,8 +291,11 @@ export async function processStripeEvent(event: Stripe.Event, deps: WebhookDeps)
     const paymentId = idOf(charge.payment_intent)
     const full = charge.refunded === true || (charge.amount > 0 && charge.amount_refunded >= charge.amount)
     const refundedAtUTC = new Date(event.created * 1000).toISOString()
+    // Add-on charges carry their sku. Anything else from an owned customer is a subscription charge.
+    const ended = full && !charge.metadata?.sku ? await endRefundedSubscription(charge, paymentId, event, deps) : {}
     return finish(
       {
+        ...ended,
         purchaseRefund: paymentId ? { paymentId, full, refundedAtUTC } : undefined,
         ledger: {
           collection: "billing_refunds",
@@ -259,10 +341,15 @@ export async function processStripeEvent(event: Stripe.Event, deps: WebhookDeps)
     return finish({ quarantine: { reason: projected.quarantine, objectId: subscription.id } }, "quarantined")
   }
 
-  return finish(
-    { entitlement: projected.record, ledger: paymentLedger(event, projected.record) },
-    "applied",
-  )
+  if (event.type === "checkout.session.completed") {
+    const settled = await settleDuplicate(subscription, projected.record, deps)
+    if (settled) return finish(settled, "applied")
+  }
+
+  const ledger = paymentLedger(event, projected.record)
+  const outcome = await finish({ entitlement: projected.record, ledger }, "applied")
+  if (ledger) await deps.onPaidInvoice?.(projected.record.uid, ledger.id)
+  return outcome
 }
 
 /**

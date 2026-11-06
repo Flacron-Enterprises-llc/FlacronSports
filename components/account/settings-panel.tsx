@@ -17,6 +17,7 @@ import type { AlertType } from "@/lib/me/preferences-defaults"
 import { readStored, SPOILER_DECIDED_KEY, writeStored } from "@/lib/storage-consent"
 import { SPORTS } from "@/lib/sports/types"
 import { useLocale } from "@/lib/use-locale"
+import { CalendarFeedPanel } from "./calendar-feed-panel"
 import { usePreferences } from "./prefs-provider"
 
 const ALERT_ROWS: AlertType[] = ["start", "final", "participants", "scoring", "interval", "highlights"]
@@ -91,7 +92,7 @@ export function SettingsPanel() {
     router.push(localePath(next, "/app/settings"))
   }
 
-  const sections = [["general", t.settings.general], ["alerts", t.settings.alerts], ["privacy", t.settings.privacy], ["help", t.settings.help]]
+  const sections = [["general", t.settings.general], ["alerts", t.settings.alerts], ["calendar", t.discover.feedManage], ["privacy", t.settings.privacy], ["help", t.settings.help]]
   const selectClass = "fs-input h-9 w-auto max-w-[11rem] px-2 text-sm"
 
   return (
@@ -133,6 +134,9 @@ export function SettingsPanel() {
           <div className="divide-y divide-line">
             <Row title={t.settings.mute}>
               {(id) => <Switch labelledBy={id} checked={prefs.alerts.muted} onChange={(muted) => save({ alerts: { ...prefs.alerts, muted } })} />}
+            </Row>
+            <Row title={t.alerts.summaryToggle} help={t.alerts.summaryToggleHelp}>
+              {(id) => <Switch labelledBy={id} disabled={prefs.alerts.muted} checked={prefs.alerts.dailySummary === true} onChange={(dailySummary) => save({ alerts: { ...prefs.alerts, dailySummary } })} />}
             </Row>
             <Row title={t.alerts.emailToggle} help={t.alerts.emailToggleHelp}>
               {(id) => <Switch labelledBy={id} disabled={prefs.alerts.muted} checked={prefs.alerts.email === true} onChange={(email) => save({ alerts: { ...prefs.alerts, email } })} />}
@@ -190,6 +194,8 @@ export function SettingsPanel() {
             </div>
           </div>
         </Panel>
+
+        <CalendarFeedPanel />
 
         <Panel id="privacy" title={t.settings.privacy} icon={<ShieldCheck aria-hidden />}>
           <Row title={t.settings.newsletter} help={t.settings.newsletterHelp}>

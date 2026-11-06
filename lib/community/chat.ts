@@ -4,6 +4,7 @@
 import { randomBytes } from "node:crypto"
 import { ApiError } from "@/lib/api-auth"
 import type { DocDb, DocTx } from "@/lib/doc-db"
+import { badgesFor, type Badge } from "./badges"
 import { assertId, MATCH_ID, MESSAGE_ID, opaqueRef, ROOM_ID } from "./content"
 import { requireAccepted } from "./gate"
 
@@ -93,10 +94,11 @@ export async function postMatchMessage(
   })
 }
 
-export function toPublicMessage(id: string, message: StoredMessage, viewerUid: string | null, myReaction: string | null = null) {
+export function toPublicMessage(id: string, message: StoredMessage, viewerUid: string | null, myReaction: string | null = null, badges: Badge[] = []) {
   return {
     id,
     displayName: message.displayName,
+    badges: message.formerMember ? [] : badges,
     text: message.removed || message.formerMember ? "" : message.text,
     createdAtUTC: message.createdAtUTC,
     removed: message.removed,
@@ -123,8 +125,10 @@ export async function listMessages(
     ? await db.query<{ messageId: string; reaction: string }>("message_reactions", { where: [["uid", viewerUid], ["scopeId", scopeId]] })
     : []
   const myReactions = new Map(mine.map((row) => [row.messageId, row.reaction]))
+  const shown = rows.filter((row) => !blocked.includes(row.uid))
+  const badges = await badgesFor(db, shown.map((row) => row.uid))
   return {
-    messages: rows.filter((row) => !blocked.includes(row.uid)).map((row) => toPublicMessage(row.id, row, viewerUid, myReactions.get(row.id) ?? null)),
+    messages: shown.map((row) => toPublicMessage(row.id, row, viewerUid, myReactions.get(row.id) ?? null, badges.get(row.uid))),
     nextCursor: rows.length === PAGE_SIZE ? rows[rows.length - 1].id : null,
   }
 }

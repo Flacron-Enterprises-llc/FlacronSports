@@ -54,7 +54,7 @@ export function FullReportSection({ slug }: { slug: string }) {
               {report.moments.map((moment) => (
                 <li key={moment.id}>
                   {moment.minute !== null && <span className="tabular font-semibold">{moment.minute}′ </span>}
-                  {t.match.timelineKinds[moment.kind]}
+                  {moment.kind !== "other" && t.match.timelineKinds[moment.kind]}
                   {moment.player ? `: ${moment.player}` : ""}
                   {moment.team ? ` (${moment.team})` : ""}
                 </li>

@@ -52,7 +52,7 @@ export function NotificationList() {
               <p className="mt-0.5 text-sm leading-6 text-ink-2">{item.body}</p>
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-2">
                 <LocalTime iso={item.createdAt} mode="datetime" />
-                <Link href={href(item.path)} className="inline-flex items-center gap-1 font-semibold text-hot-text hover:underline">{t.notifications.open}<ArrowRight aria-hidden className="size-3.5" /></Link>
+                {item.path.startsWith("/app/match/") && <Link href={href(item.path)} className="inline-flex items-center gap-1 font-semibold text-hot-text hover:underline">{t.notifications.open}<ArrowRight aria-hidden className="size-3.5" /></Link>}
               </div>
             </div>
           </li>

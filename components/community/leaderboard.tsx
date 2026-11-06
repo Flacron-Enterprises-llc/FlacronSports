@@ -3,12 +3,16 @@
 import { useCallback, useEffect, useState } from "react"
 import { ErrorNotice } from "@/components/dashboard/controls"
 import { Skeleton } from "@/components/site/states"
+import { authFetch } from "@/lib/auth-fetch"
+import type { Badge } from "@/lib/community/badges"
 import { useLocale } from "@/lib/use-locale"
+import { BadgeList } from "./badge-list"
 
 interface Entry {
   rank: number
   displayName: string
   points: number
+  badges?: Badge[]
 }
 
 export function Leaderboard() {
@@ -18,7 +22,7 @@ export function Leaderboard() {
 
   const load = useCallback(async () => {
     setFailed(false)
-    const response = await fetch("/api/predictions/leaderboard").catch(() => null)
+    const response = await authFetch("/api/predictions/leaderboard").catch(() => null)
     if (!response?.ok) return setFailed(true)
     setEntries(((await response.json()) as { entries: Entry[] }).entries ?? [])
   }, [])
@@ -36,7 +40,7 @@ export function Leaderboard() {
       {entries.map((entry, index) => (
         <li key={index} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
           <span className="tabular w-6 shrink-0 text-right font-semibold text-ink-2">{entry.rank}</span>
-          <span className="min-w-0 flex-1 truncate font-medium text-ink">{entry.displayName}</span>
+          <span className="min-w-0 flex-1 truncate font-medium text-ink">{entry.displayName} <BadgeList badges={entry.badges} /></span>
           <span className="tabular shrink-0 font-semibold text-ink">{entry.points}</span>
         </li>
       ))}

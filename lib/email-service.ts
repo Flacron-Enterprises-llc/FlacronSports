@@ -1,5 +1,6 @@
 import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2"
 import { APP_ID } from "@/lib/billing/plans"
+import { countMetric } from "@/lib/ops/metrics"
 
 export interface OutboundEmail {
   to: string
@@ -19,11 +20,12 @@ export async function sendEmail(email: OutboundEmail): Promise<boolean> {
   if (!region || !from) {
     // Outside production nothing is sent. Addresses and links are never logged.
     console.warn("Email is not configured; not sent:", email.subject)
+    countMetric("email_not_configured")
     return false
   }
 
   client ??= new SESv2Client({ region })
-  await client.send(
+  const sending = client.send(
     new SendEmailCommand({
       FromEmailAddress: from,
       Destination: { ToAddresses: [email.to] },
@@ -37,6 +39,13 @@ export async function sendEmail(email: OutboundEmail): Promise<boolean> {
       EmailTags: [{ Name: "app_id", Value: APP_ID }],
     }),
   )
+  try {
+    await sending
+  } catch (error) {
+    countMetric("email_failed")
+    throw error
+  }
+  countMetric("email_sent")
   return true
 }
 

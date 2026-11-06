@@ -209,9 +209,10 @@ describe("access computation", () => {
     expect(computeAccess(record({ cancelAtPeriodEnd: true }), 999)).toMatchObject({ plan: "plus", state: "canceling" })
     expect(computeAccess(record({ cancelAtPeriodEnd: true }), 1000).plan).toBe("none")
   })
-  it("applies the past-due grace cutoff", () => {
-    expect(computeAccess(record({ status: "past_due" }), 1000 + day).state).toBe("past_due")
-    expect(computeAccess(record({ status: "past_due" }), 1000 + 4 * day).plan).toBe("none")
+  it("gives a failed renewal nothing past the paid period, and keeps the state for billing", () => {
+    const failed = record({ status: "past_due", currentPeriodStart: 1000, currentPeriodEnd: 1000 + 30 * day })
+    expect(computeAccess(failed, 999).plan).toBe("plus")
+    expect(computeAccess(failed, 1000)).toMatchObject({ plan: "none", state: "past_due" })
   })
   it.each(["unpaid", "canceled", "incomplete", "incomplete_expired", "paused"] as const)("gives no paid access for %s", (status) => {
     expect(computeAccess(record({ status }), 500).plan).toBe("none")
@@ -528,6 +529,7 @@ describe("sports assistant", () => {
   const sources = (events: SportEvent[], overrides: Partial<EventFeed> = {}): AssistantSources => ({
     getEvents: async () => feed(events, overrides),
     getTeamFixtures: async () => ({ team: null, recent: [], feed: feed([]) }),
+    getStandings: async () => ({ state: "empty", league: null, season: null, rows: [], source: "TheSportsDB", fetchedAt: now.toISOString(), sourceUpdatedAt: null, limited: false }),
   })
   const finished = match({ status: "finished", score: { kind: "team", home: 2, away: 1 } })
 

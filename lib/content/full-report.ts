@@ -84,7 +84,8 @@ export function buildFullReport(event: SportEvent, detail: MatchDetail, tier: Fu
     if (saves && Number(saves) > 0) insights.push(fill(copy.saves, { team, value: saves }))
   }
   const possession = stat("ball possession")
-  if (possession && home && away) {
+  // A figure for one side only cannot say who led.
+  if (possession?.home && possession.away && home && away) {
     const homeLeads = Number.parseFloat(possession.home) >= Number.parseFloat(possession.away)
     insights.unshift(fill(copy.possession, { team: homeLeads ? home : away, value: homeLeads ? possession.home : possession.away }))
   }

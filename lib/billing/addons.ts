@@ -121,16 +121,26 @@ export function activeDayPass(purchases: BillingPurchase[], nowMs: number): Bill
   return purchases.find((purchase) => purchase.sku === "day_pass" && purchaseLive(purchase, nowMs)) ?? null
 }
 
+export function hasLivePurchase(purchases: BillingPurchase[], unit: AllowanceUnit, nowMs: number): boolean {
+  return purchases.some((purchase) => purchase.unit === unit && purchaseLive(purchase, nowMs))
+}
+
 export interface PurchaseRefund {
   full: boolean
   refundedAtUTC: string
+}
+
+/** A day pass spends time, not credits: Premium was open from payment even with no assistant request. */
+function alreadyUsed(purchase: BillingPurchase, refundedAtUTC: string): boolean {
+  if (purchase.consumed > 0) return true
+  return purchase.sku === "day_pass" && purchase.status === "active" && Date.parse(refundedAtUTC) > Date.parse(purchase.validFromUTC)
 }
 
 /** Idempotent. A partial refund keeps the purchase usable and asks support to decide. */
 export function applyPurchaseRefund(purchase: BillingPurchase, refund: PurchaseRefund): BillingPurchase {
   if (purchase.status === "revoked" || purchase.status === "flagged") return purchase
   if (!refund.full) return { ...purchase, supportReview: true, refundedAtUTC: refund.refundedAtUTC }
-  const used = purchase.consumed > 0
+  const used = alreadyUsed(purchase, refund.refundedAtUTC)
   return { ...purchase, status: used ? "flagged" : "revoked", supportReview: used, refundedAtUTC: refund.refundedAtUTC }
 }
 

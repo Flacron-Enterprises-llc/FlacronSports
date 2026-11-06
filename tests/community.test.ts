@@ -6,6 +6,7 @@ const verifyIdToken = vi.fn()
 vi.mock("@/lib/firebase-admin", () => ({ getAdminAuth: () => ({ verifyIdToken }), getAdminDb: () => null }))
 
 import { reviewReport } from "@/lib/admin/report-review"
+import { applyCorrection } from "@/lib/content/reports"
 import { sumMoney } from "@/lib/admin/billing-health"
 import { assertRole, requireAdmin, requireFeature, requireRole, type ApiError, type AuthedUser } from "@/lib/api-auth"
 import { addonOnSale, ADDONS, buildPurchase, type BillingPurchase } from "@/lib/billing/addons"
@@ -835,22 +836,21 @@ describe("staff roles", () => {
 describe("editor report review", () => {
   const seed = (fields: object = {}) => {
     const fake = fakeDb()
-    fake.put("reports/r1", { locale: "en", body: "Final score", publishedAt: null, status: "draft", feedKey: null, ...fields })
+    fake.put("reports/r1", { locale: "en", title: "Result", body: "Final score", publishedAt: null, status: "draft", feedKey: null, ...fields })
     return fake
   }
-  const review = (db: ReturnType<typeof fakeDb>["db"], status: "published" | "corrected" | "rejected", note: string | null = null) =>
-    reviewReport(db, { id: "r1", status, note, actorUid: "editor" }, now)
+  const review = (db: ReturnType<typeof fakeDb>["db"], status: "published" | "rejected") =>
+    reviewReport(db, { id: "r1", status, actorUid: "editor" }, now)
 
   it("publishes with the fields the public feed needs and locks out the job", async () => {
     const { db, docs } = seed()
     await review(db, "published")
     expect(docs.get("reports/r1")).toMatchObject({ status: "published", feedKey: `en#${now.toISOString()}`, editedAt: now.toISOString() })
   })
-  it("requires a note for a correction and keeps the original publish date", async () => {
+  it("changes the text on a correction and keeps the original publish date", async () => {
     const { db, docs } = seed({ publishedAt: "2026-11-01T00:00:00.000Z" })
-    expect(await code(review(db, "corrected"))).toBe("note_required")
-    await review(db, "corrected", "Score fixed")
-    expect(docs.get("reports/r1")).toMatchObject({ correctionNote: "Score fixed", publishedAt: "2026-11-01T00:00:00.000Z" })
+    await applyCorrection(db, "r1", { body: "Corrected text", note: "Score fixed", actorUid: "editor" }, now)
+    expect(docs.get("reports/r1")).toMatchObject({ status: "corrected", body: "Corrected text", correctionNote: "Score fixed", publishedAt: "2026-11-01T00:00:00.000Z", previousVersions: 1 })
   })
   it("takes a rejected report out of the public feed", async () => {
     const { db, docs } = seed({ status: "published", feedKey: "en#x" })

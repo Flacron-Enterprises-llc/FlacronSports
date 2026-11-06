@@ -26,6 +26,8 @@ export function Classification({ entries, t, limit, quiet }: { entries: Classifi
             <span className="min-w-0 flex-1 truncate font-medium">{entry.name}</span>
             <FavoriteStar team={entry.name} />
             {!limit && entry.team && <span className="hidden min-w-0 truncate text-ink-2 sm:block">{entry.team}</span>}
+            {!limit && typeof entry.laps === "number" && <span className="tabular hidden shrink-0 text-xs text-ink-2 sm:block">{t.event.laps.replace("{laps}", String(entry.laps))}</span>}
+            {!limit && typeof entry.grid === "number" && <span className="tabular shrink-0 text-xs text-ink-2">{t.event.grid.replace("{grid}", String(entry.grid))}</span>}
             {entry.time && <span className="tabular shrink-0 text-ink-2">{entry.time}</span>}
           </li>
         ))}

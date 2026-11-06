@@ -39,6 +39,32 @@ function AnswerBody({ answer }: { answer: AssistantAnswer }) {
           ))}
         </ul>
       )}
+      {answer.table && (
+        <SpoilerGuard label={t.spoiler.reveal}>
+          <table className="mt-3 w-full rounded-lg border border-line bg-surface text-sm">
+            <caption className="px-3 pt-2 text-left text-ink-2">{answer.table.league}{answer.table.season ? ` · ${answer.table.season}` : ""}</caption>
+            <thead>
+              <tr className="text-left text-xs text-ink-2">
+                <th scope="col" className="px-3 py-1.5 font-medium">{t.standings.rank}</th>
+                <th scope="col" className="py-1.5 font-medium">{t.standings.team}</th>
+                <th scope="col" className="px-2 py-1.5 text-right font-medium">{t.standings.played}</th>
+                <th scope="col" className="px-3 py-1.5 text-right font-medium">{t.standings.points}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {answer.table.rows.map((row) => (
+                <tr key={row.team} className={row.asked ? "font-semibold text-ink" : "text-ink-2"}>
+                  <td className="tabular px-3 py-1.5">{row.rank ?? t.standings.notSupplied}</td>
+                  <td className="py-1.5">{row.team}</td>
+                  <td className="tabular px-2 py-1.5 text-right">{row.played ?? t.standings.notSupplied}</td>
+                  <td className="tabular px-3 py-1.5 text-right">{row.points ?? t.standings.notSupplied}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Link href={href(`/app/standings/${answer.table.leagueId}`)} className="mt-2 inline-block text-sm font-semibold text-hot-text hover:underline">{t.assistant.fullTable.replace("{total}", String(answer.table.total))}</Link>
+        </SpoilerGuard>
+      )}
       {answer.notes.map((note) => <p key={note} className="mt-2 text-sm text-ink-2">{note}</p>)}
       {answer.sources.length > 0 && (
         <p className="mt-3 text-xs text-ink-2">

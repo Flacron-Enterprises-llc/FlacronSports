@@ -2,7 +2,11 @@ import { createHash } from "node:crypto"
 import { gunzipSync, gzipSync } from "node:zlib"
 import { ApiError } from "@/lib/api-auth"
 import { getAdminDb } from "@/lib/firebase-admin"
+import { countMetric } from "@/lib/ops/metrics"
+import { Breaker, CircuitOpenError, type BreakerStatus } from "./breaker"
+import { coverageRules, eventAllowed, sportAllowed } from "./coverage"
 import { normalizeLineups, normalizeStats, normalizeTimeline, type MatchDetail, type RawLineup, type RawStat, type RawTimeline } from "./detail"
+import { isPlayerId, normalizePlayer, type PlayerProfile, type RawPlayer } from "./player"
 import { isCovered, normalizeEvent, PROVIDER_NAME, toUtc, type RawEvent } from "./thesportsdb"
 import { SPORTS, type EventFeed, type SportDefinition, type SportEvent, type SportId } from "./types"
 
@@ -37,19 +41,36 @@ function apiKey(): { key: string; limited: boolean } {
 
 export const feedIsLimited = (): boolean => apiKey().limited
 
+const feedBreaker = new Breaker("feed")
+const liveBreaker = new Breaker("live")
+
+export const providerStatus = (): BreakerStatus[] => [feedBreaker.status(), liveBreaker.status()]
+
+/** How each sport's last scheduled refresh went. Empty until a job has run on this task. */
+const sportStates = new Map<SportId, "ok" | "stale" | "unavailable">()
+export const sportFeedStates = (): Partial<Record<SportId, string>> => Object.fromEntries(sportStates)
+
 const FRESH_MS = REVALIDATE_SECONDS * 1000
 const STALE_LIMIT_MS = 6 * 3_600_000
 const PEEK_LIMIT_MS = 48 * 3_600_000
 
+// Each entry can be a whole day's feed on a 512 MB task, and visitors choose some of the keys.
+const MEMORY_MAX_ENTRIES = 300
 const memory = new Map<string, { data: unknown; at: number }>()
 const inFlight = new Map<string, Promise<unknown>>()
+// When a path was really fetched. The memory cache's own time restarts on every read.
+const savedAt = new Map<string, number>()
 const builtFeeds = new Map<string, { feed: Promise<EventFeed>; at: number }>()
 
 export function clearFeedCache(): void {
   memory.clear()
   inFlight.clear()
+  savedAt.clear()
   builtFeeds.clear()
   liveScores = { rows: new Map(), at: 0, tried: 0 }
+  feedBreaker.succeed()
+  liveBreaker.succeed()
+  sportStates.clear()
 }
 
 let nextCallAt = 0
@@ -63,17 +84,36 @@ async function takeTurn(maxWaitMs: number): Promise<void> {
   if (at > now) await new Promise((resolve) => setTimeout(resolve, at - now))
 }
 
+/** A plain 404 is the provider answering, so only overload, server errors and silence count against it. */
+function noteResult(breaker: Breaker, name: string, status: number | null): void {
+  if (status === 429) countMetric(`${name}_rate_limited`)
+  if (status === null || status === 429 || status >= 500) {
+    breaker.fail(status === null ? "no_response" : `status_${status}`)
+    countMetric(`${name}_failures`)
+  } else {
+    breaker.succeed()
+  }
+}
+
 async function request<T>(path: string, background = false): Promise<T> {
   const running = inFlight.get(path)
   if (running) return running as Promise<T>
 
   const task = (async () => {
+    // Checked first as well, so nobody queues for a call that will not be made.
+    if (feedBreaker.status().state === "open") throw new CircuitOpenError("feed")
     await takeTurn(background ? Number.POSITIVE_INFINITY : VISITOR_MAX_WAIT_MS)
+    feedBreaker.assertReady()
+    countMetric("feed_calls")
     const response = await fetch(`${BASE}/${apiKey().key}/${path}`, {
       next: { revalidate: REVALIDATE_SECONDS },
       signal: AbortSignal.timeout(TIMEOUT_MS),
+    }).catch((error: unknown) => {
+      noteResult(feedBreaker, "feed", null)
+      throw error
     })
     if (response.status === 429) nextCallAt = Math.max(nextCallAt, Date.now() + RATE_LIMIT_COOLDOWN_MS)
+    noteResult(feedBreaker, "feed", response.status)
     if (!response.ok) throw new Error(`Provider responded ${response.status}`)
     return response.json() as Promise<T>
   })().finally(() => inFlight.delete(path))
@@ -95,6 +135,7 @@ export async function readSnapshot(path: string): Promise<Snapshot | null> {
     const doc = await snapshotDoc(path)?.get()
     if (!doc?.exists) return null
     const { body, packed, at } = doc.data() as { body?: string; packed?: Uint8Array; at: number }
+    savedAt.set(path, at)
     return { data: JSON.parse(packed ? gunzipSync(packed).toString("utf8") : (body as string)), at }
   } catch {
     return null
@@ -102,6 +143,7 @@ export async function readSnapshot(path: string): Promise<Snapshot | null> {
 }
 
 export async function writeSnapshot(path: string, data: unknown, at: number): Promise<void> {
+  savedAt.set(path, at)
   // A busy football day is over 1 MB of JSON, the most one Firestore document can hold.
   const packed = gzipSync(JSON.stringify(data))
   await snapshotDoc(path)?.set({ packed, at }).catch((error: unknown) => {
@@ -114,6 +156,17 @@ export async function writeSnapshot(path: string, data: unknown, at: number): Pr
  * provider, so traffic cannot trip its rate limit. On any failure the last good
  * answer is kept and reported as stale, including after a restart.
  */
+/** Oldest write goes first. Its stored time goes too, so neither map outgrows the cap. */
+function remember(path: string, data: unknown, at: number): void {
+  memory.delete(path)
+  memory.set(path, { data, at })
+  while (memory.size > MEMORY_MAX_ENTRIES) {
+    const oldest = memory.keys().next().value as string
+    memory.delete(oldest)
+    savedAt.delete(oldest)
+  }
+}
+
 async function load<T>(path: string, refresh = false, snapshotFreshMs = SNAPSHOT_FRESH_MS, storedOnly = false): Promise<{ data: T; stale: boolean }> {
   const cached = memory.get(path)
   const now = Date.now()
@@ -121,7 +174,7 @@ async function load<T>(path: string, refresh = false, snapshotFreshMs = SNAPSHOT
 
   const snapshot = refresh ? null : await readSnapshot(path)
   if (snapshot && now - snapshot.at < snapshotFreshMs) {
-    memory.set(path, { data: snapshot.data, at: now })
+    remember(path, snapshot.data, now)
     return { data: snapshot.data as T, stale: false }
   }
   // An older answer now beats a slow one. The scheduled job is what brings it up to date.
@@ -130,7 +183,7 @@ async function load<T>(path: string, refresh = false, snapshotFreshMs = SNAPSHOT
 
   try {
     const data = await request<T>(path, refresh)
-    memory.set(path, { data, at: now })
+    remember(path, data, now)
     await writeSnapshot(path, data, now)
     return { data, stale: false }
   } catch {
@@ -147,7 +200,7 @@ async function peek<T>(path: string): Promise<T | null> {
   if (cached && now - cached.at < FRESH_MS) return cached.data as T
   const snapshot = await readSnapshot(path)
   if (!snapshot || now - snapshot.at >= PEEK_LIMIT_MS) return (cached?.data as T | undefined) ?? null
-  memory.set(path, { data: snapshot.data, at: now })
+  remember(path, snapshot.data, now)
   return snapshot.data as T
 }
 
@@ -185,7 +238,13 @@ let liveScores: { rows: LiveRows; at: number; tried: number } = { rows: new Map(
 let liveLoading: Promise<void> | null = null
 
 async function pollLiveScores(key: string): Promise<void> {
-  const response = await fetch(`${LIVE_BASE}/livescore/all`, { headers: { "X-API-KEY": key }, cache: "no-store", signal: AbortSignal.timeout(LIVE_TIMEOUT_MS) })
+  liveBreaker.assertReady()
+  countMetric("live_calls")
+  const response = await fetch(`${LIVE_BASE}/livescore/all`, { headers: { "X-API-KEY": key }, cache: "no-store", signal: AbortSignal.timeout(LIVE_TIMEOUT_MS) }).catch((error: unknown) => {
+    noteResult(liveBreaker, "live", null)
+    throw error
+  })
+  noteResult(liveBreaker, "live", response.status)
   if (!response.ok) throw new Error(`Provider responded ${response.status}`)
   const { livescore } = (await response.json()) as { livescore?: RawLive[] | null }
   const rows: LiveRows = new Map()
@@ -225,13 +284,23 @@ function withLive(raw: RawEvent, live: LiveRows): RawEvent {
 
 /** The stored day for every enabled sport. Spends no provider calls. */
 export async function storedEvents(date: string, sport?: SportId): Promise<SportEvent[]> {
-  const sports = enabledSports().filter((item) => !sport || item.id === sport)
+  const rules = await coverageRules()
+  const sports = enabledSports().filter((item) => (!sport || item.id === sport) && sportAllowed(rules, item.id))
   const live = await liveRows()
   const days = await Promise.all(sports.map(async (item) => {
     const query = new URLSearchParams({ d: date, s: item.providerKey as string })
     return rowsToEvents((await peek<{ events: RawEvent[] | null }>(`eventsday.php?${query}`))?.events, item, live)
   }))
-  return days.flat()
+  return days.flat().filter((event) => eventAllowed(rules, event))
+}
+
+/** How complete a stored day is, for pages that must say when it is old. Call after storedEvents. */
+export function storedDayAge(date: string, sport?: SportId): { oldest: number | null; complete: boolean } {
+  const times = enabledSports()
+    .filter((item) => !sport || item.id === sport)
+    .map((item) => savedAt.get(`eventsday.php?${new URLSearchParams({ d: date, s: item.providerKey as string })}`))
+  const known = times.filter((at): at is number => at !== undefined)
+  return { oldest: known.length > 0 ? Math.min(...known) : null, complete: known.length === times.length }
 }
 
 interface RawBroadcast {
@@ -324,7 +393,8 @@ export async function getEvents(options: { date?: string; sport?: SportId; refre
 async function buildEvents(options: { date?: string; sport?: SportId; refresh?: boolean }): Promise<EventFeed> {
   const date = options.date ?? utcDate()
   const query = new URLSearchParams({ date, pageSize: "3000", ...(options.sport ? { sport: options.sport } : {}) })
-  const sports = enabledSports().filter((sport) => !options.sport || sport.id === options.sport)
+  const rules = await coverageRules()
+  const sports = enabledSports().filter((sport) => (!options.sport || sport.id === options.sport) && sportAllowed(rules, sport.id))
   const fetchedAt = new Date().toISOString()
   const base = { source: PROVIDER_NAME, fetchedAt, limited: apiKey().limited }
   // The frontend never calls the provider itself: its own retry would outlast the page timeout.
@@ -337,7 +407,14 @@ async function buildEvents(options: { date?: string; sport?: SportId; refresh?: 
   const deadline = Date.now() + VISITOR_BUDGET_MS
   for (const sport of sports) {
     const storedOnly = !options.refresh && Date.now() > deadline
-    await eventsForSport(sport, date, options.refresh, storedOnly).then((result) => succeeded.push(result)).catch(() => undefined)
+    await eventsForSport(sport, date, options.refresh, storedOnly)
+      .then((result) => {
+        succeeded.push(result)
+        if (options.refresh) sportStates.set(sport.id, result.stale ? "stale" : "ok")
+      })
+      .catch(() => {
+        if (options.refresh) sportStates.set(sport.id, "unavailable")
+      })
   }
 
   if (sports.length > 0 && succeeded.length === 0) return { ...base, state: "unavailable", events: [] }
@@ -345,7 +422,7 @@ async function buildEvents(options: { date?: string; sport?: SportId; refresh?: 
   const seen = new Set<string>()
   const events = succeeded
     .flatMap((result) => result.events)
-    .filter((event) => !seen.has(event.id) && seen.add(event.id))
+    .filter((event) => eventAllowed(rules, event) && !seen.has(event.id) && seen.add(event.id))
     .sort((a, b) => (a.scheduledStartUTC ?? "").localeCompare(b.scheduledStartUTC ?? ""))
 
   const complete = succeeded.length === sports.length && succeeded.every((result) => !result.stale)
@@ -353,30 +430,47 @@ async function buildEvents(options: { date?: string; sport?: SportId; refresh?: 
 }
 
 /** A rate-limited lookup can still be answered from a daily feed already in memory. */
-async function lookupRaw(providerId: string): Promise<RawEvent | undefined> {
-  const inMemory = () => {
-    for (const entry of memory.values()) {
+async function lookupRaw(providerId: string): Promise<{ raw: RawEvent; at: number | null } | undefined> {
+  const inMemory = (maxAgeMs: number) => {
+    let newest: { raw: RawEvent; at: number } | undefined
+    for (const [path, entry] of memory) {
+      const at = savedAt.get(path) ?? entry.at
+      if (Date.now() - at >= maxAgeMs || (newest && newest.at >= at)) continue
       const found = (entry.data as { events?: RawEvent[] | null }).events?.find((event) => event.idEvent === providerId)
-      if (found) return found
+      if (found) newest = { raw: found, at }
     }
-    return undefined
+    return newest
   }
-  const known = inMemory()
+  const known = inMemory(SNAPSHOT_FRESH_MS)
   if (known) return known
-  return (await fetchJson<{ events: RawEvent[] | null }>(`lookupevent.php?id=${providerId}`)).events?.[0]
+  const path = `lookupevent.php?id=${providerId}`
+  try {
+    const raw = (await fetchJson<{ events: RawEvent[] | null }>(path)).events?.[0]
+    return raw ? { raw, at: savedAt.get(path) ?? null } : undefined
+  } catch (error) {
+    const fallback = inMemory(STALE_LIMIT_MS)
+    if (fallback) return fallback
+    throw error
+  }
 }
 
-export async function getEvent(id: string): Promise<SportEvent | null> {
+/** `anyCoverage` is for settlement: switching a competition off must not strand open predictions. */
+export async function getEvent(id: string, options: { anyCoverage?: boolean } = {}): Promise<SportEvent | null> {
   if (process.env.API_ORIGIN) {
     const remote = await fromBackend<{ event: SportEvent | null }>(`/api/matches/${encodeURIComponent(id)}`)
     return remote?.event ?? null
   }
   const match = id.match(/^tsdb-(\d+)$/)
   if (!match) return null
-  const raw = await lookupRaw(match[1])
-  if (!raw) return null
+  const found = await lookupRaw(match[1])
+  if (!found) return null
+  const { raw, at } = found
   const sport = enabledSports().find((candidate) => candidate.providerKey === raw.strSport)
-  return sport && isCovered(raw, sport.id) ? normalizeEvent(withLive(raw, await liveRows()), sport.id) : null
+  if (!sport || !isCovered(raw, sport.id)) return null
+  const live = await liveRows()
+  const updated = live.has(raw.idEvent) ? Math.max(at ?? 0, liveScores.at) : at
+  const event = { ...normalizeEvent(withLive(raw, live), sport.id), sourceUpdatedAt: updated ? new Date(updated).toISOString() : null }
+  return options.anyCoverage || eventAllowed(await coverageRules(), event) ? event : null
 }
 
 const DETAIL_FRESH_MS: Partial<Record<SportEvent["status"], number>> = { live: 90_000, finished: 6 * 3_600_000 }
@@ -394,7 +488,7 @@ async function loadDetail<T>(path: string, freshMs: number): Promise<T> {
   if (snapshot && now - snapshot.at < freshMs) return snapshot.data as T
   try {
     const data = await request<T>(path)
-    memory.set(path, { data, at: now })
+    remember(path, data, now)
     await writeSnapshot(path, data, now)
     return data
   } catch (error) {
@@ -416,7 +510,7 @@ export async function getMatchDetail(event: SportEvent): Promise<MatchDetail> {
   const value = <T,>(result: PromiseSettledResult<T>): T | null => (result.status === "fulfilled" ? result.value : null)
   const detail = {
     timeline: normalizeTimeline(value(timeline)?.timeline),
-    stats: normalizeStats(value(stats)?.eventstats),
+    stats: normalizeStats(value(stats)?.eventstats, event.sportId),
     lineups: normalizeLineups(value(lineups)?.lineup),
     fetchedAt: new Date().toISOString(),
   }
@@ -429,10 +523,12 @@ interface RawTeam {
   idTeam: string
   strTeam: string
   strSport?: string | null
+  idLeague?: string | null
+  strLeague?: string | null
 }
 
 export interface TeamFixtures {
-  team: { id: string; name: string; sportId: SportId } | null
+  team: { id: string; name: string; sportId: SportId; league?: { id: string; name: string } | null } | null
   upcoming: SportEvent[]
   recent: SportEvent[]
   feed: Omit<EventFeed, "events">
@@ -442,7 +538,8 @@ function chooseTeam(teams: RawTeam[], name: string, sport?: SportId) {
   const wanted = name.toLowerCase()
   const candidates = teams.flatMap((team) => {
     const definition = enabledSports().find((item) => item.providerKey === team.strSport)
-    return definition && team.strTeam.toLowerCase() === wanted ? [{ id: team.idTeam, name: team.strTeam, sportId: definition.id }] : []
+    const league = team.idLeague && team.strLeague ? { id: team.idLeague, name: team.strLeague } : null
+    return definition && team.strTeam.toLowerCase() === wanted ? [{ id: team.idTeam, name: team.strTeam, sportId: definition.id, league }] : []
   })
   return candidates.find((team) => team.sportId === sport) ?? candidates[0] ?? null
 }
@@ -456,6 +553,45 @@ export async function searchTeams(text: string): Promise<{ name: string; sportId
     const definition = enabledSports().find((item) => item.providerKey === team.strSport)
     return definition ? [{ name: team.strTeam, sportId: definition.id }] : []
   }).slice(0, MAX_SEARCH_RESULTS)
+}
+
+const sportOfKey = (key: string | null | undefined): SportId | undefined => enabledSports().find((item) => item.providerKey === key)?.id
+const PLAYER_FRESH_MS = 24 * 3_600_000
+
+/** Null for an unknown player or one in a sport this site does not cover. A failed lookup throws. */
+export async function getPlayer(id: string): Promise<PlayerProfile | null> {
+  if (!isPlayerId(id)) return null
+  const found = await loadDetail<{ players?: RawPlayer[] | null }>(`lookupplayer.php?id=${id}`, PLAYER_FRESH_MS)
+  const raw = found.players?.[0]
+  return raw ? normalizePlayer(raw, sportOfKey) : null
+}
+
+export async function searchPlayers(text: string): Promise<PlayerProfile[]> {
+  const found = await fetchJson<{ player?: RawPlayer[] | null }>(`searchplayers.php?${new URLSearchParams({ p: text })}`)
+  return (found.player ?? []).flatMap((raw) => normalizePlayer(raw, sportOfKey) ?? []).slice(0, MAX_SEARCH_RESULTS)
+}
+
+interface RawLeague {
+  idLeague?: string | null
+  strLeague?: string | null
+  strSport?: string | null
+  strLeagueAlternate?: string | null
+}
+
+export interface CompetitionEntry {
+  id: string
+  name: string
+  alternate: string | null
+  sportId: SportId
+}
+
+/** The whole list of competitions in covered sports. It barely changes, so it is read once a day. */
+export async function allCompetitions(): Promise<CompetitionEntry[]> {
+  const found = await loadDetail<{ leagues?: RawLeague[] | null }>("all_leagues.php", PLAYER_FRESH_MS)
+  return (found.leagues ?? []).flatMap((raw) => {
+    const sportId = sportOfKey(raw.strSport)
+    return sportId && raw.idLeague && raw.strLeague ? [{ id: raw.idLeague, name: raw.strLeague, alternate: raw.strLeagueAlternate || null, sportId }] : []
+  })
 }
 
 /** A name the provider does not know gives team: null, which is not the same as a failed lookup. */
@@ -548,6 +684,21 @@ export function normalizeStandings(table: RawStanding[]): Pick<Standings, "leagu
       form: text(row.strForm),
     })),
   }
+}
+
+/**
+ * The field for a race, which lists nobody until it is over: the competition's most
+ * recent classified session, in name order because finishing order is that session's result.
+ * Only API routes call this, and those run on the backend.
+ */
+export async function getRecentEntrants(leagueId: string, sportId: SportId): Promise<string[]> {
+  const sport = enabledSports().find((candidate) => candidate.id === sportId)
+  if (!sport) return []
+  const { events } = await fetchJson<{ events: RawEvent[] | null }>(`eventspastleague.php?${new URLSearchParams({ id: leagueId })}`)
+  const classified = rowsToEvents(events, sport)
+    .filter((event) => event.score.kind === "classification")
+    .sort((a, b) => (b.scheduledStartUTC ?? "").localeCompare(a.scheduledStartUTC ?? ""))[0]
+  return classified?.score.kind === "classification" ? classified.score.entries.map((entry) => entry.name).sort((a, b) => a.localeCompare(b)) : []
 }
 
 export async function getStandings(leagueId: string): Promise<Standings> {

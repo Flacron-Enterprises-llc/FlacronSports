@@ -1,30 +1,36 @@
 "use client"
 
-import { byImportance } from "@/lib/sports/priority"
+import { byImportance, byStatusThenTime } from "@/lib/sports/priority"
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { ArrowRight, CalendarDays, Check, Circle, MessageCircleQuestion, Newspaper, PlayCircle, Radio, Star, Trophy, X } from "lucide-react"
+import { ArrowRight, CalendarDays, Check, Circle, LayoutGrid, MessageCircleQuestion, Newspaper, PlayCircle, Radio, Star, TrendingUp, Trophy, X } from "lucide-react"
 import { usePreferences } from "@/components/account/prefs-provider"
+import { SportIcon } from "@/components/site/sport-icon"
 import { EmptyState, Meter, Panel, StatTile, AppPage } from "@/components/site/states"
 import { EventCard, FeedNotice } from "@/components/sports/event-card"
 import { LiveRefresh, LocalTime } from "@/components/sports/parts"
-import { DEFAULT_PREFERENCES } from "@/lib/me/preferences-defaults"
-import { followsEvent } from "@/lib/sports/following"
+import { DEFAULT_PREFERENCES, favoriteTotal, type HomeSection } from "@/lib/me/preferences-defaults"
+import { followPriority, isFollowed } from "@/lib/sports/following"
+import { resolveHomeFeed, trendingCompetitions } from "@/lib/sports/home-feed"
 import { readStored, SPOILER_DECIDED_KEY, writeStored } from "@/lib/storage-consent"
 import type { Dictionary } from "@/lib/i18n"
 import type { EventFeed, SportEvent } from "@/lib/sports/types"
 import { useLocale } from "@/lib/use-locale"
 import { useAccount } from "./account-context"
+import { HighlightsSection } from "./highlights-section"
+import { HomeFeedEditor } from "./home-feed-editor"
 
 export interface ReportTeaser {
   id: string
   slug: string
   title: string
   competition: string
+  participants: string[]
   publishedAt: string | null
 }
 
 const SETUP_HIDDEN_KEY = "fs-setup-hidden"
+const NEWS_SHOWN = 4
 
 function Section({ title, events, t, href, all, live }: { title: string; events: SportEvent[]; t: Dictionary; href: (path: string) => string; all?: string; live?: boolean }) {
   if (events.length === 0) return null
@@ -85,6 +91,7 @@ function QuickActions() {
   const actions = [
     { to: "/app/scores?status=live", label: t.ui.quickLive, icon: Radio },
     { to: "/app/my-teams", label: t.ui.quickTeams, icon: Star },
+    { to: "/app/board", label: t.discover.boardNav, icon: LayoutGrid },
     { to: "/app/assistant", label: t.ui.quickAsk, icon: MessageCircleQuestion },
     { to: "/app/watch", label: t.ui.quickWatch, icon: PlayCircle },
   ]
@@ -106,13 +113,18 @@ function QuickActions() {
 
 function Reports({ reports }: { reports: ReportTeaser[] }) {
   const { t, href } = useLocale()
+  const { prefs } = usePreferences()
+  const followed = new Set(prefs.favorites)
+  const leagues = new Set(prefs.leagues.map((league) => league.name))
+  const relevant = (report: ReportTeaser) => report.participants.some((name) => followed.has(name)) || leagues.has(report.competition)
+  const shown = [...reports.filter(relevant), ...reports.filter((report) => !relevant(report))].slice(0, NEWS_SHOWN)
   return (
-    <Panel title={t.dash.latestReports} actions={reports.length > 0 ? <Link href={href("/app/news")} className="text-[13px] font-semibold text-hot-text hover:underline">{t.dash.allReports}</Link> : undefined}>
+    <Panel title={shown.some(relevant) ? t.discover.relevantNews : t.dash.latestReports} actions={reports.length > 0 ? <Link href={href("/app/news")} className="text-[13px] font-semibold text-hot-text hover:underline">{t.dash.allReports}</Link> : undefined}>
       {reports.length === 0 ? (
         <p className="text-sm leading-6 text-ink-2">{t.news.empty}</p>
       ) : (
         <ul className="-my-2 divide-y divide-line">
-          {reports.map((report) => (
+          {shown.map((report) => (
             <li key={report.id} className="py-2.5">
               <Link href={href(`/app/news/${report.slug}`)} className="block text-sm font-medium leading-5 text-ink underline-offset-2 hover:underline">{report.title}</Link>
               <p className="mt-0.5 truncate text-xs text-ink-2">{report.competition}{report.publishedAt && <> · <LocalTime iso={report.publishedAt} mode="datetime" /></>}</p>
@@ -120,6 +132,26 @@ function Reports({ reports }: { reports: ReportTeaser[] }) {
           ))}
         </ul>
       )}
+    </Panel>
+  )
+}
+
+function Trending({ feed }: { feed: EventFeed }) {
+  const { t, href } = useLocale()
+  const copy = t.discover
+  const items = trendingCompetitions(feed.events)
+  if (items.length === 0) return null
+  return (
+    <Panel title={copy.trending} description={copy.trendingHelp} icon={<TrendingUp aria-hidden />}>
+      <ul className="-my-1 divide-y divide-line">
+        {items.map((item) => (
+          <li key={item.key} className="flex min-w-0 items-center gap-2 py-2">
+            <SportIcon id={item.sportId} className="size-4 shrink-0 text-ink-3" />
+            <Link href={href(`/app/scores?q=${encodeURIComponent(item.name)}`)} className="min-w-0 flex-1 truncate text-sm font-medium text-ink underline-offset-2 hover:underline">{item.name}</Link>
+            <span className="tabular shrink-0 text-xs text-ink-2">{(item.live > 0 ? copy.liveGames : copy.games).replace("{live}", String(item.live)).replace("{games}", String(item.games))}</span>
+          </li>
+        ))}
+      </ul>
     </Panel>
   )
 }
@@ -167,7 +199,9 @@ export function DashboardHome({ feed, reports }: { feed: EventFeed; reports: Rep
   }
 
   const known = feed.state !== "unavailable"
-  const mine = feed.events.filter((event) => followsEvent(prefs.favorites, event))
+  const mine = feed.events
+    .filter((event) => isFollowed(prefs, event))
+    .sort((a, b) => followPriority(prefs, a) - followPriority(prefs, b) || byStatusThenTime(a, b))
   const others = feed.events.filter((event) => !mine.includes(event)).sort(byImportance)
   const live = others.filter((event) => event.status === "live").slice(0, 6)
   const liveTotal = feed.events.filter((event) => event.status === "live").length
@@ -175,6 +209,24 @@ export function DashboardHome({ feed, reports }: { feed: EventFeed; reports: Rep
     .filter((event) => event.status === "scheduled")
     .slice(0, 6)
   const results = others.filter((event) => event.status === "finished").slice(0, 6)
+  const followed = favoriteTotal(prefs)
+  const home = resolveHomeFeed(prefs.homeFeed)
+
+  const sections: Record<HomeSection, React.ReactNode> = {
+    favorites: (
+      <>
+        {followed === 0 && <EmptyState compact icon={<Star aria-hidden />} title={t.dash.favorites} body={t.dash.pickTeams} action={{ href: href("/app/scores"), label: t.myTeams.browse }} />}
+        {followed > 0 && mine.length === 0 && known && <p className="rounded-xl border border-line bg-surface p-3.5 text-sm text-ink-2">{t.dash.noFavorites}</p>}
+        <Section title={t.dash.favorites} events={mine} t={t} href={href} all="/app/my-teams" />
+      </>
+    ),
+    live: <Section title={t.dash.liveNow} events={live} t={t} href={href} all="/app/scores?status=live" live />,
+    upcoming: <Section title={t.dash.upcoming} events={upcoming} t={t} href={href} all="/app/scores?status=upcoming" />,
+    results: <Section title={t.dash.results} events={results} t={t} href={href} all="/app/scores?status=finished" />,
+    highlights: <HighlightsSection />,
+    trending: <Trending feed={feed} />,
+    news: <Reports reports={reports} />,
+  }
 
   return (
     <AppPage>
@@ -182,7 +234,7 @@ export function DashboardHome({ feed, reports }: { feed: EventFeed; reports: Rep
       <Greeting />
 
       <div className="fs-stagger grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatTile label={t.ui.statTeams} value={prefs.favorites.length} icon={<Star aria-hidden />} href={href("/app/my-teams")} />
+        <StatTile label={t.ui.statTeams} value={followed} icon={<Star aria-hidden />} href={href("/app/my-teams")} />
         <StatTile label={t.dash.liveNow} value={known ? liveTotal : null} icon={<Radio aria-hidden />} tone="live" href={href("/app/scores?status=live")} />
         <StatTile label={t.ui.statFixtures} value={known ? feed.events.length : null} icon={<CalendarDays aria-hidden />} href={href("/app/scores")} />
         <StatTile label={t.ui.statRequests} value={balance ? balance.remaining : null} icon={<MessageCircleQuestion aria-hidden />} href={href("/app/assistant")} />
@@ -191,23 +243,14 @@ export function DashboardHome({ feed, reports }: { feed: EventFeed; reports: Rep
       <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-7">
           {!setupHidden && <div className="xl:hidden"><Checklist onHide={hideSetup} /></div>}
-          {prefs.favorites.length === 0 && (
-            <EmptyState compact icon={<Star aria-hidden />} title={t.dash.favorites} body={t.dash.pickTeams} action={{ href: href("/app/scores"), label: t.myTeams.browse }} />
-          )}
-          {prefs.favorites.length > 0 && mine.length === 0 && known && (
-            <p className="rounded-xl border border-line bg-surface p-3.5 text-sm text-ink-2">{t.dash.noFavorites}</p>
-          )}
-          <Section title={t.dash.favorites} events={mine} t={t} href={href} all="/app/my-teams" />
-          <Section title={t.dash.liveNow} events={live} t={t} href={href} all="/app/scores?status=live" live />
-          <Section title={t.dash.upcoming} events={upcoming} t={t} href={href} all="/app/scores?status=upcoming" />
-          <Section title={t.dash.results} events={results} t={t} href={href} all="/app/scores?status=finished" />
+          <div className="flex justify-end"><HomeFeedEditor /></div>
+          {home.order.filter((section) => !home.hidden.includes(section)).map((section) => <div key={section} className="min-w-0 space-y-7 empty:hidden">{sections[section]}</div>)}
           {feed.events.length === 0 && known && <EmptyState compact icon={<Trophy aria-hidden />} title={t.dash.nothing} action={{ href: href("/app/scores"), label: t.myTeams.browse }} />}
           <FeedNotice feed={feed} t={t} />
         </div>
         <aside aria-label={t.ui.quickActions} className="min-w-0 space-y-4">
           {!setupHidden && <div className="hidden xl:block"><Checklist onHide={hideSetup} /></div>}
           <QuickActions />
-          <Reports reports={reports} />
           <p className="flex items-center gap-1.5 text-xs text-ink-3"><Newspaper aria-hidden className="size-3.5" />{t.reports.labelHelp}</p>
         </aside>
       </div>

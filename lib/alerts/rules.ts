@@ -6,6 +6,8 @@ import { isMajorCompetition } from "@/lib/sports/priority"
 import type { SportEvent } from "@/lib/sports/types"
 
 export type DueAlert = AlertType
+/** Sent when an event moves. It follows the member's start alert setting. */
+export type NoticeType = DueAlert | "correction"
 type Plan = PlanId
 
 const BASIC_TYPES: readonly AlertType[] = ["start", "final"]
@@ -14,6 +16,8 @@ const MINUTE = 60_000
 // without announcing a kickoff that happened hours ago.
 const START_LEAD = 15 * MINUTE
 const START_GRACE = 30 * MINUTE
+const SUMMARY_HOUR = 8
+const SUMMARY_LINES = 5
 
 const clockFormat = (timeZone: string) =>
   new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" })
@@ -82,8 +86,10 @@ export function filteredOut(prefs: Preferences, plan: Plan, event: SportEvent): 
   return filters.majorOnly && !isMajorCompetition(event.competition.name)
 }
 
-export function suppressionReason(prefs: Preferences, plan: Plan, type: DueAlert, now: Date, event?: SportEvent): "muted" | "type_off" | "plan" | "filtered" | "quiet" | null {
+export function suppressionReason(prefs: Preferences, plan: Plan, type: DueAlert, now: Date, event?: SportEvent): "muted" | "spoiler" | "type_off" | "plan" | "filtered" | "quiet" | null {
   if (prefs.alerts.muted) return "muted"
+  // Hiding the numbers is not enough: "the score has changed" is itself the spoiler.
+  if (prefs.spoilerMode && type === "scoring") return "spoiler"
   if (!prefs.alerts.types.includes(type)) return "type_off"
   if (!planAllows(plan, type)) return "plan"
   if (event && filteredOut(prefs, plan, event)) return "filtered"
@@ -91,8 +97,21 @@ export function suppressionReason(prefs: Preferences, plan: Plan, type: DueAlert
   return isQuietHour(hour, prefs.alerts.quietStart, prefs.alerts.quietEnd) ? "quiet" : null
 }
 
-function kickoffTime(iso: string, locale: Locale, timeZone: string): string {
-  const options: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", timeZoneName: "short" }
+/** The first hour from 08:00 outside quiet hours, so a long quiet window only delays it. */
+export function summaryHour(prefs: Preferences): number {
+  for (let offset = 0; offset < 24; offset += 1) {
+    const hour = (SUMMARY_HOUR + offset) % 24
+    if (!isQuietHour(hour, prefs.alerts.quietStart, prefs.alerts.quietEnd)) return hour
+  }
+  return SUMMARY_HOUR
+}
+
+export function summaryDue(prefs: Preferences, now: Date): boolean {
+  return prefs.alerts.dailySummary === true && !prefs.alerts.muted && localClock(now, prefs.timeZone).hour === summaryHour(prefs)
+}
+
+function kickoffTime(iso: string, locale: Locale, timeZone: string, withDate = false): string {
+  const options: Intl.DateTimeFormatOptions = { ...(withDate ? { month: "short", day: "numeric" } : {}), hour: "2-digit", minute: "2-digit", timeZoneName: "short" }
   try {
     return new Intl.DateTimeFormat(locale, { ...options, timeZone }).format(new Date(iso))
   } catch {
@@ -109,8 +128,33 @@ export interface AlertContent {
   spoilerFreeBody: string
 }
 
+/** Says the event moved. A date alone is never a result, so nothing here needs hiding. */
+function buildCorrection(event: SportEvent, prefs: Preferences, previousKickoffUTC: string | null | undefined): AlertContent {
+  const { alerts: copy } = getDictionary(prefs.locale)
+  const values = { event: eventTitle(event), competition: event.competition.name }
+  const when = (iso: string) => kickoffTime(iso, prefs.locale, prefs.timeZone, true)
+  const moved = event.status !== "postponed" && previousKickoffUTC && event.scheduledStartUTC
+  const body = moved
+    ? fill(copy.correctionBody, { ...values, time: when(event.scheduledStartUTC as string), previous: when(previousKickoffUTC) })
+    : fill(copy.correctionPostponedBody, values)
+  return { title: fill(copy.correctionTitle, values), body, spoilerFreeBody: body }
+}
+
+/** Alert titles carry no scores, and score updates stay out of the spoiler-free text. */
+export function buildSummary(alerts: { type: string; title: string }[], prefs: Preferences): AlertContent {
+  const { alerts: copy } = getDictionary(prefs.locale)
+  const lines = (rows: { title: string }[]) => {
+    const shown = rows.slice(0, SUMMARY_LINES).map((row) => row.title).join(" · ")
+    const more = rows.length - SUMMARY_LINES
+    return more > 0 ? `${shown} ${fill(copy.summaryMore, { count: String(more) })}` : shown
+  }
+  const safe = alerts.filter((alert) => alert.type !== "scoring")
+  return { title: fill(copy.summaryTitle, { count: String(alerts.length) }), body: lines(alerts), spoilerFreeBody: safe.length ? lines(safe) : copy.summaryHidden }
+}
+
 /** With spoiler mode on the score never reaches the stored record or the email. */
-export function buildAlert(event: SportEvent, type: DueAlert, prefs: Preferences): AlertContent {
+export function buildAlert(event: SportEvent, type: NoticeType, prefs: Preferences, previousKickoffUTC?: string | null): AlertContent {
+  if (type === "correction") return buildCorrection(event, prefs, previousKickoffUTC)
   const dictionary = getDictionary(prefs.locale)
   const { alerts: copy } = dictionary
   const duel = isDuel(event)

@@ -8,7 +8,7 @@ import { PLANS } from "@/lib/billing/plans"
 import { askAssistant } from "@/lib/assistant/service"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { rateLimit } from "@/lib/rate-limit"
-import { getEvents, getTeamFixtures } from "@/lib/sports/service"
+import { getEvents, getStandings, getTeamFixtures } from "@/lib/sports/service"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
       includedLimit: PLANS[access.plan].assistantRequestsPerMonth,
       question: parsed.data.question,
       locale: parsed.data.locale,
-      sources: { getEvents, getTeamFixtures },
+      sources: { getEvents, getTeamFixtures, getStandings },
       now: new Date(),
     })
     return NextResponse.json(result)

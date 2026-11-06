@@ -3,6 +3,8 @@ import type Stripe from "stripe"
 import { firestoreBillingStore, ownsCustomer } from "@/lib/billing/firestore-store"
 import { getStripe, liveModeApproved } from "@/lib/billing/stripe-client"
 import { processStripeEvent } from "@/lib/billing/webhook-core"
+import { awardReferral } from "@/lib/community/referrals"
+import { firestoreDocDb } from "@/lib/doc-db"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -30,6 +32,14 @@ export async function POST(request: Request) {
       retrieveSubscription: (id) => stripe.subscriptions.retrieve(id),
       retrieveCheckoutSession: (id) => stripe.checkout.sessions.retrieve(id, { expand: ["line_items", "payment_intent.latest_charge"] }),
       ownsCustomer,
+      invoiceForPayment: async (id) => {
+        const { data } = await stripe.invoicePayments.list({ payment: { type: "payment_intent", payment_intent: id }, limit: 1, expand: ["data.invoice"] })
+        const invoice = data[0]?.invoice
+        return invoice && typeof invoice === "object" && !invoice.deleted ? invoice : null
+      },
+      listSubscriptions: async (customer) => (await stripe.subscriptions.list({ customer, status: "all", limit: 20 })).data,
+      cancelSubscription: async (id) => void (await stripe.subscriptions.cancel(id)),
+      onPaidInvoice: (uid, invoiceId) => awardReferral(firestoreDocDb(), { uid, paymentId: invoiceId }, new Date()),
       allowLivemode: liveModeApproved(),
     })
     return NextResponse.json({ received: true, outcome })

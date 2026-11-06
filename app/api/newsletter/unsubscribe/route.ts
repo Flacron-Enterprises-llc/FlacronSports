@@ -3,7 +3,7 @@ import { ApiError, apiErrorResponse } from "@/lib/api-auth"
 import { getAdminDb } from "@/lib/firebase-admin"
 import { getDictionary, isLocale, type Locale } from "@/lib/i18n"
 import { verifyUnsubscribeToken } from "@/lib/newsletter/token"
-import { clientIp, rateLimit } from "@/lib/rate-limit"
+import { rateLimitClient } from "@/lib/rate-limit"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   const { locale, uid } = read(request)
   const copy = getDictionary(locale).newsletter
   try {
-    rateLimit(`unsubscribe:${clientIp(request)}`, 30, 60_000)
+    rateLimitClient(request, "unsubscribe", { visitor: 30, shared: 300 }, 60_000)
     if (!uid) return page(locale, copy.invalidTitle, `<p>${copy.invalidBody}</p>`, 400)
     const db = getAdminDb()
     if (!db) throw new ApiError(503, "storage_unavailable", "Please try again shortly")

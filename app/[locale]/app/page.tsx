@@ -8,7 +8,7 @@ export const generateMetadata = titled((t) => t.dash.dashboard)
 
 export default async function DashboardPage({ params }: LocaleParams) {
   const { locale } = await pageContext(params)
-  const [feed, { reports }] = await Promise.all([getEvents(), listPublishedReports(locale, 4)])
-  const teasers = reports.slice(0, 4).map(({ id, slug, title, competition, publishedAt }) => ({ id, slug, title, competition, publishedAt }))
+  const [feed, { reports }] = await Promise.all([getEvents(), listPublishedReports(locale, 30)])
+  const teasers = reports.slice(0, 30).map(({ id, slug, title, competition, participants, publishedAt }) => ({ id, slug, title, competition, participants, publishedAt }))
   return <DashboardHome feed={feed} reports={teasers} />
 }

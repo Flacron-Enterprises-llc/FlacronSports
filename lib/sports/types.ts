@@ -82,7 +82,28 @@ export interface ClassificationEntry {
   name: string
   team: string | null
   time: string | null
+  laps?: number | null
+  grid?: number | null
 }
+
+/** One period of a game. A side the source left blank stays null, never zero. */
+export interface ScoreSegment {
+  kind: "quarter" | "half" | "inning" | "set" | "overtime"
+  number: number
+  home: number | null
+  away: number | null
+}
+
+/** Period scores read from the source's result text. Other sports get no statistics feed. */
+export interface ScoreBreakdown {
+  segments: ScoreSegment[]
+  /** Baseball box score totals. */
+  hits?: { home: number; away: number }
+  errors?: { home: number; away: number }
+}
+
+/** How a finished game ended, when it was not in regular time. */
+export type EventConclusion = "extra-time" | "overtime" | "penalties" | "shootout" | "awarded" | "walkover"
 
 export type EventScore =
   | { kind: "none" }
@@ -108,6 +129,10 @@ export interface SportEvent {
   status: EventStatus
   /** Minutes played or the period clock, while a game is live and the feed states it. */
   clock?: string | null
+  conclusion?: EventConclusion
+  /** Only when the source states it. */
+  shootout?: { home: number; away: number }
+  breakdown?: ScoreBreakdown
   /** Raw provider status, kept so unmapped values stay visible to operators. */
   providerStatus: string | null
   score: EventScore

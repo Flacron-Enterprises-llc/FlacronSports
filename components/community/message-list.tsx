@@ -6,10 +6,12 @@ import { Flag, Send, ShieldOff } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
 import { btn, Notice, Skeleton } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
+import type { Badge } from "@/lib/community/badges"
 import type { ReportScope } from "@/lib/community/chat"
 import type { Reaction } from "@/lib/community/engagement"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { useLocale } from "@/lib/use-locale"
+import { BadgeList } from "./badge-list"
 import { BlockedPeople } from "./blocked-people"
 import { useCommunityGate } from "./community-gate"
 import { MatchPoll, type PollView } from "./match-poll"
@@ -18,6 +20,7 @@ import { ModeratorTools } from "./moderator-tools"
 interface Message {
   id: string
   displayName: string
+  badges?: Badge[]
   text: string
   createdAtUTC: string
   removed: boolean
@@ -166,7 +169,7 @@ export function MessageList({ scope, scopeId, path }: { scope: ReportScope; scop
           const live = !message.removed && !message.formerMember
           return (
             <li key={message.id} className={`fs-panel-in rounded-xl border p-3 text-sm ${message.mine ? "border-line-strong bg-surface-muted" : "border-line"}`}>
-              <p className="text-xs font-medium text-ink-2">{message.formerMember ? t.community.formerMember : message.displayName} · {time(message.createdAtUTC)}</p>
+              <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs font-medium text-ink-2"><span>{message.formerMember ? t.community.formerMember : message.displayName}</span><BadgeList badges={message.badges} /><span>· {time(message.createdAtUTC)}</span></p>
               <p className="mt-1 whitespace-pre-wrap break-words text-ink">{message.removed ? t.community.removed : message.formerMember ? t.community.formerMessage : message.text}</p>
               {live && (
                 <div className="mt-2 flex flex-wrap gap-1" role="group" aria-label={t.community.reactions}>

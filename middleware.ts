@@ -1,13 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server"
 
+// The host is client supplied, so a redirect target only ever comes from this table.
+const CANONICAL_HOSTS = new Map([["www.flacronsport.com", "flacronsport.com"]])
+
 // English is served without a prefix, French under /fr. A request for /en/... is
 // redirected so each page keeps one canonical URL.
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl
 
-  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? ""
-  if (host.startsWith("www.")) {
-    return NextResponse.redirect(`https://${host.slice(4)}${pathname}${search}`, 308)
+  const host = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "").split(",")[0].trim().split(":")[0].toLowerCase()
+  const canonical = CANONICAL_HOSTS.get(host)
+  if (canonical) {
+    return NextResponse.redirect(`https://${canonical}${pathname}${search}`, 308)
   }
 
   if (pathname === "/fr" || pathname.startsWith("/fr/")) {

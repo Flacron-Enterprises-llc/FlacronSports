@@ -30,6 +30,9 @@ export interface Room {
   inviteHash: string | null
   createdAtUTC: string
   expiresAtUTC: string
+  /** Set on a fan club, which is a room so that chat, reports and moderation all apply. */
+  kind?: "club"
+  slowModeSeconds?: number
 }
 
 export interface Member {
@@ -39,6 +42,8 @@ export interface Member {
   role: "host" | "member"
   status: MemberStatus
   joinedAtUTC: string
+  kind?: "club"
+  lastPostMs?: number
 }
 
 export const roomPath = (id: string) => `rooms/${id}`
@@ -191,7 +196,7 @@ export async function listMyRooms(db: Pick<DocDb, "get" | "query">, uid: string)
   const memberships = await db.query<Member>("room_members", { where: [["uid", uid], ["status", "active"]] })
   const rooms = await Promise.all(memberships.map(async (member) => ({ id: member.roomId, role: member.role, room: await db.get<Room>(roomPath(member.roomId)) })))
   return rooms.flatMap(({ id, role, room }) =>
-    room && room.status === "active"
+    room && room.status === "active" && room.kind !== "club"
       ? [{ id, role, name: room.name, matchId: room.matchId, memberCount: room.memberCount, expiresAtUTC: room.expiresAtUTC }]
       : [],
   )
@@ -259,12 +264,16 @@ export function postRoomMessage(db: DocDb, input: { roomId: string; uid: string;
     await requireAccepted(tx, uid)
     const current = await tx.get<Room>(roomPath(roomId))
     const sanction = await readSanction(tx, uid)
-    await assertRoomOpen(tx, current, now)
+    const room = await assertRoomOpen(tx, current, now)
     assertNotSanctioned(sanction, now, "post")
+    if (room.slowModeSeconds && member.lastPostMs && now.getTime() - member.lastPostMs < room.slowModeSeconds * 1000) {
+      throw new ApiError(429, "slow_mode", "Slow mode is on. Wait a moment before posting again.")
+    }
 
     const id = newMessageId(now)
     const message: StoredMessage = { sortKey: id, uid, displayName: member.displayName, text, createdAtUTC: now.toISOString(), removed: false }
     tx.set(`${messagesPath("room", roomId)}/${id}`, message)
+    if (room.slowModeSeconds) tx.set(memberPath(roomId, uid), { lastPostMs: now.getTime() }, { merge: true })
     return { id }
   })
 }

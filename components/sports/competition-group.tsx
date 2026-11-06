@@ -2,6 +2,7 @@ import Link from "next/link"
 import { SportIcon } from "@/components/site/sport-icon"
 import type { Dictionary } from "@/lib/i18n"
 import type { CompetitionGroup } from "@/lib/sports/priority"
+import { FollowLeagueButton } from "./event-actions"
 import { EventCard } from "./event-card"
 
 // The source files a continental competition under one country.
@@ -20,6 +21,7 @@ export function CompetitionGroupSection({ group, total, t, href }: { group: Comp
         </h2>
         {competition.country && !CONTINENTAL.test(competition.name) && <span className="hidden min-w-0 truncate text-xs text-ink-3 sm:inline">{competition.country}</span>}
         <span className="tabular ml-auto shrink-0 text-xs text-ink-3">{t.scores.games.replace("{count}", String(total))}</span>
+        {competition.id && <FollowLeagueButton league={{ id: competition.id, name: competition.name, sportId: first.sportId }} />}
       </header>
       <div className="fs-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {events.map((event) => <EventCard key={event.id} event={event} t={t} href={href} />)}

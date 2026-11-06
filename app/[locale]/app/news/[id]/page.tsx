@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Flag } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
 import { AppPage, Notice } from "@/components/site/states"
 import { FullReportSection } from "@/components/reports/paid-report"
+import { SaveReportButton } from "@/components/reports/saved-reports"
 import { LocalTime, SpoilerGuard } from "@/components/sports/parts"
 import { getPublishedReport, type Report } from "@/lib/content/reports"
 import { isLocale } from "@/lib/i18n"
@@ -57,13 +58,14 @@ export default async function ReportPage({ params }: Props) {
     <AppPage width="sm">
       {back}
       <article className="fs-rise mt-4 rounded-xl border border-line bg-surface p-5 shadow-[var(--shadow-sm)] sm:p-8">
-        <p className="text-xs font-semibold text-hot-text">{t.reports.label}</p>
+        <p className="text-xs font-semibold text-hot-text">{t.reports.label} · {t.reports.types[report.type]}</p>
         <h1 className="mt-2 text-2xl font-semibold leading-tight text-ink sm:text-[1.75rem]">{report.title}</h1>
-        <p className="mt-1.5 text-sm text-ink-2">{report.competition}</p>
+        {report.competition && <p className="mt-1.5 text-sm text-ink-2">{report.competition}</p>}
+        <div className="mt-3"><SaveReportButton slug={report.slug} /></div>
         <div className="mt-6 text-[15.5px] leading-7 text-ink">
-          <SpoilerGuard label={t.reports.reveal}><p>{report.body}</p></SpoilerGuard>
+          <SpoilerGuard label={t.reports.reveal}><p className="whitespace-pre-line">{report.body}</p></SpoilerGuard>
         </div>
-        <FullReportSection slug={report.slug} />
+        {(report.type === "result" || report.type === "recap") && <FullReportSection slug={report.slug} />}
         {report.correctionNote && (
           <Notice className="mt-5" role="note" title={t.reports.correction}>
             <SpoilerGuard label={t.reports.reveal}>{report.correctionNote}</SpoilerGuard>
@@ -76,7 +78,7 @@ export default async function ReportPage({ params }: Props) {
           <div><dt className="text-ink-2">{t.reports.source}</dt><dd className="mt-0.5 font-medium text-ink">{t.reports.verifiedData}</dd></div>
         </dl>
         <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold">
-          <Link href={href(`/app/match/${report.matchId}`)} className="inline-flex items-center gap-1.5 text-hot-text hover:underline">{t.reports.matchLink}<ArrowRight aria-hidden className="size-3.5" /></Link>
+          {report.type !== "roundup" && <Link href={href(`/app/match/${report.matchId}`)} className="inline-flex items-center gap-1.5 text-hot-text hover:underline">{t.reports.matchLink}<ArrowRight aria-hidden className="size-3.5" /></Link>}
           <a href={`mailto:${CORRECTIONS_EMAIL}?subject=${subject}`} className="inline-flex items-center gap-1.5 text-ink-2 hover:text-ink hover:underline"><Flag aria-hidden className="size-3.5" />{t.reports.reportError}</a>
         </div>
       </article>

@@ -12,12 +12,28 @@ import { SportIcon } from "@/components/site/sport-icon"
 import { FEATURES, getMarketing, money } from "@/lib/marketing"
 import { LOCALES } from "@/lib/i18n"
 import { pageContext, type LocaleParams } from "@/lib/page-context"
+import { COMPANY_URL, SOCIAL_LINKS } from "@/lib/site"
 import { SPORTS } from "@/lib/sports/types"
 
 export async function generateMetadata({ params }: LocaleParams): Promise<Metadata> {
   const { locale } = await pageContext(params)
   return { description: getMarketing(locale).home.seoDescription }
 }
+
+const SITE_URL = process.env.APP_BASE_URL || "https://flacronsport.com"
+
+/** Escaped so a value can never close the script tag. */
+const jsonLd = (locale: string, description: string) => JSON.stringify({
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization", "@id": `${SITE_URL}/#organization`, name: "FlacronSport", url: SITE_URL, logo: `${SITE_URL}/brand/fs-logo-full.png`,
+      parentOrganization: { "@type": "Organization", name: "Flacron Enterprises LLC", url: COMPANY_URL },
+      sameAs: SOCIAL_LINKS.map((link) => link.href),
+    },
+    { "@type": "WebSite", "@id": `${SITE_URL}/#website`, name: "FlacronSport", url: SITE_URL, description, inLanguage: locale, publisher: { "@id": `${SITE_URL}/#organization` } },
+  ],
+}).replace(/</g, "\\u003c")
 
 const STEP_ICONS = [UserPlus, Star, Eye]
 const VIEW_ICONS = [ShieldCheck, ListChecks, MonitorPlay, CircleCheck]
@@ -33,6 +49,7 @@ export default async function HomePage({ params }: LocaleParams) {
 
   return (
     <main id="main">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(locale, h.seoDescription) }} />
       <section className="fs-band overflow-hidden" aria-labelledby="hero-title">
         <div aria-hidden className="fs-grid pointer-events-none absolute inset-0" />
         <div className="relative mx-auto grid max-w-7xl items-center gap-14 px-4 pb-20 pt-16 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:pb-28 lg:pt-24">

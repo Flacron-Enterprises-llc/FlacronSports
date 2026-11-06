@@ -1,8 +1,6 @@
 import { purchaseLive, type BillingPurchase } from "./addons"
 import type { BillingInterval, PaidPlanId, PlanId } from "./plans"
 
-/** Days of access kept after a failed renewal while Stripe retries the payment. */
-export const PAST_DUE_GRACE_DAYS = 3
 /** Tolerance for a delayed renewal webhook on an otherwise active subscription. */
 export const RENEWAL_LEEWAY_DAYS = 3
 
@@ -27,6 +25,8 @@ export interface EntitlementRecord {
   status: StripeSubscriptionStatus
   stripeCustomerId: string
   stripeSubscriptionId: string
+  /** Absent on records written before it was tracked. Unix seconds. */
+  currentPeriodStart?: number
   currentPeriodEnd: number // unix seconds
   cancelAtPeriodEnd: boolean
   lastEventCreated: number // unix seconds
@@ -77,8 +77,10 @@ export function computeAccess(
       return nowSeconds < cutoff ? paid : expired
     }
     case "past_due": {
-      const cutoff = record.currentPeriodEnd + PAST_DUE_GRACE_DAYS * DAY_SECONDS
-      return nowSeconds < cutoff ? { ...paid, state: "past_due" } : expired
+      // Stripe rolls the period forward before the renewal is paid, so the paid time ended
+      // where the current period starts. The state stays so billing can ask for a new card.
+      const paidThrough = record.currentPeriodStart ?? 0
+      return nowSeconds < paidThrough ? { ...paid, state: "past_due" } : { ...expired, state: "past_due" }
     }
     default:
       return expired

@@ -50,10 +50,73 @@ describe("favorites limits are enforced on the server", () => {
   })
 })
 
+describe("followed leagues and players", () => {
+  const league = (id: string) => ({ id, name: `League ${id}`, sportId: "football" })
+  const player = (id: string) => ({ id, name: `Player ${id}`, team: null, sportId: "football" })
+
+  it("reads a stored document from before these fields existed", async () => {
+    store.set("user_preferences/old", { favorites: ["Team 0"] })
+    expect(await getPreferences("old")).toMatchObject({ favorites: ["Team 0"], leagues: [], players: [], reminders: [], boardPins: [] })
+  })
+  it("counts leagues and players toward the Basic limit of 5", async () => {
+    await updatePreferences("u", { favorites: teams(3), leagues: [league("1")], players: [player("2")] })
+    await expect(updatePreferences("u", { leagues: [league("1"), league("3")] })).rejects.toMatchObject({ code: "favorites_limit" })
+    await expect(updatePreferences("u", { favorites: teams(4) })).rejects.toMatchObject({ code: "favorites_limit" })
+  })
+  it("still lets a member reorder at the limit", async () => {
+    await updatePreferences("u", { favorites: teams(5) })
+    expect((await updatePreferences("u", { favorites: teams(5).reverse() })).favorites[0]).toBe("Team 4")
+  })
+  it("refuses an unknown home section", async () => {
+    await expect(updatePreferences("u", { homeFeed: { order: ["ads"], hidden: [] } })).rejects.toMatchObject({ code: "invalid_request" })
+  })
+})
+
 describe("preferences", () => {
   it("rejects unknown shapes", async () => {
     await expect(updatePreferences("u", { favorites: "all" })).rejects.toMatchObject({ code: "invalid_request" })
   })
+  it("never sends Firestore an undefined value, whatever the plan", async () => {
+    for (const current of ["none", "basic", "plus", "premium"]) {
+      plan = current
+      store.clear()
+      await updatePreferences("u", { alerts: { ...SERVER_DEFAULTS.alerts }, spoilerMode: true })
+      const saved = store.get("user_preferences/u") as { alerts: Record<string, unknown> }
+      expect(Object.values(saved.alerts)).not.toContain(undefined)
+    }
+  })
+
+  it("decides newsletter consent on the server", async () => {
+    const first = await updatePreferences("u", { newsletter: { optedIn: true, consentedAt: null } })
+    const forged = await updatePreferences("u", { newsletter: { optedIn: true, consentedAt: "2000-01-01T00:00:00.000Z" } })
+    expect(forged.newsletter.consentedAt).toBe(first.newsletter.consentedAt)
+    expect(forged.newsletter.consentedAt).not.toContain("2000")
+  })
+
+  it("keeps an unsubscribe time through later saves", async () => {
+    store.set("user_preferences/u", { newsletter: { optedIn: false, consentedAt: "2026-01-01T00:00:00.000Z", unsubscribedAt: "2026-02-01T00:00:00.000Z" } })
+    await updatePreferences("u", { newsletter: { optedIn: false, consentedAt: "2000-01-01T00:00:00.000Z" } })
+    const again = await updatePreferences("u", { newsletter: { optedIn: true, consentedAt: null } })
+    expect(again.newsletter.unsubscribedAt).toBe("2026-02-01T00:00:00.000Z")
+    expect(again.newsletter.consentedAt).not.toBe("2026-01-01T00:00:00.000Z")
+  })
+
+  it("records when a member opts out in settings", async () => {
+    await updatePreferences("u", { newsletter: { optedIn: true, consentedAt: null } })
+    const out = await updatePreferences("u", { newsletter: { optedIn: false, consentedAt: null } })
+    expect(out.newsletter).toMatchObject({ optedIn: false, unsubscribedAt: expect.any(String) })
+    expect(out.newsletter.consentedAt).not.toBeNull()
+  })
+
+  it("keeps a Premium member's filters after a downgrade, and refuses changes to them", async () => {
+    plan = "premium"
+    const filters = { sports: ["football"], majorOnly: true }
+    await updatePreferences("u", { alerts: { ...SERVER_DEFAULTS.alerts, filters } })
+    plan = "plus"
+    const saved = await updatePreferences("u", { alerts: { ...SERVER_DEFAULTS.alerts, filters: { sports: [], majorOnly: false } } })
+    expect(saved.alerts.filters).toEqual(filters)
+  })
+
   it("limits Free alerts to start and final", async () => {
     const saved = await updatePreferences("u", { alerts: { ...SERVER_DEFAULTS.alerts, types: ["start", "scoring"] } })
     expect(saved.alerts.types).toEqual(["start"])

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { apiErrorResponse, requireCron, requireFeature } from "@/lib/api-auth"
-import { runTick } from "@/lib/jobs/tick"
+import { assertJobStorage, runTick } from "@/lib/jobs/tick"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -9,10 +9,14 @@ export async function POST(request: Request) {
   try {
     requireCron(request)
     requireFeature("JOBS_ENABLED")
-    const result = await runTick()
-    // EventBridge drops the connection at 5 seconds, so the log is the durable record.
-    console.log("Jobs tick", JSON.stringify(result))
-    return NextResponse.json({ success: true, ...result })
+    assertJobStorage()
+    // EventBridge counts anything over 5 seconds as a failure and would retry it, so
+    // this acknowledges at once. Only a tick that truly could not start reaches the
+    // retry and dead-letter path. job_runs and this log are the record of the outcome.
+    void runTick()
+      .then((result) => console.log("Jobs tick", JSON.stringify(result)))
+      .catch((error: unknown) => console.error("Tick aborted", error instanceof Error ? error.message : "unknown"))
+    return NextResponse.json({ success: true, started: true }, { status: 202 })
   } catch (error) {
     return apiErrorResponse(error)
   }

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
-import { ApiError, apiErrorResponse, requireVerifiedUser } from "@/lib/api-auth"
+import { ApiError, apiErrorResponse, requireSwitch, requireVerifiedUser } from "@/lib/api-auth"
 import { activeDayPass, addonOnSale, isAddonSku, priceIdForAddon } from "@/lib/billing/addons"
 import { getStoredCustomerId, getSubscriptionAccess, getUserPurchases, storeCustomerId } from "@/lib/billing/firestore-store"
 import { APP_ID } from "@/lib/billing/plans"
+import { settleOpenSessions } from "@/lib/billing/open-sessions"
 import { getStripe } from "@/lib/billing/stripe-client"
 import { rateLimit } from "@/lib/rate-limit"
 
@@ -12,6 +13,7 @@ export const runtime = "nodejs"
 export async function POST(request: Request) {
   try {
     const user = await requireVerifiedUser(request)
+    requireSwitch("FEATURE_PAYMENTS")
     rateLimit(`addon:${user.uid}`, 10, 60_000)
     const { sku } = await request.json().catch(() => ({}))
 
@@ -19,8 +21,12 @@ export async function POST(request: Request) {
     const price = priceIdForAddon(sku)
     if (!price || !addonOnSale(sku)) throw new ApiError(503, "addon_unavailable", "This add-on is not available yet")
 
+    const { plan } = await getSubscriptionAccess(user.uid)
+    if (sku !== "day_pass" && plan === "none") {
+      throw new ApiError(402, "subscription_required", "This add-on needs a plan")
+    }
     if (sku === "day_pass") {
-      if ((await getSubscriptionAccess(user.uid)).plan === "premium") {
+      if (plan === "premium") {
         throw new ApiError(409, "already_premium", "Your subscription already includes Premium benefits")
       }
       if (activeDayPass(await getUserPurchases(user.uid), Date.now())) {
@@ -37,6 +43,13 @@ export async function POST(request: Request) {
       )
       customer = created.id
       await storeCustomerId(user.uid, customer)
+    }
+
+    // One open day pass checkout at most, so a second tab cannot pay for a pass with no benefit.
+    if (sku === "day_pass") {
+      const dayPass = (session: { metadata: Record<string, string> | null }) => session.metadata?.sku === "day_pass"
+      const reuse = await settleOpenSessions(stripe, customer, { kind: dayPass, same: dayPass })
+      if (reuse) return NextResponse.json({ url: reuse })
     }
 
     const metadata = { app_id: APP_ID, firebase_uid: user.uid, sku }

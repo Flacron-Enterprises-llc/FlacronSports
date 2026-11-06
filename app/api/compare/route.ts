@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { ApiError, apiErrorResponse, requireUser } from "@/lib/api-auth"
 import { getEffectiveAccess } from "@/lib/billing/firestore-store"
+import { hasPlusFeatures } from "@/lib/billing/plans"
 import { rateLimit } from "@/lib/rate-limit"
 import { compareTeams, TeamNotFound } from "@/lib/sports/compare"
 import { SPORTS, type SportId } from "@/lib/sports/types"
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
   try {
     const user = await requireUser(request)
     const { plan } = await getEffectiveAccess(user.uid)
-    if (plan === "free") throw new ApiError(403, "plan_required", "Comparison needs the Plus or Premium plan")
+    if (!hasPlusFeatures(plan)) throw new ApiError(403, "plan_required", "Comparison needs the Plus or Premium plan")
     rateLimit(`compare:${user.uid}`, 20, 60_000)
     const parsed = query.safeParse(Object.fromEntries(new URL(request.url).searchParams))
     if (!parsed.success) throw new ApiError(400, "invalid_request", "Choose two teams")

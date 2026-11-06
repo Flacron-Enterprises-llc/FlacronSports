@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { ApiError, apiErrorResponse, requireUser } from "@/lib/api-auth"
 import { userFollowService } from "@/lib/user-follow-service"
+import { requireSubscriber } from "@/lib/billing/require-plan"
 
 const followSchema = z.object({
   followType: z.enum(["author", "team", "tag"]),
@@ -18,6 +19,7 @@ async function parse(request: Request) {
 export async function POST(request: Request) {
   try {
     const user = await requireUser(request)
+    await requireSubscriber(user.uid)
     const { followType, followId } = await parse(request)
     const success = await userFollowService.followItem(user.uid, followType, followId)
     return NextResponse.json({ success }, { status: success ? 200 : 503 })
@@ -29,6 +31,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const user = await requireUser(request)
+    await requireSubscriber(user.uid)
     const { followType, followId } = await parse(request)
     const success = await userFollowService.unfollowItem(user.uid, followType, followId)
     return NextResponse.json({ success }, { status: success ? 200 : 503 })

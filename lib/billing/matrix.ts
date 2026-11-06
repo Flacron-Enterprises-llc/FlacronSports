@@ -2,7 +2,7 @@
 // come from plans.ts, so this file cannot disagree with what is enforced.
 
 import { ADDONS, type AddonSku } from "./addons"
-import { PLANS, type BillingInterval, type PlanId } from "./plans"
+import { PLANS, type BillingInterval, type PaidPlanId } from "./plans"
 import type { Locale } from "@/lib/i18n"
 
 type Text = Record<Locale, string>
@@ -14,11 +14,11 @@ export interface MatrixCell {
 export interface MatrixRow {
   id: string
   label: Text
-  cells: Record<PlanId, MatrixCell>
+  cells: Record<PaidPlanId, MatrixCell>
 }
 
-const same = (text: Text): Record<PlanId, MatrixCell> => ({ free: { text }, plus: { text }, premium: { text } })
-const requests = (id: PlanId): MatrixCell => ({ text: { en: `${PLANS[id].assistantRequestsPerMonth} requests`, fr: `${PLANS[id].assistantRequestsPerMonth} demandes` } })
+const same = (text: Text): Record<PaidPlanId, MatrixCell> => ({ basic: { text }, plus: { text }, premium: { text } })
+const requests = (id: PaidPlanId): MatrixCell => ({ text: { en: `${PLANS[id].assistantRequestsPerMonth} requests`, fr: `${PLANS[id].assistantRequestsPerMonth} demandes` } })
 const rooms = (id: "plus" | "premium"): number => PLANS[id].privateRooms?.active ?? 0
 const seats = (id: "plus" | "premium"): number => PLANS[id].privateRooms?.participantsPerRoom ?? 0
 
@@ -34,32 +34,32 @@ const ALL_ALERTS: Text = { en: "All supported event alerts", fr: "Toutes les ale
 export const PLAN_MATRIX: MatrixRow[] = [
   { id: "scores", label: { en: "Scores and schedules", fr: "Scores et calendriers" }, cells: same({ en: "All enabled sports", fr: "Tous les sports activés" }) },
   { id: "video", label: { en: "Authorized public video", fr: "Vidéo publique autorisée" }, cells: same({ en: "Where available", fr: "Si disponible" }) },
-  { id: "favorites", label: { en: "Favorite teams or athletes", fr: "Équipes ou athlètes favoris" }, cells: { free: { text: { en: `${PLANS.free.favoritesLimit} total`, fr: `${PLANS.free.favoritesLimit} au total` } }, plus: { text: UNLIMITED }, premium: { text: UNLIMITED } } },
+  { id: "favorites", label: { en: "Favorite teams or athletes", fr: "Équipes ou athlètes favoris" }, cells: { basic: { text: { en: `${PLANS.basic.favoritesLimit} total`, fr: `${PLANS.basic.favoritesLimit} au total` } }, plus: { text: UNLIMITED }, premium: { text: UNLIMITED } } },
   {
     id: "alerts",
     label: { en: "Alerts", fr: "Alertes" },
     cells: {
-      free: { text: { en: "Start and final result", fr: "Début et résultat final" } },
+      basic: { text: { en: "Start and final result", fr: "Début et résultat final" } },
       plus: { text: ALL_ALERTS },
       premium: { text: { en: "All supported alerts and advanced filters", fr: "Toutes les alertes prises en charge et filtres avancés" } },
     },
   },
-  { id: "ads", label: { en: "FlacronSport display ads", fr: "Publicités FlacronSport" }, cells: { free: { text: { en: "Included", fr: "Incluses" } }, plus: { text: REMOVED }, premium: { text: REMOVED } } },
+  { id: "ads", label: { en: "FlacronSport display ads", fr: "Publicités FlacronSport" }, cells: { basic: { text: { en: "Included", fr: "Incluses" } }, plus: { text: REMOVED }, premium: { text: REMOVED } } },
   {
     id: "news",
     label: { en: "News and summaries", fr: "Actualités et résumés" },
     cells: {
-      free: { text: DIGEST },
+      basic: { text: DIGEST },
       plus: { text: FULL_REPORTS },
       premium: { text: DEEP_REPORTS },
     },
   },
-  { id: "assistant", label: { en: "Sports assistant per month", fr: "Assistant sportif par mois" }, cells: { free: requests("free"), plus: requests("plus"), premium: requests("premium") } },
+  { id: "assistant", label: { en: "Sports assistant per month", fr: "Assistant sportif par mois" }, cells: { basic: requests("basic"), plus: requests("plus"), premium: requests("premium") } },
   {
     id: "rooms",
     label: { en: "Private room creation", fr: "Création de salons privés" },
     cells: {
-      free: { text: { en: "Join only", fr: "Rejoindre uniquement" } },
+      basic: { text: { en: "Join only", fr: "Rejoindre uniquement" } },
       plus: { text: { en: `${rooms("plus")} active rooms`, fr: `${rooms("plus")} salons actifs` } },
       premium: { text: { en: `${rooms("premium")} active rooms`, fr: `${rooms("premium")} salons actifs` } },
     },
@@ -68,7 +68,7 @@ export const PLAN_MATRIX: MatrixRow[] = [
     id: "participants",
     label: { en: "Room participant limit", fr: "Participants par salon" },
     cells: {
-      free: { text: { en: "Host plan applies", fr: "Selon l'offre de l'hôte" } },
+      basic: { text: { en: "Host plan applies", fr: "Selon l'offre de l'hôte" } },
       plus: { text: { en: `${seats("plus")} per room`, fr: `${seats("plus")} par salon` } },
       premium: { text: { en: `${seats("premium")} per room`, fr: `${seats("premium")} par salon` } },
     },
@@ -77,7 +77,7 @@ export const PLAN_MATRIX: MatrixRow[] = [
     id: "comparison",
     label: { en: "Advanced comparison tools", fr: "Outils de comparaison avancés" },
     cells: {
-      free: { text: { en: "No", fr: "Non" } },
+      basic: { text: { en: "No", fr: "Non" } },
       plus: { text: BASIC_COMPARE },
       premium: { text: ADVANCED_COMPARE },
     },
@@ -97,19 +97,19 @@ export const EVERY_PLAN: Text[] = [
 
 const PLUS_ROOMS: Text = { en: `${rooms("plus")} active private rooms, ${seats("plus")} people each`, fr: `${rooms("plus")} salons privés actifs, ${seats("plus")} personnes chacun` }
 const PREMIUM_ROOMS: Text = { en: `${rooms("premium")} active private rooms, ${seats("premium")} people each`, fr: `${rooms("premium")} salons privés actifs, ${seats("premium")} personnes chacun` }
-const assistantLine = (id: PlanId): Text => ({ en: `${PLANS[id].assistantRequestsPerMonth} assistant requests a month`, fr: `${PLANS[id].assistantRequestsPerMonth} demandes à l'assistant par mois` })
+const assistantLine = (id: PaidPlanId): Text => ({ en: `${PLANS[id].assistantRequestsPerMonth} assistant requests a month`, fr: `${PLANS[id].assistantRequestsPerMonth} demandes à l'assistant par mois` })
 
-export const PLAN_HIGHLIGHTS: Record<PlanId, Text[]> = {
-  free: [
+export const PLAN_HIGHLIGHTS: Record<PaidPlanId, Text[]> = {
+  basic: [
     { en: "Scores and schedules for all enabled sports", fr: "Scores et calendriers de tous les sports activés" },
-    { en: `${PLANS.free.favoritesLimit} favorite teams or athletes`, fr: `${PLANS.free.favoritesLimit} équipes ou athlètes favoris` },
+    { en: `${PLANS.basic.favoritesLimit} favorite teams or athletes`, fr: `${PLANS.basic.favoritesLimit} équipes ou athlètes favoris` },
     { en: "Start and final result alerts", fr: "Alertes de début et de résultat final" },
     DIGEST,
-    assistantLine("free"),
+    assistantLine("basic"),
     { en: "Join private rooms", fr: "Rejoindre des salons privés" },
   ],
   plus: [
-    { en: "Everything in Free", fr: "Tout le contenu de Free" },
+    { en: "Everything in Basic", fr: "Tout le contenu de Basic" },
     { en: "Unlimited favorites", fr: "Favoris illimités" },
     ALL_ALERTS,
     { en: "No FlacronSport display ads", fr: "Sans publicité FlacronSport" },
@@ -128,13 +128,13 @@ export const PLAN_HIGHLIGHTS: Record<PlanId, Text[]> = {
   ],
 }
 
-/** Whole percent saved by paying yearly, or null for the free plan. */
-export function annualSavingPercent(id: PlanId): number | null {
+/** Whole percent saved by paying yearly. */
+export function annualSavingPercent(id: PaidPlanId): number {
   const { monthlyPriceUsd, annualPriceUsd } = PLANS[id]
-  return monthlyPriceUsd === 0 ? null : Math.round((1 - annualPriceUsd / (monthlyPriceUsd * 12)) * 100)
+  return Math.round((1 - annualPriceUsd / (monthlyPriceUsd * 12)) * 100)
 }
 
-export const priceFor = (id: PlanId, interval: BillingInterval): number => (interval === "monthly" ? PLANS[id].monthlyPriceUsd : PLANS[id].annualPriceUsd)
+export const priceFor = (id: PaidPlanId, interval: BillingInterval): number => (interval === "monthly" ? PLANS[id].monthlyPriceUsd : PLANS[id].annualPriceUsd)
 
 export const ADDON_ORDER: AddonSku[] = ["assistant_100", "day_pass", "room_pass", "export_pack"]
 export const addonPrice = (sku: AddonSku): number => ADDONS[sku].priceUsd

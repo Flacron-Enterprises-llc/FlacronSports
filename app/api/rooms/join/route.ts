@@ -5,6 +5,7 @@ import { displayNameOf } from "@/lib/community/content"
 import { joinRoom } from "@/lib/community/rooms"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { rateLimit } from "@/lib/rate-limit"
+import { requireSubscriber } from "@/lib/billing/require-plan"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -13,6 +14,7 @@ export async function POST(request: Request) {
   try {
     requireFeature("COMMUNITY_ENABLED")
     const user = await requireVerifiedUser(request)
+    await requireSubscriber(user.uid)
     rateLimit(`room-join:${user.uid}`, 10, 60_000)
     const { token } = await request.json().catch(() => ({}))
     if (typeof token !== "string" || !/^[\w-]{20,100}$/.test(token)) throw new ApiError(404, "invite_invalid", "This invitation is not valid")

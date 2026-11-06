@@ -1,6 +1,7 @@
 "use client"
 
 import { HouseAd } from "./house-ad"
+import { PaywallGate } from "./paywall"
 import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
@@ -119,7 +120,7 @@ function Sidebar({ path, onClose }: { path: string; onClose?: () => void }) {
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-semibold text-white">{name ?? email}</p>
               {loaded ? (
-                <p className="text-[11px] text-[var(--sidebar-ink)]">{PLANS[plan].name} {t.dash.planLabel}{dayPassEnd ? ` · ${t.ui.dayPassShort}` : ""}</p>
+                <p className="text-[11px] text-[var(--sidebar-ink)]">{plan === "none" ? t.paywall.noPlan : `${PLANS[plan].name} ${t.dash.planLabel}`}{dayPassEnd ? ` · ${t.ui.dayPassShort}` : ""}</p>
               ) : (
                 <Skeleton className="mt-1 h-3 w-16 opacity-20" />
               )}
@@ -134,7 +135,7 @@ function Sidebar({ path, onClose }: { path: string; onClose?: () => void }) {
               <Meter value={included.used} max={included.limit} label={t.ui.assistantAllowance} tone="inverse" className="mt-1" />
             </div>
           )}
-          {loaded && plan === "free" && (
+          {loaded && plan === "basic" && (
             <Link href={href("/app/billing#plans")} onClick={onClose} className="mt-3 inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-orange px-3 text-[13px] font-semibold text-hot-on transition-colors hover:bg-orange-hover">
               <Sparkles aria-hidden className="size-3.5" /> {t.dash.upgrade}
             </Link>
@@ -294,7 +295,7 @@ function UserMenu() {
           <div className="px-3 pb-3 pt-2">
             <p className="truncate text-sm font-semibold text-ink">{name ?? t.nav.account}</p>
             <p className="truncate text-xs text-ink-2">{email}</p>
-            <p className="mt-1 text-xs font-medium text-ink-2">{PLANS[plan].name} {t.dash.planLabel}</p>
+            <p className="mt-1 text-xs font-medium text-ink-2">{plan === "none" ? t.paywall.noPlan : `${PLANS[plan].name} ${t.dash.planLabel}`}</p>
           </div>
           <div className="border-t border-line py-1.5">
             <Link href={href("/app/settings")} onClick={close} className={item}><Settings aria-hidden className="size-4" />{t.dash.settings}</Link>
@@ -351,7 +352,7 @@ function Frame({ path, children }: { path: string; children: React.ReactNode }) 
       <div className="flex min-h-dvh min-w-0 flex-col">
         <TopBar path={path} drawer={drawer} onMenu={() => setDrawer(true)} />
         <OfflineBanner />
-        <div className="flex-1 pb-20 lg:pb-4">{children}<HouseAd /></div>
+        <div className="flex-1 pb-20 lg:pb-4"><PaywallGate path={path}>{children}<HouseAd /></PaywallGate></div>
         <footer className="hidden px-10 pb-6 text-xs text-ink-3 lg:block print:hidden">
           <ul className="mx-auto flex max-w-[1280px] flex-wrap gap-x-4 gap-y-1">
             {POLICIES.map((policy) => <li key={policy.slug}><Link className="hover:text-ink" href={href(`/${policy.slug}`)}>{policy.label}</Link></li>)}

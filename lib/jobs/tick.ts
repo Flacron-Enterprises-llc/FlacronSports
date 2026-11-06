@@ -37,6 +37,13 @@ async function verifiedEmail(uid: string): Promise<string | null> {
   return user?.email && user.emailVerified && !user.disabled ? user.email : null
 }
 
+/** The daily digest is a plan benefit, so an opted-in account with no plan is skipped. */
+async function* subscriberDigestRows(db: Firestore): AsyncGenerator<UserRow> {
+  for await (const row of preferenceRows(db)) {
+    if (row.prefs.newsletter.optedIn && (await getEffectiveAccess(row.uid)).plan !== "none") yield row
+  }
+}
+
 export type JobResult<T> = T | { failed: true; error: string }
 
 /** Each job is isolated, so one failure is reported without stopping the others. */
@@ -145,7 +152,7 @@ async function tick(now: Date) {
     newsletter: async () => {
       // Skipping leaves the day unclaimed, so a later tick in the hour can still send.
       if (today.state === "unavailable") return { skipped: "feed_unavailable" }
-      return runNewsletter({ db, events, now, siteUrl, send: sendEmail, emailFor: verifiedEmail, users: preferenceRows(db) })
+      return runNewsletter({ db, events, now, siteUrl, send: sendEmail, emailFor: verifiedEmail, users: subscriberDigestRows(db) })
     },
   })
 

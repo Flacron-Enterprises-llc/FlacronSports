@@ -3,12 +3,17 @@ import { ADDONS } from "@/lib/billing/addons"
 import { annualSavingPercent, EVERY_PLAN, PLAN_HIGHLIGHTS, PLAN_MATRIX } from "@/lib/billing/matrix"
 import { PLANS } from "@/lib/billing/plans"
 
-const cell = (id: string, plan: "free" | "plus" | "premium") => PLAN_MATRIX.find((row) => row.id === id)?.cells[plan]
+const cell = (id: string, plan: "basic" | "plus" | "premium") => PLAN_MATRIX.find((row) => row.id === id)?.cells[plan]
 
-describe("the plan table matches section 12 of the spec", () => {
+describe("the plan table matches the client's updated section 12", () => {
+  it("has no free plan to buy", () => {
+    expect(Object.keys(PLAN_HIGHLIGHTS)).toEqual(["basic", "plus", "premium"])
+    expect(PLANS.none).toMatchObject({ favoritesLimit: 0, assistantRequestsPerMonth: 0, privateRooms: null, displayAds: false })
+  })
+
   it("has the published prices", () => {
-    expect([PLANS.free.monthlyPriceUsd, PLANS.plus.monthlyPriceUsd, PLANS.premium.monthlyPriceUsd]).toEqual([0, 6.99, 12.99])
-    expect([PLANS.free.annualPriceUsd, PLANS.plus.annualPriceUsd, PLANS.premium.annualPriceUsd]).toEqual([0, 59.99, 119.99])
+    expect([PLANS.basic.monthlyPriceUsd, PLANS.plus.monthlyPriceUsd, PLANS.premium.monthlyPriceUsd]).toEqual([19.99, 29.99, 49.99])
+    expect([PLANS.basic.annualPriceUsd, PLANS.plus.annualPriceUsd, PLANS.premium.annualPriceUsd]).toEqual([199.99, 299.99, 499.99])
   })
 
   it("lists every benefit row, in order", () => {
@@ -19,8 +24,8 @@ describe("the plan table matches section 12 of the spec", () => {
   })
 
   it("states the limits the backend enforces", () => {
-    expect(cell("favorites", "free")?.text.en).toBe("5 total")
-    expect(cell("assistant", "free")?.text.en).toBe("5 requests")
+    expect(cell("favorites", "basic")?.text.en).toBe("5 total")
+    expect(cell("assistant", "basic")?.text.en).toBe("5 requests")
     expect(cell("assistant", "plus")?.text.en).toBe("100 requests")
     expect(cell("assistant", "premium")?.text.en).toBe("300 requests")
     expect(cell("rooms", "plus")?.text.en).toBe("3 active rooms")
@@ -62,8 +67,8 @@ describe("every benefit in the spec is offered", () => {
 
 describe("annual saving", () => {
   it("is worked out from the real prices", () => {
-    expect(annualSavingPercent("free")).toBeNull()
-    expect(annualSavingPercent("plus")).toBe(28)
-    expect(annualSavingPercent("premium")).toBe(23)
+    expect(annualSavingPercent("basic")).toBe(17)
+    expect(annualSavingPercent("plus")).toBe(17)
+    expect(annualSavingPercent("premium")).toBe(17)
   })
 })

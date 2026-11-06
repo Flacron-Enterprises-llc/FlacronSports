@@ -30,6 +30,10 @@ Parameters:
     Type: String
   TheSportsDbSecretArn:
     Type: String
+  PriceBasicMonthly:
+    Type: String
+  PriceBasicAnnual:
+    Type: String
   PricePlusMonthly:
     Type: String
   PricePlusAnnual:
@@ -199,6 +203,8 @@ Resources:
             - { Name: JOBS_ENABLED, Value: "true" }
             - { Name: COMMUNITY_ENABLED, Value: "true" }
             - { Name: EMAIL_FROM, Value: !Sub "FlacronSport <noreply@${EmailIdentity}>" }
+            - { Name: STRIPE_PRICE_BASIC_MONTHLY, Value: !Ref PriceBasicMonthly }
+            - { Name: STRIPE_PRICE_BASIC_ANNUAL, Value: !Ref PriceBasicAnnual }
             - { Name: STRIPE_PRICE_PLUS_MONTHLY, Value: !Ref PricePlusMonthly }
             - { Name: STRIPE_PRICE_PLUS_ANNUAL, Value: !Ref PricePlusAnnual }
             - { Name: STRIPE_PRICE_PREMIUM_MONTHLY, Value: !Ref PricePremiumMonthly }

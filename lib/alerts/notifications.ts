@@ -1,4 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore"
+import type { PlanId } from "@/lib/billing/plans"
 import { brandedEmail } from "@/lib/email-service"
 import { getDictionary, localePath } from "@/lib/i18n"
 import type { Preferences } from "@/lib/me/preferences-defaults"
@@ -46,7 +47,7 @@ export interface AlertDeps {
   db: Firestore
   events: SportEvent[]
   users: Iterable<UserRow> | AsyncIterable<UserRow>
-  planFor(uid: string): Promise<"free" | "plus" | "premium">
+  planFor(uid: string): Promise<PlanId>
   /** Whether a lineup or an approved video really exists. Without this those alerts are not sent. */
   confirm?(event: SportEvent, type: "participants" | "highlights"): Promise<boolean>
   emailFor(uid: string): Promise<string | null>

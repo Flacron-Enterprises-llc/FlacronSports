@@ -38,3 +38,9 @@ GitHub Support purge of PR #1, paid TheSportsDB and API-Football keys, ScoreBat 
 - `lib/billing/matrix.ts` is the section 12 table in both languages. Prices and limits come from `lib/billing/plans.ts`.
 - Every benefit in the table is now built: score, break, lineup and highlight alerts; Premium alert filters; `/app/compare` with saved views; full and personalized reports; a first-party ad for the Free plan.
 - Alerts run on the 15 minute job, so a score alert can arrive up to 15 minutes late.
+
+## 2026-11-06: Paid plans only
+
+- See D-034. Plans are Basic $19.99, Plus $29.99, Premium $49.99, with annual at $199.99, $299.99 and $499.99.
+- ScoreBat paid token is live in `flacron-sport/production/scorebat`: the feed has no upgrade notice and the newest clip was under a day old.
+- The handoff PDF still shows the old table; D-034 and `lib/billing/plans.ts` decide.

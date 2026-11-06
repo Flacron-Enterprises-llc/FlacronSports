@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     if (!price) throw new ApiError(503, "plan_unavailable", "This plan is not available yet")
 
     const access = computeAccess(await getEntitlementRecord(user.uid))
-    if (access.plan !== "free") {
+    if (access.plan !== "none") {
       throw new ApiError(409, "already_subscribed", "You already have a subscription. Manage it from Billing.")
     }
 

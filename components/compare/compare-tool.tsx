@@ -9,6 +9,7 @@ import { ErrorNotice } from "@/components/dashboard/controls"
 import { btn, Panel, Skeleton } from "@/components/site/states"
 import { LocalTime, SpoilerGuard, SpoilerReveal, SpoilerScope } from "@/components/sports/parts"
 import { authFetch } from "@/lib/auth-fetch"
+import { hasPlusFeatures } from "@/lib/billing/plans"
 import type { Comparison, SplitRecord, TeamProfile } from "@/lib/sports/compare"
 import type { SportId } from "@/lib/sports/types"
 import { useLocale } from "@/lib/use-locale"
@@ -196,7 +197,7 @@ export function CompareTool({ sports }: { sports: { id: SportId; name: string }[
   }
 
   if (!loaded) return <Panel><Skeleton className="h-10 w-full" /></Panel>
-  if (plan === "free") {
+  if (!hasPlusFeatures(plan)) {
     return (
       <Panel title={t.compare.lockedTitle} icon={<Lock aria-hidden />}>
         <p className="text-sm leading-6 text-ink-2">{t.compare.lockedBody}</p>

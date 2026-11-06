@@ -4,6 +4,7 @@ import { assertId, MATCH_ID } from "@/lib/community/content"
 import { getMatchChatState, voteInPoll } from "@/lib/community/engagement"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { rateLimit } from "@/lib/rate-limit"
+import { requireSubscriber } from "@/lib/billing/require-plan"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -14,6 +15,7 @@ export async function POST(request: Request, { params }: Context) {
   try {
     requireFeature("COMMUNITY_ENABLED")
     const user = await requireVerifiedUser(request)
+    await requireSubscriber(user.uid)
     rateLimit(`poll:${user.uid}`, 20, 60_000)
     const matchId = assertId((await params).id, MATCH_ID)
     const { option } = await request.json().catch(() => ({}))

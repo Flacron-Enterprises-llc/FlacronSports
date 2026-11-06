@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { ApiError, apiErrorResponse, requireUser } from "@/lib/api-auth"
 import { getEffectiveAccess } from "@/lib/billing/firestore-store"
+import { hasPlusFeatures } from "@/lib/billing/plans"
 import { listPublishedReports } from "@/lib/content/reports"
 import { getPreferences } from "@/lib/me/preferences"
 
@@ -14,7 +15,7 @@ export async function GET(request: Request) {
   try {
     const user = await requireUser(request)
     const { plan } = await getEffectiveAccess(user.uid)
-    if (plan === "free") throw new ApiError(403, "plan_required", "Personalized reports need the Plus or Premium plan")
+    if (!hasPlusFeatures(plan)) throw new ApiError(403, "plan_required", "Personalized reports need the Plus or Premium plan")
     const locale = new URL(request.url).searchParams.get("locale") === "fr" ? "fr" : "en"
     const [{ favorites }, list] = await Promise.all([getPreferences(user.uid), listPublishedReports(locale, 300)])
     const followed = new Set(favorites)

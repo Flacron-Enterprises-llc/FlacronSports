@@ -5,6 +5,7 @@ import { blockAuthor, listBlocked, unblockAuthor } from "@/lib/community/chat"
 import { assertId, OPAQUE_REF } from "@/lib/community/content"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { rateLimit } from "@/lib/rate-limit"
+import { requireSubscriber } from "@/lib/billing/require-plan"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -15,6 +16,7 @@ export async function GET(request: Request) {
   try {
     requireFeature("COMMUNITY_ENABLED")
     const user = await requireUser(request)
+    await requireSubscriber(user.uid)
     rateLimit(`block-list:${user.uid}`, 60, 60_000)
     return NextResponse.json({ blocked: await listBlocked(firestoreDocDb(), user.uid) })
   } catch (error) {
@@ -26,6 +28,7 @@ export async function DELETE(request: Request) {
   try {
     requireFeature("COMMUNITY_ENABLED")
     const user = await requireVerifiedUser(request)
+    await requireSubscriber(user.uid)
     rateLimit(`block:${user.uid}`, 20, 60_000)
     const { ref } = await request.json().catch(() => ({}))
     await unblockAuthor(firestoreDocDb(), { uid: user.uid, ref: assertId(ref, OPAQUE_REF) })
@@ -39,6 +42,7 @@ export async function POST(request: Request) {
   try {
     requireFeature("COMMUNITY_ENABLED")
     const user = await requireVerifiedUser(request)
+    await requireSubscriber(user.uid)
     rateLimit(`block:${user.uid}`, 20, 60_000)
     const parsed = schema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) throw new ApiError(400, "invalid_request", "Invalid request")

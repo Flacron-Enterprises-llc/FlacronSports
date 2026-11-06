@@ -9,7 +9,7 @@ import { PLANS } from "@/lib/billing/plans"
 import { getMarketing } from "@/lib/marketing"
 import { pageContext, type LocaleParams } from "@/lib/page-context"
 
-const PLAN_IDS = ["free", "plus", "premium"] as const
+const PLAN_IDS = ["basic", "plus", "premium"] as const
 
 export async function generateMetadata({ params }: LocaleParams): Promise<Metadata> {
   const { locale, t } = await pageContext(params)

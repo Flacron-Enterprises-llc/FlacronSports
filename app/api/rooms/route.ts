@@ -7,6 +7,7 @@ import { requireEvent } from "@/lib/community/events"
 import { createRoom, listMyRooms } from "@/lib/community/rooms"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { rateLimit } from "@/lib/rate-limit"
+import { requireSubscriber } from "@/lib/billing/require-plan"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -21,6 +22,7 @@ export async function GET(request: Request) {
   try {
     requireFeature("COMMUNITY_ENABLED")
     const user = await requireUser(request)
+    await requireSubscriber(user.uid)
     return NextResponse.json({ rooms: await listMyRooms(firestoreDocDb(), user.uid) })
   } catch (error) {
     return apiErrorResponse(error)
@@ -31,6 +33,7 @@ export async function POST(request: Request) {
   try {
     requireFeature("COMMUNITY_ENABLED")
     const user = await requireVerifiedUser(request)
+    await requireSubscriber(user.uid)
     rateLimit(`rooms:${user.uid}`, 10, 60_000)
     const parsed = schema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) throw new ApiError(400, "invalid_request", "Invalid room")

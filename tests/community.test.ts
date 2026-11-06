@@ -183,12 +183,12 @@ describe("private rooms", () => {
   it("matches the plan limits", () => {
     expect(PLANS.plus.privateRooms).toEqual({ active: 3, participantsPerRoom: 20 })
     expect(PLANS.premium.privateRooms).toEqual({ active: 10, participantsPerRoom: 50 })
-    expect(PLANS.free.privateRooms).toBeNull()
+    expect(PLANS.basic.privateRooms).toBeNull()
   })
 
   it("lets Free users join but not create", async () => {
     const { db } = fakeDb()
-    expect(await code(create(db, "free"))).toBe("plan_required")
+    expect(await code(create(db, "basic"))).toBe("plan_required")
     const { inviteToken } = await create(db, "plus")
     expect(await code(join(db, "free-user", inviteToken))).toBe("ok")
   })
@@ -218,10 +218,10 @@ describe("private rooms", () => {
   it("adds one 50-person room with a pass, once, beyond the base limit", async () => {
     const { db, docs, put } = fakeDb()
     put("billing_purchases/rp", pass())
-    const room = await create(db, "free")
+    const room = await create(db, "basic")
     expect(room.room).toMatchObject({ passPurchaseId: "rp", participantCap: 50, expiresAtUTC: pass().expiresAtUTC })
     expect(docs.get("billing_purchases/rp")).toMatchObject({ consumed: 1, roomId: room.id })
-    expect(await code(create(db, "free"))).toBe("plan_required")
+    expect(await code(create(db, "basic"))).toBe("plan_required")
   })
 
   it("uses the base allowance before spending a pass", async () => {
@@ -258,8 +258,8 @@ describe("private rooms", () => {
     const room = { participantCap: 50, passPurchaseId: null }
     expect(joinCap(room, "premium")).toBe(50)
     expect(joinCap(room, "plus")).toBe(20)
-    expect(joinCap(room, "free")).toBe(0)
-    expect(joinCap({ participantCap: 50, passPurchaseId: "p" }, "free")).toBe(50)
+    expect(joinCap(room, "basic")).toBe(0)
+    expect(joinCap({ participantCap: 50, passPurchaseId: "p" }, "basic")).toBe(50)
   })
 
   it("gives nonmembers the same 404 as a missing room, including former members", async () => {
@@ -308,13 +308,13 @@ describe("private rooms", () => {
   it("closes a pass room to joins and messages at expiry or refund", async () => {
     const { db, put } = fakeDb()
     put("billing_purchases/rp", pass())
-    const { id, inviteToken } = await create(db, "free")
+    const { id, inviteToken } = await create(db, "basic")
     expect(await code(postRoomMessage(db, { roomId: id, uid: "host", text: "hi" }, now))).toBe("ok")
-    expect(await code(join(db, "u1", inviteToken, "free", later(8 * DAY)))).toBe("room_expired")
+    expect(await code(join(db, "u1", inviteToken, "basic", later(8 * DAY)))).toBe("room_expired")
     expect(await code(postRoomMessage(db, { roomId: id, uid: "host", text: "hi" }, later(8 * DAY)))).toBe("room_expired")
 
     put("billing_purchases/rp", pass({ status: "flagged", consumed: 1 }))
-    expect(await code(join(db, "u1", inviteToken, "free"))).toBe("room_expired")
+    expect(await code(join(db, "u1", inviteToken, "basic"))).toBe("room_expired")
   })
 
   it("blocks joins and messages when a moderator locks the room", async () => {

@@ -6,6 +6,7 @@ import { getMatchChatState } from "@/lib/community/engagement"
 import { requireEvent } from "@/lib/community/events"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { clientIp, rateLimit } from "@/lib/rate-limit"
+import { requireSubscriber } from "@/lib/billing/require-plan"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -32,6 +33,7 @@ export async function POST(request: Request, { params }: Context) {
   try {
     requireFeature("COMMUNITY_ENABLED")
     const user = await requireVerifiedUser(request)
+    await requireSubscriber(user.uid)
     rateLimit(`chat:${user.uid}`, 10, 60_000)
     const matchId = assertId((await params).id, MATCH_ID)
     const { text } = await request.json().catch(() => ({}))

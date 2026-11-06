@@ -88,7 +88,7 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
         const following = names.includes(name)
         const favorites = following ? names.filter((item) => item !== name) : [...names, name]
         if (!user) {
-          if (!following && names.length >= (PLANS.free.favoritesLimit as number)) return "limit"
+          if (!following && names.length >= (PLANS.basic.favoritesLimit as number)) return "limit"
           const next = { ...latest.current, favorites }
           latest.current = next
           setPrefs(next)

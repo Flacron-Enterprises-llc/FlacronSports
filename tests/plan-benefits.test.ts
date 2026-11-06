@@ -30,8 +30,13 @@ describe("alerts beyond start and final", () => {
     expect(detailAlerts({ ...game("1", "A", "B", 2, 1), videoUrl: "https://youtube.com/watch?v=x" }, NOW)).toEqual(["highlights"])
   })
 
-  it("keeps these from the Free plan", () => {
-    expect(suppressionReason(prefs(), "free", "scoring", NOW)).toBe("plan")
+  it("sends an account with no plan nothing at all", () => {
+    expect(suppressionReason(prefs(), "none", "final", NOW)).toBe("plan")
+    expect(suppressionReason(prefs(), "basic", "final", NOW)).toBeNull()
+  })
+
+  it("keeps these from Basic", () => {
+    expect(suppressionReason(prefs(), "basic", "scoring", NOW)).toBe("plan")
     expect(suppressionReason(prefs(), "plus", "scoring", NOW)).toBeNull()
   })
 

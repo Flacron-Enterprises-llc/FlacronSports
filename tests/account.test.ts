@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const store = new Map<string, Record<string, unknown>>()
-let plan = "free"
+let plan = "basic"
 
 vi.mock("@/lib/firebase-admin", () => ({
   getAdminAuth: () => null,
@@ -28,7 +28,7 @@ const teams = (count: number) => Array.from({ length: count }, (_, index) => `Te
 
 beforeEach(() => {
   store.clear()
-  plan = "free"
+  plan = "basic"
 })
 
 describe("favorites limits are enforced on the server", () => {
@@ -43,7 +43,7 @@ describe("favorites limits are enforced on the server", () => {
   it("keeps saved favorites after a downgrade but blocks new ones", async () => {
     plan = "plus"
     await updatePreferences("u", { favorites: teams(8) })
-    plan = "free"
+    plan = "basic"
     expect((await getPreferences("u")).favorites).toHaveLength(8)
     await expect(updatePreferences("u", { favorites: teams(9) })).rejects.toBeInstanceOf(ApiError)
     expect((await updatePreferences("u", { favorites: teams(7) })).favorites).toHaveLength(7)

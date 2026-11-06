@@ -11,6 +11,7 @@ import { btn, Panel } from "@/components/site/states"
 import { startTour } from "@/components/tour/app-tour"
 import { authFetch } from "@/lib/auth-fetch"
 import { signOutUser } from "@/lib/firebase-auth"
+import { hasPlusFeatures } from "@/lib/billing/plans"
 import { localePath } from "@/lib/i18n"
 import type { AlertType } from "@/lib/me/preferences-defaults"
 import { readStored, SPOILER_DECIDED_KEY, writeStored } from "@/lib/storage-consent"
@@ -142,7 +143,7 @@ export function SettingsPanel() {
             <p aria-hidden className="mb-1 text-[13px] font-semibold text-ink">{t.settings.alertTypes}</p>
             <div className="divide-y divide-line">
               {ALERT_ROWS.map((type) => {
-                const locked = loaded && plan === "free" && PAID_ALERTS.includes(type)
+                const locked = loaded && !hasPlusFeatures(plan) && PAID_ALERTS.includes(type)
                 return (
                   <Row key={type} title={t.settings.alertNames[type]} help={locked ? t.settings.alertPaid : undefined}>
                     {(id) => <Switch labelledBy={id} disabled={prefs.alerts.muted || locked} checked={!locked && prefs.alerts.types.includes(type)} onChange={() => toggleAlert(type)} />}

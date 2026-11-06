@@ -219,14 +219,14 @@ export default async function HomePage({ params }: LocaleParams) {
             </div>
           </div>
           <ul className="mt-8 grid gap-4 sm:grid-cols-3">
-            {(["free", "plus", "premium"] as const).map((id) => (
+            {(["basic", "plus", "premium"] as const).map((id) => (
               <li key={id} className="rounded-2xl border border-line bg-surface p-5">
                 <h3 className="font-semibold text-ink">{PLANS[id].name}</h3>
                 <p className="mt-2">
                   <span className="tabular font-display text-[1.75rem] font-semibold text-ink">{money(locale, PLANS[id].monthlyPriceUsd)}</span>
                   <span className="text-sm text-ink-3">{h.perMonth}</span>
                 </p>
-                {id !== "free" && <p className="mt-1 text-xs text-ink-3">{h.orAnnual.replace("{price}", money(locale, PLANS[id].annualPriceUsd))}</p>}
+                {<p className="mt-1 text-xs text-ink-3">{h.orAnnual.replace("{price}", money(locale, PLANS[id].annualPriceUsd))}</p>}
               </li>
             ))}
           </ul>

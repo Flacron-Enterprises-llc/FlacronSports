@@ -18,7 +18,7 @@ import type { SportEvent } from "@/lib/sports/types"
 const ses = vi.hoisted(() => ({ commands: [] as { input: unknown }[] }))
 
 vi.mock("@/lib/firebase-admin", () => ({ getAdminAuth: () => null, getAdminDb: () => null }))
-vi.mock("@/lib/billing/firestore-store", () => ({ getEffectiveAccess: async () => ({ plan: "free" }) }))
+vi.mock("@/lib/billing/firestore-store", () => ({ getEffectiveAccess: async () => ({ plan: "none" }) }))
 vi.mock("@aws-sdk/client-sesv2", () => ({
   SESv2Client: class {
     async send(command: { input: unknown }) {
@@ -201,11 +201,11 @@ describe("alert rules", () => {
   it("applies quiet hours in the user's time zone, not UTC", () => {
     const late = new Date("2026-11-05T22:30:00Z")
     const quiet = { quietStart: 22, quietEnd: 7 }
-    expect(suppressionReason(alertPrefs(quiet, { timeZone: "UTC" }), "free", "final", late)).toBe("quiet")
-    expect(suppressionReason(alertPrefs(quiet, { timeZone: "America/New_York" }), "free", "final", late)).toBeNull()
+    expect(suppressionReason(alertPrefs(quiet, { timeZone: "UTC" }), "basic", "final", late)).toBe("quiet")
+    expect(suppressionReason(alertPrefs(quiet, { timeZone: "America/New_York" }), "basic", "final", late)).toBeNull()
     const tokyoDawn = new Date("2026-11-05T21:30:00Z")
-    expect(suppressionReason(alertPrefs(quiet, { timeZone: "UTC" }), "free", "final", tokyoDawn)).toBeNull()
-    expect(suppressionReason(alertPrefs(quiet, { timeZone: "Asia/Tokyo" }), "free", "final", tokyoDawn)).toBe("quiet")
+    expect(suppressionReason(alertPrefs(quiet, { timeZone: "UTC" }), "basic", "final", tokyoDawn)).toBeNull()
+    expect(suppressionReason(alertPrefs(quiet, { timeZone: "Asia/Tokyo" }), "basic", "final", tokyoDawn)).toBe("quiet")
   })
   it("falls back to UTC for an unknown zone instead of failing", () => {
     expect(localClock(NOW, "Not/AZone")).toEqual({ hour: 18, date: "2026-11-05" })
@@ -238,7 +238,7 @@ describe("alert delivery", () => {
   const deps = (overrides: Partial<AlertDeps> & Pick<AlertDeps, "db">): AlertDeps => ({
     events: [event()],
     users: [{ uid: "u1", prefs: prefs() }],
-    planFor: async () => "free",
+    planFor: async () => "basic",
     emailFor: async () => "fan@example.test",
     send: vi.fn(async () => true),
     siteUrl: "https://example.test",
@@ -296,7 +296,7 @@ describe("alert delivery", () => {
     const { db } = memoryDb()
     const planFor = vi.fn(async (uid: string) => {
       if (uid === "u1") throw new Error("down")
-      return "free" as const
+      return "basic" as const
     })
     const counts = await runAlerts(deps({ db, planFor, users: [{ uid: "u1", prefs: prefs() }, { uid: "u2", prefs: prefs() }] }))
     expect(counts).toMatchObject({ failed: 1, created: 1 })

@@ -1,3 +1,4 @@
+import { hasPlusFeatures, type PlanId } from "@/lib/billing/plans"
 import { getDictionary, type Locale } from "@/lib/i18n"
 import type { AlertType, Preferences } from "@/lib/me/preferences-defaults"
 import { eventTitle, hasResult, isDuel, resultLine } from "@/lib/sports/presentation"
@@ -5,9 +6,9 @@ import { isMajorCompetition } from "@/lib/sports/priority"
 import type { SportEvent } from "@/lib/sports/types"
 
 export type DueAlert = AlertType
-type Plan = "free" | "plus" | "premium"
+type Plan = PlanId
 
-const FREE_TYPES: readonly AlertType[] = ["start", "final"]
+const BASIC_TYPES: readonly AlertType[] = ["start", "final"]
 const MINUTE = 60_000
 // One tick interval ahead, and a short grace behind so a late tick still fires
 // without announcing a kickoff that happened hours ago.
@@ -70,7 +71,7 @@ export function followsEvent(favorites: string[], event: SportEvent): boolean {
 }
 
 export function planAllows(plan: Plan, type: AlertType): boolean {
-  return plan !== "free" || FREE_TYPES.includes(type)
+  return hasPlusFeatures(plan) || (plan === "basic" && BASIC_TYPES.includes(type))
 }
 
 /** A Premium member's filters. They only ever remove alerts. */

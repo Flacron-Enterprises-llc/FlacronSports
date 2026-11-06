@@ -5,6 +5,7 @@ import { assertId, cleanMessage, ROOM_ID } from "@/lib/community/content"
 import { assertRoomMember, postRoomMessage } from "@/lib/community/rooms"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { rateLimit } from "@/lib/rate-limit"
+import { requireSubscriber } from "@/lib/billing/require-plan"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -15,6 +16,7 @@ export async function GET(request: Request, { params }: Context) {
   try {
     requireFeature("COMMUNITY_ENABLED")
     const user = await requireUser(request)
+    await requireSubscriber(user.uid)
     const roomId = assertId((await params).id, ROOM_ID)
     const db = firestoreDocDb()
     await assertRoomMember(db, roomId, user.uid)
@@ -29,6 +31,7 @@ export async function POST(request: Request, { params }: Context) {
   try {
     requireFeature("COMMUNITY_ENABLED")
     const user = await requireVerifiedUser(request)
+    await requireSubscriber(user.uid)
     rateLimit(`room-chat:${user.uid}`, 20, 60_000)
     const roomId = assertId((await params).id, ROOM_ID)
     const { text } = await request.json().catch(() => ({}))

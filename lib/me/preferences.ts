@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { ApiError } from "@/lib/api-auth"
 import { getEffectiveAccess } from "@/lib/billing/firestore-store"
-import { PLANS } from "@/lib/billing/plans"
+import { hasPlusFeatures, PLANS } from "@/lib/billing/plans"
 import { getAdminDb } from "@/lib/firebase-admin"
 
 export const ALERT_TYPES = ["start", "final", "participants", "scoring", "interval", "highlights"] as const
@@ -37,8 +37,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   tourVersion: 0,
 }
 
-/** Free alerts cover start and final only; every other type needs a paid plan. */
-export const FREE_ALERTS = ["start", "final"] as const
+/** Basic alerts cover start and final only; every other type needs Plus or Premium. */
+export const BASIC_ALERTS = ["start", "final"] as const
 
 const db = () => {
   const instance = getAdminDb()
@@ -62,10 +62,10 @@ export async function updatePreferences(uid: string, patch: unknown): Promise<Pr
   // Downgrades keep saved data, but nothing new can be added past the plan limit.
   const limit = PLANS[plan].favoritesLimit
   if (limit !== null && next.favorites.length > Math.max(limit, current.favorites.length)) {
-    throw new ApiError(403, "favorites_limit", "The Free plan includes 5 favorites")
+    throw new ApiError(403, "favorites_limit", "The Basic plan includes 5 favorites")
   }
-  if (plan === "free") {
-    next.alerts = { ...next.alerts, types: next.alerts.types.filter((type) => (FREE_ALERTS as readonly string[]).includes(type)) }
+  if (!hasPlusFeatures(plan)) {
+    next.alerts = { ...next.alerts, types: next.alerts.types.filter((type) => (BASIC_ALERTS as readonly string[]).includes(type)) }
   }
   // Filters are a Premium benefit: others keep what was saved but cannot change it.
   if (plan !== "premium") next.alerts = { ...next.alerts, filters: current.alerts.filters }

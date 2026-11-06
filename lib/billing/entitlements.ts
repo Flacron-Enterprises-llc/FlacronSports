@@ -44,7 +44,7 @@ export interface EffectiveAccess {
 }
 
 const FREE: EffectiveAccess = {
-  plan: "free",
+  plan: "none",
   state: "none",
   interval: null,
   currentPeriodEnd: null,

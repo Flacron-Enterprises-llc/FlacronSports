@@ -57,7 +57,7 @@ export function PlanCards({ onPick, currentInterval }: { onPick?: (plan: PaidPla
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
-        {(["free", "plus", "premium"] as const).map((id) => {
+        {(["basic", "plus", "premium"] as const).map((id) => {
           const plan = PLANS[id]
           const price = interval === "monthly" ? plan.monthlyPriceUsd : plan.annualPriceUsd
           const featured = id === "plus"
@@ -70,11 +70,9 @@ export function PlanCards({ onPick, currentInterval }: { onPick?: (plan: PaidPla
                 <span className="text-ink-2">{interval === "monthly" ? t.pricing.perMonth : t.pricing.perYear}</span>
               </p>
               {saving !== null && <p className="mt-2 text-sm font-semibold text-good">{t.pricing.save.replace("{percent}", String(saving))}</p>}
-              {id !== "free" && (
-                <p className="mt-2 text-xs leading-5 text-ink-2">
-                  {interval === "monthly" ? t.pricing.billedMonthly : t.pricing.billedAnnual} {t.pricing.tax}
-                </p>
-              )}
+              <p className="mt-2 text-xs leading-5 text-ink-2">
+                {interval === "monthly" ? t.pricing.billedMonthly : t.pricing.billedAnnual} {t.pricing.tax}
+              </p>
               <ul className="my-6 flex-1 space-y-2.5 text-sm text-ink-2">
                 {PLAN_HIGHLIGHTS[id].map((benefit) => (
                   <li key={benefit.en} className="flex items-start gap-2">
@@ -85,10 +83,8 @@ export function PlanCards({ onPick, currentInterval }: { onPick?: (plan: PaidPla
               </ul>
               {current === id && (!onPick || !currentInterval || currentInterval === interval) ? (
                 <p className="rounded-md border border-line py-2 text-center text-sm font-semibold text-ink-2">{t.pricing.current}</p>
-              ) : id !== "free" && onPick ? (
+              ) : onPick ? (
                 <button type="button" onClick={() => onPick(id, interval)} className="rounded-md bg-orange py-2 text-sm font-semibold text-[#0a1a33] hover:bg-orange-hover">{`${t.pricing.choose} ${plan.name}`}</button>
-              ) : id === "free" && onPick ? null : id === "free" ? (
-                <Link href={href(user ? "/app/billing" : "/signup")} className="rounded-md border border-line py-2 text-center text-sm font-semibold text-ink hover:bg-surface-muted">{t.pricing.free}</Link>
               ) : user ? (
                 <button type="button" disabled={pending !== null} onClick={() => buy(id)} className="rounded-md bg-orange py-2 text-sm font-semibold text-[#0a1a33] hover:bg-orange-hover disabled:opacity-60">
                   {pending === id ? t.pricing.opening : `${t.pricing.choose} ${plan.name}`}

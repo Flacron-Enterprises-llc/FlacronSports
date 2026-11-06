@@ -48,3 +48,20 @@ The paid TheSportsDB key returns every game of the day (1,008 football fixtures 
 - Standings and team pages go through the backend, so the frontend never calls the provider.
 
 Checked on 2026-11-06: the API-Football key supplied as paid reports plan Free, 100 requests a day, ending 2026-11-19, so it is not used. The ScoreBat feed still reports limited competitions and clips at least 7 days old.
+
+## D-034: Client pricing replaces the free plan with a paid paywall
+
+On 2026-11-06 the client replaced the section 12 prices. This supersedes the plan table in the handoff PDF.
+
+| | Basic | Plus | Premium |
+|---|---|---|---|
+| Monthly | $19.99 | $29.99 | $49.99 |
+| Annual | $199.99 | $299.99 | $499.99 |
+
+Benefits are unchanged: Basic takes the old Free column, including FlacronSport display ads. Add-on prices are unchanged.
+
+There is no free plan. The owner chose a full paywall: an account can sign in, pay and manage settings, and everything else needs a plan or a day pass. Internally such an account has plan `none`. Member APIs refuse it with 402 `subscription_required`, and alerts and the daily digest skip it.
+
+Scores, Watch and report data stay public on their own API routes, because the frontend renders them on the server without a user token. The dashboard screen is what hides them from an account with no plan.
+
+Stripe test prices were created for all six prices and the old Plus and Premium prices were archived. Live prices still need creating when Stripe goes live.

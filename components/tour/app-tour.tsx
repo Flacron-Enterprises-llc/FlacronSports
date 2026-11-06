@@ -36,7 +36,7 @@ export function AppTour() {
   const pathname = usePathname()
   const router = useRouter()
   const [index, setIndex] = useState<number | null>(null)
-  const [plan, setPlan] = useState<string>("free")
+  const [plan, setPlan] = useState<string>("basic")
   const [box, setBox] = useState<DOMRect | null>(null)
   const panel = useRef<HTMLDivElement>(null)
 
@@ -46,7 +46,7 @@ export function AppTour() {
       { id: "watch", target: "/app/watch" },
       { id: "teams", target: "/app/my-teams" },
     ]
-    return [...base, { id: plan === "free" ? "upgrade" : "billing", target: "/app/billing" }, { id: "settings", target: "/app/settings" }]
+    return [...base, { id: plan === "basic" ? "upgrade" : "billing", target: "/app/billing" }, { id: "settings", target: "/app/settings" }]
   }, [plan])
 
   useEffect(() => {

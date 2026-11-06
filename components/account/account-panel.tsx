@@ -72,7 +72,7 @@ export function AccountPanel() {
     if (ok) await reload()
   }
 
-  const paid = access !== null && access.plan !== "free"
+  const paid = access !== null && access.plan !== "none"
   const limit = PLANS[plan].favoritesLimit
   const rooms = PLANS[plan].privateRooms
 
@@ -84,8 +84,8 @@ export function AccountPanel() {
       {loaded && !access && <ErrorNotice onRetry={reload}>{t.account.failed}</ErrorNotice>}
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Panel title={t.account.plan} icon={<CreditCard aria-hidden />} actions={access && access.plan !== "free" ? <StatusChip access={access} /> : undefined}>
-          {access ? <p className="font-display text-[1.75rem] font-semibold leading-none text-ink">{PLANS[access.plan].name}</p> : !loaded ? <Skeleton className="h-8 w-32" /> : null}
+        <Panel title={t.account.plan} icon={<CreditCard aria-hidden />} actions={access && access.plan !== "none" ? <StatusChip access={access} /> : undefined}>
+          {access ? <p className="font-display text-[1.75rem] font-semibold leading-none text-ink">{access.plan === "none" ? t.paywall.noPlan : PLANS[access.plan].name}</p> : !loaded ? <Skeleton className="h-8 w-32" /> : null}
           <p className="mt-2 truncate text-sm text-ink-2">{user?.email}</p>
           {paid && access.currentPeriodEnd && <p className="mt-1 text-sm text-ink-2">{access.cancelAtPeriodEnd ? t.account.ends : t.account.renews} {date(access.currentPeriodEnd)}</p>}
           {paid && access.interval && <p className="mt-1 text-sm text-ink-2">{t.pricing[access.interval]}</p>}

@@ -8,6 +8,7 @@ import { ErrorNotice } from "@/components/dashboard/controls"
 import { btn, Skeleton } from "@/components/site/states"
 import { LocalTime, SpoilerGuard } from "@/components/sports/parts"
 import { authFetch } from "@/lib/auth-fetch"
+import { hasPlusFeatures } from "@/lib/billing/plans"
 import type { FullReport } from "@/lib/content/full-report"
 import { useLocale } from "@/lib/use-locale"
 
@@ -26,11 +27,11 @@ export function FullReportSection({ slug }: { slug: string }) {
   }, [locale, slug])
 
   useEffect(() => {
-    if (loaded && plan !== "free") void load()
+    if (loaded && hasPlusFeatures(plan)) void load()
   }, [load, loaded, plan])
 
   if (!loaded) return null
-  if (plan === "free") {
+  if (!hasPlusFeatures(plan)) {
     return (
       <div className="mt-6 rounded-lg border border-line bg-surface-muted p-4">
         <p className="flex items-center gap-2 text-sm font-semibold text-ink"><Sparkles aria-hidden className="size-4 text-hot-text" /> {t.fullReport.lockedTitle}</p>
@@ -101,7 +102,7 @@ export function ForYouReports() {
   const [state, setState] = useState<{ reports: MineReport[]; favorites: number } | null>(null)
 
   useEffect(() => {
-    if (!loaded || plan === "free") return
+    if (!loaded || !hasPlusFeatures(plan)) return
     authFetch(`/api/reports/mine?locale=${locale}`)
       .then((response) => (response.ok ? response.json() : null))
       .then(setState)
@@ -109,7 +110,7 @@ export function ForYouReports() {
   }, [loaded, locale, plan])
 
   if (!loaded) return null
-  if (plan === "free") {
+  if (!hasPlusFeatures(plan)) {
     return (
       <p className="fs-rise mb-5 rounded-lg border border-line bg-surface-muted p-3 text-sm leading-6 text-ink-2">
         {t.fullReport.forYouLocked} <Link href={href("/app/billing#plans")} className="font-semibold text-hot-text hover:underline">{t.fullReport.upgrade}</Link>

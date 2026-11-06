@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     const user = await requireUser(request)
     // Drives the plan and cancel controls, which only apply to a real subscription.
     const access = await getSubscriptionAccess(user.uid)
-    return NextResponse.json({ ...access, isPaid: access.plan !== "free" })
+    return NextResponse.json({ ...access, isPaid: access.plan !== "none" })
   } catch (error) {
     return apiErrorResponse(error)
   }

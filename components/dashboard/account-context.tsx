@@ -21,7 +21,7 @@ interface AccountValue {
   setBalance(balance: AllowanceBalance): void
 }
 
-const AccountContext = createContext<AccountValue>({ user: null, plan: "free", access: null, balance: null, dayPassEnd: null, role: null, community: false, loaded: false, reload: async () => undefined, setBalance: () => undefined })
+const AccountContext = createContext<AccountValue>({ user: null, plan: "none", access: null, balance: null, dayPassEnd: null, role: null, community: false, loaded: false, reload: async () => undefined, setBalance: () => undefined })
 
 export function AccountProvider({ user, community, children }: { user: User; community: boolean; children: React.ReactNode }) {
   const [access, setAccess] = useState<EffectiveAccess | null>(null)
@@ -47,7 +47,7 @@ export function AccountProvider({ user, community, children }: { user: User; com
   }, [user, reload])
 
   const value = useMemo(
-    () => ({ user, plan: access?.plan ?? ("free" as PlanId), access, balance, dayPassEnd, role, community, loaded, reload, setBalance }),
+    () => ({ user, plan: access?.plan ?? ("none" as PlanId), access, balance, dayPassEnd, role, community, loaded, reload, setBalance }),
     [user, access, balance, dayPassEnd, role, community, loaded, reload],
   )
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>

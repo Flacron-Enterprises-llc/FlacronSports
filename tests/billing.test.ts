@@ -105,9 +105,9 @@ const deps = (store: BillingStore, sub: Stripe.Subscription) => ({ store, retrie
 
 describe("plan matrix", () => {
   it("matches the specification prices and limits", () => {
-    expect(PLANS.plus).toMatchObject({ monthlyPriceUsd: 6.99, annualPriceUsd: 59.99, assistantRequestsPerMonth: 100 })
-    expect(PLANS.premium).toMatchObject({ monthlyPriceUsd: 12.99, annualPriceUsd: 119.99, assistantRequestsPerMonth: 300 })
-    expect(PLANS.free).toMatchObject({ monthlyPriceUsd: 0, favoritesLimit: 5, assistantRequestsPerMonth: 5 })
+    expect(PLANS.plus).toMatchObject({ monthlyPriceUsd: 29.99, annualPriceUsd: 299.99, assistantRequestsPerMonth: 100 })
+    expect(PLANS.premium).toMatchObject({ monthlyPriceUsd: 49.99, annualPriceUsd: 499.99, assistantRequestsPerMonth: 300 })
+    expect(PLANS.basic).toMatchObject({ monthlyPriceUsd: 19.99, favoritesLimit: 5, assistantRequestsPerMonth: 5 })
   })
 
   it("maps only this app's prices", () => {
@@ -203,21 +203,21 @@ describe("access computation", () => {
   const day = 86_400
 
   it("gives free access without a record", () => {
-    expect(computeAccess(null).plan).toBe("free")
+    expect(computeAccess(null).plan).toBe("none")
   })
   it("keeps access until the end of a canceled period, then ends it", () => {
     expect(computeAccess(record({ cancelAtPeriodEnd: true }), 999)).toMatchObject({ plan: "plus", state: "canceling" })
-    expect(computeAccess(record({ cancelAtPeriodEnd: true }), 1000).plan).toBe("free")
+    expect(computeAccess(record({ cancelAtPeriodEnd: true }), 1000).plan).toBe("none")
   })
   it("applies the past-due grace cutoff", () => {
     expect(computeAccess(record({ status: "past_due" }), 1000 + day).state).toBe("past_due")
-    expect(computeAccess(record({ status: "past_due" }), 1000 + 4 * day).plan).toBe("free")
+    expect(computeAccess(record({ status: "past_due" }), 1000 + 4 * day).plan).toBe("none")
   })
   it.each(["unpaid", "canceled", "incomplete", "incomplete_expired", "paused"] as const)("gives no paid access for %s", (status) => {
-    expect(computeAccess(record({ status }), 500).plan).toBe("free")
+    expect(computeAccess(record({ status }), 500).plan).toBe("none")
   })
   it("expires an active record whose renewal never arrived", () => {
-    expect(computeAccess(record({}), 1000 + 4 * day).plan).toBe("free")
+    expect(computeAccess(record({}), 1000 + 4 * day).plan).toBe("none")
   })
 })
 
@@ -393,11 +393,11 @@ describe("day pass access", () => {
 
   it("gives Premium until expiry and then falls back", () => {
     expect(withDayPass(free, pass, expiry - 1)).toMatchObject({ plan: "premium", dayPassExpiresAtUTC: pass.expiresAtUTC, currentPeriodEnd: null })
-    expect(withDayPass(free, pass, expiry).plan).toBe("free")
+    expect(withDayPass(free, pass, expiry).plan).toBe("none")
   })
   it("gives nothing for a revoked pass or another product", () => {
-    expect(withDayPass(free, { ...pass, status: "revoked" }, 1500).plan).toBe("free")
-    expect(withDayPass(free, purchase("q", "assistant_100", 1000), 1500).plan).toBe("free")
+    expect(withDayPass(free, { ...pass, status: "revoked" }, 1500).plan).toBe("none")
+    expect(withDayPass(free, purchase("q", "assistant_100", 1000), 1500).plan).toBe("none")
   })
   it("lifts Plus to Premium without touching a Premium subscription", () => {
     const paid = { plan: "premium", state: "active", interval: "monthly", currentPeriodEnd: 9, cancelAtPeriodEnd: false } as const
@@ -485,8 +485,8 @@ describe("allowances", () => {
 
   it("keeps unexpired purchases after a plan ends", async () => {
     const { db } = seed(purchase("p", "assistant_100", novSeconds))
-    const free = PLANS[computeAccess(null).plan].assistantRequestsPerMonth
-    expect((await readAssistantBalance(db, "u", free, nov)).remaining).toBe(105)
+    const lapsed = PLANS[computeAccess(null).plan].assistantRequestsPerMonth
+    expect((await readAssistantBalance(db, "u", lapsed, nov)).remaining).toBe(100)
   })
 
   it("does not let a downgrade report negative plan requests", async () => {
@@ -614,7 +614,7 @@ describe("sports assistant", () => {
   it("does not lift a day pass holder to Premium's 300 requests", async () => {
     const { db, put } = fakeDb()
     put("billing_purchases/p", purchase("p", "day_pass", Math.floor(now.getTime() / 1000)))
-    const result = await askAssistant({ db, uid: "u", includedLimit: PLANS.free.assistantRequestsPerMonth, question: "What is offside?", locale: "en", sources: sources([]), now })
+    const result = await askAssistant({ db, uid: "u", includedLimit: PLANS.basic.assistantRequestsPerMonth, question: "What is offside?", locale: "en", sources: sources([]), now })
     expect(result.balance).toMatchObject({ included: { limit: 5, remaining: 4 }, purchased: 10 })
   })
 })

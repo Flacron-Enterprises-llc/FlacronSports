@@ -12,7 +12,7 @@ RUN npm run build
 
 FROM node:22-alpine AS runner
 WORKDIR /app
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0 BACKEND_ONLY=true
 ARG GIT_COMMIT_SHA=unknown
 ENV GIT_COMMIT_SHA=$GIT_COMMIT_SHA
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs

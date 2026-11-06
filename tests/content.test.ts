@@ -11,6 +11,7 @@ import { getDictionary } from "@/lib/i18n"
 import { runIsolated } from "@/lib/jobs/tick"
 import { DEFAULT_PREFERENCES, type Preferences } from "@/lib/me/preferences-defaults"
 import { buildDigest, digestEmail, isDeliveryHour, runNewsletter } from "@/lib/newsletter/digest"
+import type { PlanId } from "@/lib/billing/plans"
 import { unsubscribeToken, verifyUnsubscribeToken } from "@/lib/newsletter/token"
 import { fakeDb } from "./fake-db"
 import { normalizeStandings } from "@/lib/sports/service"
@@ -251,6 +252,25 @@ describe("alert delivery", () => {
     ...overrides,
   })
 
+  it("alerts on a followed league or player, once across reruns, and tracks their kickoffs", async () => {
+    const { db, store } = memoryDb()
+    const send = vi.fn(async () => true)
+    const byLeague = prefs({ favorites: [], leagues: [{ id: "9", name: "Test League", sportId: "football" }] })
+    const byPlayer = prefs({ favorites: [], players: [{ id: "7", name: "P", team: "Ridge United", sportId: "football" }] })
+    const users = [{ uid: "league", prefs: byLeague }, { uid: "player", prefs: byPlayer }, { uid: "none", prefs: prefs({ favorites: [] }) }]
+    expect((await runAlerts(deps({ db, send, users }))).created).toBe(2)
+    expect((await runAlerts(deps({ db, send, users }))).duplicate).toBe(2)
+
+    const start = (kickoffUTC: string) => event({ id: "tsdb-5", status: "scheduled", score: { kind: "none" }, scheduledStartUTC: kickoffUTC })
+    const later = new Date(NOW.getTime() + 2 * 86_400_000).toISOString()
+    const moved = new Date(NOW.getTime() + 3 * 86_400_000).toISOString()
+    await runAlerts(deps({ db, events: [start(later)], users: [users[0]] }))
+    expect(store.has("event_kickoffs/tsdb-5")).toBe(true)
+    await runAlerts(deps({ db, events: [start(moved)], users: [users[0]] }))
+    expect([...store.keys()].filter((key) => key.includes("tsdb-5_correction"))).toHaveLength(1)
+    await runAlerts(deps({ db, events: [start(moved)], users: [users[0]] }))
+    expect([...store.keys()].filter((key) => key.includes("tsdb-5_correction"))).toHaveLength(1)
+  })
   it("makes a duplicate impossible at the store", async () => {
     const { db } = memoryDb()
     const record = { uid: "u1", eventId: "e1", type: "final", feedKey: "u1#t" } as NotificationRecord
@@ -352,8 +372,27 @@ describe("newsletter", () => {
   })
 
   const deps = (db: Firestore, send = vi.fn(async () => true)) => ({
-    db, send, events: [event()], users: [{ uid: "u1", prefs: subscribed() }], emailFor: async () => "fan@example.test",
+    db, send, events: [event()], users: [{ uid: "u1", prefs: subscribed() }], planFor: async (): Promise<PlanId> => "basic", emailFor: async () => "fan@example.test",
     siteUrl: "https://example.test", now: new Date("2026-11-05T08:00:00Z"),
+  })
+
+  it("checks the plan only for people due now, and skips an account with no plan", async () => {
+    const { db } = memoryDb()
+    const send = vi.fn(async () => true)
+    const planFor = vi.fn(async (uid: string): Promise<PlanId> => (uid === "lapsed" ? "none" : "basic"))
+    const users = [{ uid: "lapsed", prefs: subscribed() }, { uid: "paid", prefs: subscribed() }, { uid: "elsewhere", prefs: subscribed({ timeZone: "Asia/Tokyo" }) }, { uid: "out", prefs: { ...subscribed(), newsletter: { optedIn: false, consentedAt: null } } }]
+    expect(await runNewsletter({ ...deps(db, send), users, planFor })).toMatchObject({ due: 1, sent: 1 })
+    expect(planFor.mock.calls.map(([uid]) => uid)).toEqual(["lapsed", "paid"])
+  })
+  it("uses a followed league or player in place of the whole feed", () => {
+    const followed = event({ id: "tsdb-2", competition: { id: "77", name: "Coastal League", country: null }, participants: [{ id: "3", name: "Lake Town", role: "home", badgeUrl: null }, { id: "4", name: "Bay Rovers", role: "away", badgeUrl: null }] })
+    const other = event({ participants: [{ id: "5", name: "Hill FC", role: "home", badgeUrl: null }, { id: "6", name: "Dale FC", role: "away", badgeUrl: null }] })
+    const league = buildDigest(subscribed({ favorites: [], leagues: [{ id: "77", name: "Coastal League", sportId: "football" }] }), [followed, other], NOW)
+    expect(league?.lines.join(" ")).toContain("Lake Town")
+    expect(league?.lines.join(" ")).not.toContain("Hill FC")
+    const player = buildDigest(subscribed({ favorites: [], players: [{ id: "9", name: "P", team: "Lake Town", sportId: "football" }] }), [followed, other], NOW)
+    expect(player?.lines.join(" ")).toContain("Lake Town")
+    expect(player?.lines.join(" ")).not.toContain("Hill FC")
   })
 
   it("sends one digest per local date across every tick in the hour", async () => {

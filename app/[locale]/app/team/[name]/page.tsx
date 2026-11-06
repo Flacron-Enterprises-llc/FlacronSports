@@ -2,20 +2,21 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { ArrowRight, Clapperboard, ListOrdered, Newspaper, Shield } from "lucide-react"
+import { MemberDataPending } from "@/components/dashboard/member-data-pending"
 import { AppPage, EmptyState, PageHeader, Panel } from "@/components/site/states"
 import { EventCard, FeedNotice } from "@/components/sports/event-card"
 import { FavoriteStar, LocalTime, SpoilerGuard, SpoilerReveal, SpoilerScope } from "@/components/sports/parts"
 import { HighlightPlayer } from "@/components/video/highlight-player"
 import { listPublishedReports } from "@/lib/content/reports"
 import { pageContext } from "@/lib/page-context"
+import { formByGame, tableAround, type FormResult } from "@/lib/sports/detail"
 import { eventTitle } from "@/lib/sports/presentation"
 import { enabledSports, getStandings, getTeamFixtures, type StandingRow } from "@/lib/sports/service"
-import { tableAround, teamForm, type FormResult } from "@/lib/sports/team-form"
 import type { SportEvent } from "@/lib/sports/types"
 import { cn } from "@/lib/utils"
 import { videoFor } from "@/lib/video/catalog"
 
-export const revalidate = 300
+export const dynamic = "force-dynamic"
 
 const REPORT_LIMIT = 4
 const VIDEO_LIMIT = 3
@@ -54,6 +55,7 @@ export default async function TeamPage({ params, searchParams }: Props) {
   const wanted = (await searchParams).sport
   const sport = enabledSports().find((item) => item.id === wanted)?.id
   const { team, upcoming, recent, feed } = await getTeamFixtures(name, sport)
+  if (feed.state === "withheld") return <MemberDataPending />
   const displayName = team?.name ?? name
 
   const leagueId = team?.league?.id
@@ -64,7 +66,7 @@ export default async function TeamPage({ params, searchParams }: Props) {
   ])
   const related = reports.filter((report) => report.participants.some((item) => item.toLowerCase() === displayName.toLowerCase())).slice(0, REPORT_LIMIT)
   const rows: StandingRow[] = standings?.state === "ok" ? tableAround(standings.rows, displayName) : []
-  const form = teamForm(recent, displayName)
+  const form = formByGame(recent, displayName)
 
   const list = (heading: string, events: SportEvent[]) =>
     events.length > 0 && (

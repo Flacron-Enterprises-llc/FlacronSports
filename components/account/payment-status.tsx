@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Clock, LoaderCircle } from "lucide-react"
 import { authButton } from "@/components/auth/auth-ui"
+import { useAccount } from "@/components/dashboard/account-context"
 import { AnimatedCheck, IconBadge, StatusCard } from "@/components/site/status-card"
 import { authFetch } from "@/lib/auth-fetch"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
@@ -17,6 +19,8 @@ const MAX_ATTEMPTS = 15
 export function PaymentStatus() {
   const { t, href } = useLocale()
   const user = useAuthUser()
+  const router = useRouter()
+  const { reload } = useAccount()
   const [state, setState] = useState<"confirming" | "done" | "delayed">("confirming")
 
   useEffect(() => {
@@ -30,7 +34,13 @@ export function PaymentStatus() {
       const response = await authFetch("/api/billing/status").catch(() => null)
       const data = response?.ok ? await response.json() : null
       if (!active) return
-      if (data?.isPaid) return setState("done")
+      if (data?.isPaid) {
+        // The shell read the plan before the webhook landed and would keep showing the paywall.
+        await reload()
+        router.refresh()
+        if (active) setState("done")
+        return
+      }
       if (attempts >= MAX_ATTEMPTS) return setState("delayed")
       timer = setTimeout(poll, POLL_MS)
     }
@@ -40,7 +50,7 @@ export function PaymentStatus() {
       active = false
       clearTimeout(timer)
     }
-  }, [user])
+  }, [user, reload, router])
 
   const [title, body] = { confirming: [t.paid.confirming, t.paid.confirmingBody], done: [t.paid.done, t.paid.doneBody], delayed: [t.paid.delayed, t.paid.delayedBody] }[state]
   const visual = {

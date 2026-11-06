@@ -70,10 +70,6 @@ export function detailAlerts(event: SportEvent, now: Date): DueAlert[] {
   return due
 }
 
-export function followsEvent(favorites: string[], event: SportEvent): boolean {
-  return event.participants.some((participant) => participant.name !== "TBD" && favorites.includes(participant.name))
-}
-
 export function planAllows(plan: Plan, type: AlertType): boolean {
   return hasPlusFeatures(plan) || (plan === "basic" && BASIC_TYPES.includes(type))
 }

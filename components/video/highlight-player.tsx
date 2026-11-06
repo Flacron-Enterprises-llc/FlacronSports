@@ -4,6 +4,7 @@ import { useState } from "react"
 import { ExternalLink, LoaderCircle, Play } from "lucide-react"
 import { usePreferences } from "@/components/account/prefs-provider"
 import { btn } from "@/components/site/states"
+import { authFetch } from "@/lib/auth-fetch"
 import { useLocale } from "@/lib/use-locale"
 
 /**
@@ -19,7 +20,7 @@ export function HighlightPlayer({ matchId, clipId, title, thumbnailUrl, channel 
   const play = async () => {
     setState("checking")
     const query = clipId ? `clip=${encodeURIComponent(clipId)}` : `match=${encodeURIComponent(matchId ?? "")}`
-    const response = await fetch(`/api/watch/play?${query}`).catch(() => null)
+    const response = await authFetch(`/api/watch/play?${query}`).catch(() => null)
     const body = response?.ok ? ((await response.json().catch(() => null)) as { video: { embedUrl: string; youtubeId?: string } | null } | null) : null
     if (!body?.video) return setState("gone")
     setVideo(body.video)

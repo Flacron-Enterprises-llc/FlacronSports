@@ -7,6 +7,8 @@ import { pageContext } from "@/lib/page-context"
 import { readShare, shareCard, type ShareCard } from "@/lib/share/cards"
 import { fromBackend, getEvent } from "@/lib/sports/service"
 
+export const dynamic = "force-dynamic"
+
 type Props = { params: Promise<{ locale: string; id: string }> }
 
 const SITE_URL = process.env.APP_BASE_URL || "https://flacronsport.com"

@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { Newspaper, Search, X } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
+import { MemberDataPending } from "@/components/dashboard/member-data-pending"
 import { AppPage, btn, EmptyState, PageHeader } from "@/components/site/states"
 import { ForYouReports } from "@/components/reports/paid-report"
 import { LocalTime } from "@/components/sports/parts"
@@ -21,6 +22,7 @@ export default async function NewsPage({ params, searchParams }: Props) {
   const team = (query.team ?? "").slice(0, 120)
   const competition = (query.competition ?? "").slice(0, 200)
   const { state, reports } = await listPublishedReports(locale)
+  if (state === "withheld") return <MemberDataPending />
 
   const shown = filterReports(reports, { q, team, competition })
 

@@ -78,7 +78,10 @@ jobs:
         run: |
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
             commit=$(curl -fsS "$API_ENDPOINT/api/health" | jq -r .commit || true)
-            [ "$commit" = "$GITHUB_SHA" ] && exit 0
+            if [ "$commit" = "$GITHUB_SHA" ]; then
+              test "$(curl -sS -o /dev/null -w '%{http_code}' "$API_ENDPOINT/app/scores")" = 404
+              exit 0
+            fi
             sleep 15
           done
           echo "Expected $GITHUB_SHA, got $commit" >&2
@@ -126,7 +129,8 @@ jobs:
           curl -fsS -o /dev/null "$APP_BASE_URL/"
           curl -fsS -o /dev/null "$APP_BASE_URL/pricing"
           test "$(curl -fsS "$APP_BASE_URL/api/health" | jq -r .commit)" = "$GITHUB_SHA"
-          curl -fsS -o /dev/null "$APP_BASE_URL/api/matches?pageSize=3000"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "$APP_BASE_URL/api/health")" = 200
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "$APP_BASE_URL/api/matches?pageSize=3000")" = 401
 
   browser-tests:
     needs: deploy-frontend

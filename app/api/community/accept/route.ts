@@ -4,7 +4,7 @@ import { ApiError, apiErrorResponse, requireFeature, requireVerifiedUser } from 
 import { acceptGuidelines } from "@/lib/community/gate"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { rateLimit } from "@/lib/rate-limit"
-import { requireSubscriber } from "@/lib/billing/require-plan"
+import { requireSubscriberOrPurchase } from "@/lib/billing/require-plan"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   try {
     requireFeature("COMMUNITY_ENABLED")
     const user = await requireVerifiedUser(request)
-    await requireSubscriber(user.uid)
+    await requireSubscriberOrPurchase(user.uid, "room")
     rateLimit(`community-accept:${user.uid}`, 10, 60_000)
     if (!schema.safeParse(await request.json().catch(() => null)).success) {
       throw new ApiError(400, "invalid_request", "Confirm your age and accept the Community Guidelines")

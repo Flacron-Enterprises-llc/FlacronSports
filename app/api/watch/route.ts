@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { apiErrorResponse } from "@/lib/api-auth"
+import { requireMember } from "@/lib/billing/require-plan"
 import { SPORTS, type SportId } from "@/lib/sports/types"
 import { getWatchFeed } from "@/lib/video/catalog"
 
@@ -12,6 +14,11 @@ const query = z.object({
 })
 
 export async function GET(request: Request) {
+  try {
+    await requireMember(request, "watch", 60)
+  } catch (error) {
+    return apiErrorResponse(error)
+  }
   const parsed = query.safeParse(Object.fromEntries(new URL(request.url).searchParams))
   if (!parsed.success) return NextResponse.json({ error: "Invalid filters" }, { status: 400 })
   const { sport, team, competition } = parsed.data

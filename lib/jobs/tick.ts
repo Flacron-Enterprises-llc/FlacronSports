@@ -4,6 +4,7 @@ import { runAlerts, type UserRow } from "@/lib/alerts/notifications"
 import { getEffectiveAccess } from "@/lib/billing/firestore-store"
 import { settlePredictions } from "@/lib/community/predictions"
 import { firestoreDocDb } from "@/lib/doc-db"
+import { releaseTickLease, takeTickLease } from "@/lib/jobs/lease"
 import { runPreviews, runRecaps, runRoundup } from "@/lib/content/coverage"
 import { runReports } from "@/lib/content/reports"
 import { sendEmail } from "@/lib/email-service"
@@ -13,6 +14,7 @@ import { runNewsletter } from "@/lib/newsletter/digest"
 import { flushMetrics } from "@/lib/ops/metrics"
 import { failedJobs, recordRun, type JobRun } from "@/lib/ops/runs"
 import { seenPath, summarizeSeen } from "@/lib/sports/coverage"
+import { isFollowed, type Following } from "@/lib/sports/following"
 import { isMajorCompetition } from "@/lib/sports/priority"
 import type { EventFeed, SportId } from "@/lib/sports/types"
 import { videoFor } from "@/lib/video/catalog"
@@ -23,14 +25,15 @@ import type { SportEvent } from "@/lib/sports/types"
 const PAGE_SIZE = 300
 const DAY = 86_400_000
 
-async function* preferenceRows(db: Firestore): AsyncGenerator<UserRow> {
+async function preferenceRows(db: Firestore): Promise<UserRow[]> {
+  const rows: UserRow[] = []
   let last: QueryDocumentSnapshot | undefined
   for (;;) {
     let query = db.collection("user_preferences").orderBy(FieldPath.documentId()).limit(PAGE_SIZE)
     if (last) query = query.startAfter(last)
     const page = await query.get()
-    for (const doc of page.docs) yield { uid: doc.id, prefs: { ...DEFAULT_PREFERENCES, ...(doc.data() as Partial<Preferences>) } }
-    if (page.docs.length < PAGE_SIZE) return
+    for (const doc of page.docs) rows.push({ uid: doc.id, prefs: { ...DEFAULT_PREFERENCES, ...(doc.data() as Partial<Preferences>) } })
+    if (page.docs.length < PAGE_SIZE) return rows
     last = page.docs[page.docs.length - 1]
   }
 }
@@ -41,12 +44,7 @@ async function verifiedEmail(uid: string): Promise<string | null> {
   return user?.email && user.emailVerified && !user.disabled ? user.email : null
 }
 
-/** The daily digest is a plan benefit, so an opted-in account with no plan is skipped. */
-async function* subscriberDigestRows(db: Firestore): AsyncGenerator<UserRow> {
-  for await (const row of preferenceRows(db)) {
-    if (row.prefs.newsletter.optedIn && (await getEffectiveAccess(row.uid)).plan !== "none") yield row
-  }
-}
+const planFor = async (uid: string) => (await getEffectiveAccess(uid)).plan
 
 export type JobResult<T> = T | { failed: true; error: string }
 
@@ -94,8 +92,17 @@ export function listingTargets(now: Date): { date: string; sportId: SportId }[] 
   return Array.from({ length: perTick }, (_, index) => pairs[(start + index) % pairs.length])
 }
 
-export function reportableEvents(events: SportEvent[], followed: Set<string>): SportEvent[] {
-  return events.filter((event) => isMajorCompetition(event.competition.name) || event.participants.some((participant) => followed.has(participant.name)))
+export function reportableEvents(events: SportEvent[], followed: Following): SportEvent[] {
+  return events.filter((event) => isMajorCompetition(event.competition.name) || isFollowed(followed, event))
+}
+
+/** Everything anyone follows, as one list, so a game costs one check however many members there are. */
+export function followedByAnyone(rows: UserRow[]): Following {
+  return {
+    favorites: [...new Set(rows.flatMap(({ prefs }) => prefs.favorites))],
+    leagues: [...new Map(rows.flatMap(({ prefs }) => prefs.leagues).map((league) => [league.id, league])).values()],
+    players: [...new Map(rows.flatMap(({ prefs }) => prefs.players).map((player) => [player.id, player])).values()],
+  }
 }
 
 interface JobContext {
@@ -105,7 +112,8 @@ interface JobContext {
   yesterday: EventFeed
   today: EventFeed
   events: SportEvent[]
-  /** Reads every member's preferences, so it runs at most once per context. */
+  /** Reads every member's preferences on first use. Every job in the context shares that one scan. */
+  members(): Promise<UserRow[]>
   targets(events: SportEvent[]): Promise<SportEvent[]>
 }
 
@@ -115,19 +123,16 @@ async function loadContext(db: Firestore, now: Date): Promise<JobContext> {
   const today = await getEvents({ date: utcDate(now), refresh: true })
   const seen = new Set<string>()
   const events: SportEvent[] = [...yesterday.events, ...today.events].filter((event) => !seen.has(event.id) && seen.add(event.id))
-  let followed: Promise<Set<string>> | null = null
-  const loadFollowed = async () => {
-    const names = new Set<string>()
-    for await (const { prefs } of preferenceRows(db)) for (const name of prefs.favorites) names.add(name)
-    return names
-  }
+  let scan: Promise<UserRow[]> | null = null
+  const members = () => (scan ??= preferenceRows(db))
+  let followed: Promise<Following> | null = null
   return {
-    db, now, yesterday, today, events,
+    db, now, yesterday, today, events, members,
     siteUrl: process.env.APP_BASE_URL || "https://flacronsport.com",
     // The full feed has hundreds of finished games a day. A written report for every
     // regional fixture would bury the news page, so it covers the major competitions
     // and any game a member follows, which is what personalized reports are made from.
-    targets: async (list) => (feedIsLimited() ? list : reportableEvents(list, await (followed ??= loadFollowed()))),
+    targets: async (list) => (feedIsLimited() ? list : reportableEvents(list, await (followed ??= members().then(followedByAnyone)))),
   }
 }
 
@@ -139,21 +144,20 @@ const JOBS = {
     return settlePredictions(firestoreDocDb(), { events, lookup: (id) => getEvent(id, { anyCoverage: true }) }, now)
   },
   reports: async ({ db, events, today, now, targets }: JobContext) => runReports(db, await targets(events), today.fetchedAt, now),
-  alerts: ({ db, events, now, siteUrl }: JobContext) =>
+  alerts: async ({ db, events, now, siteUrl, members }: JobContext) =>
     runAlerts({
-      db, events, now, siteUrl, send: sendEmail, emailFor: verifiedEmail,
-      users: preferenceRows(db),
-      planFor: async (uid) => (await getEffectiveAccess(uid)).plan,
+      db, events, now, siteUrl, planFor, send: sendEmail, emailFor: verifiedEmail,
+      users: await members(),
       confirm: async (event, type) => {
         if (type === "highlights") return Boolean(await videoFor(event))
         const { home, away } = (await getMatchDetail(event)).lineups
         return home.length > 0 && away.length > 0
       },
     }),
-  newsletter: async ({ db, events, now, siteUrl, today }: JobContext) => {
+  newsletter: async ({ db, events, now, siteUrl, today, members }: JobContext) => {
     // Skipping leaves the day unclaimed, so a later tick in the hour can still send.
     if (today.state === "unavailable") return { skipped: "feed_unavailable" }
-    return runNewsletter({ db, events, now, siteUrl, send: sendEmail, emailFor: verifiedEmail, users: subscriberDigestRows(db) })
+    return runNewsletter({ db, events, now, siteUrl, planFor, send: sendEmail, emailFor: verifiedEmail, users: await members() })
   },
   recaps: async ({ db, events, today, now, targets }: JobContext) => {
     // The public test key has no match detail worth reporting from.
@@ -218,13 +222,26 @@ async function recorded<T extends Record<string, unknown>>(db: Firestore, meta: 
 
 let ticking = false
 
+/** Leaves a row, so a job stuck for hours shows as skips and not as a gap or a clean run. */
+async function skippedTick(db: Firestore, now: Date, skipped: string): Promise<{ skipped: string }> {
+  await recordRun(db, { trigger: "schedule", job: "tick", actorUid: null, at: now.toISOString(), finishedAt: new Date().toISOString(), failed: [], aborted: false, skipped, results: {} })
+  return { skipped }
+}
+
 export async function runTick(now: Date = new Date()) {
+  const db = assertJobStorage()
   // A long provider cooldown can outlast the 15 minute schedule.
-  if (ticking) return { skipped: "already_running" }
+  if (ticking) return skippedTick(db, now, "already_running")
   ticking = true
   try {
-    const db = assertJobStorage()
-    return await recorded(db, { trigger: "schedule", job: "tick", actorUid: null }, now, () => tick(db, now))
+    const docs = firestoreDocDb()
+    const lease = await takeTickLease(docs, now)
+    if (!lease) return await skippedTick(db, now, "lease_held")
+    try {
+      return await recorded(db, { trigger: "schedule", job: "tick", actorUid: null }, now, () => tick(db, now))
+    } finally {
+      await releaseTickLease(docs, lease).catch((error: unknown) => console.error("Tick lease not released", error instanceof Error ? error.message : "unknown"))
+    }
   } finally {
     ticking = false
   }

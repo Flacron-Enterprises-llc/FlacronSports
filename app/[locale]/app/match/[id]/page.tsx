@@ -5,6 +5,7 @@ import { notFound } from "next/navigation"
 import { ArrowLeft, CalendarClock, MapPin, Timer, Trophy } from "lucide-react"
 import { MatchCommunity } from "@/components/community/match-community"
 import { ErrorNotice } from "@/components/dashboard/controls"
+import { MemberDataPending } from "@/components/dashboard/member-data-pending"
 import { SportIcon } from "@/components/site/sport-icon"
 import { AppPage, Notice, Panel } from "@/components/site/states"
 import { nameOf, StatusLabel } from "@/components/sports/event-card"
@@ -18,12 +19,15 @@ import { MatchForm, MatchFormSkeleton } from "@/components/sports/match-form"
 import { Crest, FavoriteStar, LiveRefresh, LocalTime, MatchScore, SpoilerGuard, SpoilerScope } from "@/components/sports/parts"
 import { predictionKind, predictionOpen } from "@/lib/community/predictions"
 import { getDictionary, isLocale, type Dictionary } from "@/lib/i18n"
+import { MemberAccessRequired } from "@/lib/member-fetch"
 import { pageContext } from "@/lib/page-context"
 import { isStaleUpdate } from "@/lib/sports/detail"
 import { eventTitle, hasResult, isDuel } from "@/lib/sports/presentation"
 import { getEvent } from "@/lib/sports/service"
 import { currentPeriod } from "@/lib/sports/thesportsdb"
 import type { SportEvent } from "@/lib/sports/types"
+
+export const dynamic = "force-dynamic"
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 
@@ -48,7 +52,8 @@ export default async function MatchPage({ params }: Props) {
   let failed = false
   try {
     event = await getEvent(id)
-  } catch {
+  } catch (error) {
+    if (error instanceof MemberAccessRequired) return <MemberDataPending />
     failed = true
   }
   if (!event && !failed) notFound()

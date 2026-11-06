@@ -6,7 +6,7 @@ vi.mock("@/lib/firebase-admin", () => ({ getAdminAuth: () => null, getAdminDb: (
 import { buildAlert, detailAlerts, filteredOut, suppressionReason } from "@/lib/alerts/rules"
 import { notificationId, runAlerts } from "@/lib/alerts/notifications"
 import { buildFullReport } from "@/lib/content/full-report"
-import { reportableEvents } from "@/lib/jobs/tick"
+import { followedByAnyone, reportableEvents } from "@/lib/jobs/tick"
 import { DEFAULT_PREFERENCES, type Preferences } from "@/lib/me/preferences-defaults"
 import { advancedFigures, basicProfile, headToHead, teamGames } from "@/lib/sports/compare"
 import type { MatchDetail } from "@/lib/sports/detail"
@@ -143,7 +143,20 @@ describe("full reports", () => {
 
 describe("personalized reports reach followed teams in any league", () => {
   it("keeps major competitions and followed games", () => {
-    const kept = reportableEvents([game("1", "A", "B", 1, 0, "FT", "Georgian Liga 3"), game("2", "C", "D", 1, 0), game("3", "E", "F", 1, 0, "FT", "Georgian Liga 3")], new Set(["A"]))
+    const kept = reportableEvents([game("1", "A", "B", 1, 0, "FT", "Georgian Liga 3"), game("2", "C", "D", 1, 0), game("3", "E", "F", 1, 0, "FT", "Georgian Liga 3")], { favorites: ["A"], leagues: [], players: [] })
     expect(kept.map((event) => event.id)).toEqual(["tsdb-1", "tsdb-2"])
+  })
+  it("counts a followed league or a followed player's team, from one list across all members", () => {
+    const local = game("3", "E", "F", 1, 0, "FT", "Georgian Liga 3")
+    const leagueId = local.competition.id as string
+    const followed = followedByAnyone([
+      { uid: "a", prefs: prefs({}, { favorites: ["Nobody"], leagues: [{ id: leagueId, name: "Georgian Liga 3", sportId: "football" }] }) },
+      { uid: "b", prefs: prefs({}, { favorites: ["Nobody"], leagues: [{ id: leagueId, name: "Georgian Liga 3", sportId: "football" }], players: [{ id: "9", name: "P", team: "K", sportId: "football" }] }) },
+    ])
+    expect(followed.favorites).toEqual(["Nobody"])
+    expect(followed.leagues).toHaveLength(1)
+    expect(reportableEvents([local], followed)).toEqual([local])
+    expect(reportableEvents([game("4", "K", "L", 1, 0, "FT", "Other Liga")], { ...followed, leagues: [] })).toHaveLength(1)
+    expect(reportableEvents([local], { favorites: [], leagues: [], players: [] })).toEqual([])
   })
 })

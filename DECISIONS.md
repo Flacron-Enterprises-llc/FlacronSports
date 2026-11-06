@@ -62,7 +62,11 @@ Benefits are unchanged: Basic takes the old Free column, including FlacronSport 
 
 There is no free plan. The owner chose a full paywall: an account can sign in, pay and manage settings, and everything else needs a plan or a day pass. Internally such an account has plan `none`. Member APIs refuse it with 402 `subscription_required`, and alerts and the daily digest skip it.
 
-Scores, Watch and report data stay public on their own API routes, because the frontend renders them on the server without a user token. The dashboard screen is what hides them from an account with no plan.
+Scores, Watch, standings, team and report data need a plan on their own API routes: no token gets 401 and no plan gets 402. Staff with a role pass without a plan. Share routes, the calendar feed, webhooks, jobs and the marketing forms stay public.
+
+Pages render on Amplify, so the browser keeps the current Firebase ID token in a short-lived cookie, `fs_member`, and the server render sends it to the backend. Those calls never use the shared Next data cache. A render the backend refuses gets no data, so the page source holds no score, report text or provider data. The paywall still explains this to an account with no plan. A paying member whose token ran out renews it in the background and the page renders again.
+
+The backend image sets `BACKEND_ONLY=true` and answers no pages. API Gateway sends it every path, and a page rendered there reads the provider directly and would skip the wall.
 
 Stripe test prices were created for all six prices and the old Plus and Premium prices were archived. Live prices still need creating when Stripe goes live.
 

@@ -74,6 +74,11 @@ export async function requireAdmin(request: Request): Promise<AuthedUser> {
 
 export type StaffRole = "moderator" | "editor" | "admin"
 
+const STAFF_ROLES: StaffRole[] = ["moderator", "editor", "admin"]
+
+/** The role alone. Privileged actions also need the second factor in assertRole. */
+export const isStaff = (user: AuthedUser): boolean => STAFF_ROLES.includes(user.token.role as StaffRole)
+
 /** Admins hold every staff permission. All privileged roles need a second factor. */
 export function assertRole(user: AuthedUser, ...roles: StaffRole[]): StaffRole {
   const role = user.token.role as StaffRole | undefined

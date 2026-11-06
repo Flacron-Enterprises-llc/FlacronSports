@@ -19,6 +19,7 @@ export type QuarantineReason =
   | "missing_payment"
   | "duplicate_subscription"
   | "unlinked_refund"
+  | "refund_needs_review"
 
 export interface LedgerEntry {
   collection: "billing_payments" | "billing_refunds"
@@ -63,6 +64,8 @@ export interface WebhookDeps {
   cancelSubscription?(id: string): Promise<void>
   /** Runs after the payment is on record, and again on redelivery, so it must be idempotent. */
   onPaidInvoice?(uid: string, invoiceId: string): Promise<unknown>
+  /** Runs after a full refund is on record, and again on redelivery, so it must be idempotent. */
+  onRefundedInvoice?(invoiceId: string): Promise<unknown>
   allowLivemode?: boolean
   env?: Record<string, string | undefined>
 }
@@ -196,6 +199,10 @@ async function projectPurchase(
 
 const SYSTEM_ACTOR = "system:stripe"
 
+// Only these invoices pay for a whole period. A proration or manual invoice covers part
+// of one, so refunding it says nothing about the period the member already paid for.
+const PERIOD_INVOICES = new Set<string | null>(["subscription_create", "subscription_cycle"])
+
 /**
  * Only a charge for time still running ends access: refunding last month's invoice
  * leaves the paid current period alone. Canceling in Stripe, not just here, is what
@@ -203,12 +210,11 @@ const SYSTEM_ACTOR = "system:stripe"
  */
 async function endRefundedSubscription(
   charge: Stripe.Charge,
-  paymentId: string | null,
+  invoice: Stripe.Invoice | null,
   event: Stripe.Event,
   deps: WebhookDeps,
 ): Promise<Pick<EventMutation, "entitlement" | "audit" | "quarantine">> {
   if (!deps.invoiceForPayment || !deps.cancelSubscription) return {}
-  const invoice = paymentId ? await deps.invoiceForPayment(paymentId) : null
   const subscriptionId = invoice ? subscriptionIdFromInvoice(invoice) : null
   if (!invoice || !subscriptionId) return { quarantine: { reason: "unlinked_refund", objectId: charge.id } }
 
@@ -218,6 +224,12 @@ async function endRefundedSubscription(
 
   const { record } = projected
   const detail = { targetUid: record.uid, stripeSubscriptionId: subscription.id, stripeChargeId: charge.id, stripeInvoiceId: invoice.id ?? null }
+  if (!PERIOD_INVOICES.has(invoice.billing_reason)) {
+    return {
+      quarantine: { reason: "refund_needs_review", objectId: charge.id },
+      audit: { action: "billing.refund_needs_review", actorUid: SYSTEM_ACTOR, detail: { ...detail, billingReason: invoice.billing_reason } },
+    }
+  }
   if (!invoice.lines.data.some((line) => line.period.end > event.created)) {
     return { audit: { action: "billing.refund_past_period", actorUid: SYSTEM_ACTOR, detail } }
   }
@@ -292,8 +304,10 @@ export async function processStripeEvent(event: Stripe.Event, deps: WebhookDeps)
     const full = charge.refunded === true || (charge.amount > 0 && charge.amount_refunded >= charge.amount)
     const refundedAtUTC = new Date(event.created * 1000).toISOString()
     // Add-on charges carry their sku. Anything else from an owned customer is a subscription charge.
-    const ended = full && !charge.metadata?.sku ? await endRefundedSubscription(charge, paymentId, event, deps) : {}
-    return finish(
+    const subscriptionCharge = full && !charge.metadata?.sku
+    const invoice = subscriptionCharge && paymentId && deps.invoiceForPayment ? await deps.invoiceForPayment(paymentId) : null
+    const ended = subscriptionCharge ? await endRefundedSubscription(charge, invoice, event, deps) : {}
+    const outcome = await finish(
       {
         ...ended,
         purchaseRefund: paymentId ? { paymentId, full, refundedAtUTC } : undefined,
@@ -315,6 +329,8 @@ export async function processStripeEvent(event: Stripe.Event, deps: WebhookDeps)
       },
       "applied",
     )
+    if (invoice?.id) await deps.onRefundedInvoice?.(invoice.id)
+    return outcome
   }
 
   if (event.type === "checkout.session.completed") {

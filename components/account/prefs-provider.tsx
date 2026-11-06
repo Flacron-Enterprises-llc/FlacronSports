@@ -5,6 +5,7 @@ import { authFetch } from "@/lib/auth-fetch"
 import { PLANS } from "@/lib/billing/plans"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { DEFAULT_PREFERENCES, type Preferences } from "@/lib/me/preferences-defaults"
+import { watchMemberCookie } from "@/lib/member-session"
 import { readStored, writeStored } from "@/lib/storage-consent"
 
 const KEY = "fs-prefs"
@@ -35,6 +36,8 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
   const latest = useRef<Preferences>(DEFAULT_PREFERENCES)
   const queue = useRef<Promise<unknown>>(Promise.resolve())
   latest.current = prefs
+
+  useEffect(() => watchMemberCookie(), [])
 
   useEffect(() => {
     const stored = { ...DEFAULT_PREFERENCES, ...readStored<Partial<Preferences>>(KEY, {}) }

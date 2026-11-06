@@ -125,6 +125,19 @@ export function hasLivePurchase(purchases: BillingPurchase[], unit: AllowanceUni
   return purchases.some((purchase) => purchase.unit === unit && purchaseLive(purchase, nowMs))
 }
 
+/** The add-ons that open a screen of their own. Credits for the assistant open none. */
+export type AccessAddon = Extract<AllowanceUnit, "room" | "export">
+
+export function liveAccessAddons(purchases: BillingPurchase[], nowMs: number): AccessAddon[] {
+  return (["room", "export"] as const).filter((unit) => hasLivePurchase(purchases, unit, nowMs))
+}
+
+const MATCH_PAGE = /^\/app\/match\//
+const ADDON_PATHS: Record<AccessAddon, RegExp[]> = { room: [/^\/app\/rooms(\/|$)/, MATCH_PAGE], export: [MATCH_PAGE] }
+
+/** A live add-on keeps its own screens open once a plan ends, and nothing else. */
+export const addonOpensPath = (path: string, addons: AccessAddon[]): boolean => addons.some((addon) => ADDON_PATHS[addon].some((pattern) => pattern.test(path)))
+
 export interface PurchaseRefund {
   full: boolean
   refundedAtUTC: string

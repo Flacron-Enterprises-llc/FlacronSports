@@ -14,6 +14,8 @@ import {
   User
 } from 'firebase/auth';
 
+import { clearMemberCookie, syncMemberCookie } from './member-session';
+
 // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyCxoiq8YSQv3wyw6VvplDYVKgxxZUnbL0M",
@@ -77,6 +79,7 @@ export const signInWithEmail = async (email: string, password: string) => {
   try {
     const authInstance = getFirebaseAuth();
     const userCredential = await signInWithEmailAndPassword(authInstance, email, password);
+    await syncMemberCookie(userCredential.user);
     return { user: userCredential.user, error: null };
   } catch (error: any) {
     return { user: null, error: error.message, cause: error };
@@ -88,6 +91,7 @@ export const signUpWithEmail = async (email: string, password: string) => {
   try {
     const authInstance = getFirebaseAuth();
     const userCredential = await createUserWithEmailAndPassword(authInstance, email, password);
+    await syncMemberCookie(userCredential.user);
     // The account exists by now, so a failed email is retried from the verify page rather than failing sign-up.
     const emailSent = await sendVerification(userCredential.user).then(() => true, () => false);
     return { user: userCredential.user, error: null, emailSent };
@@ -102,6 +106,7 @@ export const signInWithGoogle = async () => {
     const authInstance = getFirebaseAuth();
     const provider = getGoogleProvider();
     const result = await signInWithPopup(authInstance, provider);
+    await syncMemberCookie(result.user);
     return { user: result.user, error: null };
   } catch (error: any) {
     return { user: null, error: error.message, cause: error };
@@ -113,6 +118,7 @@ export const signOutUser = async () => {
   try {
     const authInstance = getFirebaseAuth();
     await signOut(authInstance);
+    clearMemberCookie();
     return { error: null };
   } catch (error: any) {
     return { error: error.message };

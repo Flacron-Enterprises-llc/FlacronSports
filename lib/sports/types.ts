@@ -145,7 +145,8 @@ export interface SportEvent {
   coverageFlags: { liveScores: boolean; statistics: boolean; video: boolean }
 }
 
-export type FeedState = "ok" | "stale" | "unavailable"
+/** "withheld": the backend refused this viewer, so nothing is shown and nothing is wrong. */
+export type FeedState = "ok" | "stale" | "unavailable" | "withheld"
 
 export interface EventFeed {
   state: FeedState

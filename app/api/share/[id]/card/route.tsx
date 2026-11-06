@@ -3,7 +3,7 @@ import path from "node:path"
 import { ImageResponse } from "next/og"
 import { ApiError, apiErrorResponse } from "@/lib/api-auth"
 import { firestoreDocDb } from "@/lib/doc-db"
-import { clientIp, rateLimit } from "@/lib/rate-limit"
+import { rateLimitClient } from "@/lib/rate-limit"
 import { readShare, shareCard } from "@/lib/share/cards"
 import { getEvent } from "@/lib/sports/service"
 
@@ -20,7 +20,7 @@ const logoData = () => (logo ??= readFile(path.join(process.cwd(), "public/brand
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    rateLimit(`share-card:${clientIp(request)}`, 60, 60_000)
+    rateLimitClient(request, "share-card", { visitor: 60, shared: 600 }, 60_000)
     const share = await readShare(firestoreDocDb(), (await params).id)
     const event = share ? await getEvent(share.matchId) : null
     if (!share || !event) throw new ApiError(404, "not_found", "Card not found")

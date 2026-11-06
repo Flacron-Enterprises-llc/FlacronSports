@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { apiErrorResponse } from "@/lib/api-auth"
-import { rateLimitClient } from "@/lib/rate-limit"
+import { requireMember } from "@/lib/billing/require-plan"
 import { getTeamFixtures } from "@/lib/sports/service"
 import { SPORTS, type SportId } from "@/lib/sports/types"
 
@@ -13,7 +13,7 @@ const query = z.object({
 export async function GET(request: Request) {
   try {
     // Every unknown name is a provider call, so this is tighter than the daily feeds.
-    rateLimitClient(request, "teams", { visitor: 60, shared: 600 }, 60_000)
+    await requireMember(request, "teams", 60)
   } catch (error) {
     return apiErrorResponse(error)
   }

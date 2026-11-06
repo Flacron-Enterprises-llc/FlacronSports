@@ -1,13 +1,14 @@
 import { notFound } from "next/navigation"
 import { ListOrdered } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
+import { MemberDataPending } from "@/components/dashboard/member-data-pending"
 import { AppPage, EmptyState, PageHeader } from "@/components/site/states"
 import { LocalTime } from "@/components/sports/parts"
 import { pageContext, titled } from "@/lib/page-context"
 import { getStandings, type StandingRow } from "@/lib/sports/service"
 
 export const generateMetadata = titled((t) => t.standings.title)
-export const revalidate = 300
+export const dynamic = "force-dynamic"
 
 type Props = { params: Promise<{ locale: string; leagueId: string }> }
 
@@ -17,6 +18,7 @@ export default async function StandingsPage({ params }: Props) {
   if (!/^\d{1,8}$/.test(leagueId)) notFound()
 
   const table = await getStandings(leagueId)
+  if (table.state === "withheld") return <MemberDataPending />
   const copy = t.standings
 
   const columns: [keyof StandingRow, string][] = [

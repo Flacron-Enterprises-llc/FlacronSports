@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server"
 import { ApiError, apiErrorResponse } from "@/lib/api-auth"
-import { rateLimitClient } from "@/lib/rate-limit"
+import { MATCH_ADDONS, requireMember } from "@/lib/billing/require-plan"
 import { getEvent } from "@/lib/sports/service"
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    rateLimitClient(request, "match", { visitor: 120, shared: 1500 }, 60_000)
+    await requireMember(request, "match", 120, MATCH_ADDONS)
+  } catch (error) {
+    return apiErrorResponse(error)
+  }
+  try {
     const event = await getEvent((await params).id)
     if (!event) return NextResponse.json({ error: "Match not found" }, { status: 404 })
     return NextResponse.json({ event, fetchedAt: event.sourceUpdatedAt })

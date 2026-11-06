@@ -2,12 +2,14 @@ import Link from "next/link"
 import { headers } from "next/headers"
 import { CalendarClock, Clapperboard, PlayCircle, Radio, Search, Tv } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
+import { MemberDataPending } from "@/components/dashboard/member-data-pending"
 import { SportIcon } from "@/components/site/sport-icon"
 import { AppPage, btn, EmptyState, Notice, PageHeader, Panel } from "@/components/site/states"
 import { EventCard } from "@/components/sports/event-card"
 import { FilterSelect } from "@/components/sports/filter-select"
 import { LocalTime } from "@/components/sports/parts"
 import { HighlightPlayer } from "@/components/video/highlight-player"
+import { MemberAccessRequired } from "@/lib/member-fetch"
 import { pageContext, titled, type LocaleParams } from "@/lib/page-context"
 import { enabledSports, fromBackend } from "@/lib/sports/service"
 import type { SportId } from "@/lib/sports/types"
@@ -19,11 +21,15 @@ export const generateMetadata = titled((t) => t.watch.title)
 
 const EMPTY: WatchFeed = { live: [], highlights: [], clips: [], broadcasts: [] }
 
-async function loadFeed(sport: SportId | undefined, filters: WatchFilters): Promise<{ feed: WatchFeed; failed: boolean }> {
+async function loadFeed(sport: SportId | undefined, filters: WatchFilters): Promise<{ feed: WatchFeed; failed: boolean; withheld: boolean }> {
   const query = new URLSearchParams(Object.entries({ sport, ...filters }).flatMap(([key, value]) => (value ? [[key, value]] : []))).toString()
   const request = process.env.API_ORIGIN ? fromBackend<WatchFeed>(`/api/watch${query ? `?${query}` : ""}`) : getWatchFeed(sport, new Date(), filters)
-  const feed = await request.catch(() => null)
-  return { feed: feed ?? EMPTY, failed: !feed || feed.state === "unavailable" }
+  let withheld = false
+  const feed = await request.catch((error) => {
+    withheld = error instanceof MemberAccessRequired
+    return null
+  })
+  return { feed: feed ?? EMPTY, failed: !feed || feed.state === "unavailable", withheld }
 }
 
 function viewerCountry(code: string | null): string | null {
@@ -45,7 +51,8 @@ export default async function WatchPage({ params, searchParams }: LocaleParams &
   const team = (search.team ?? "").trim().slice(0, 80)
   const competition = (search.competition ?? "").slice(0, 120)
   const watchable = search.watchable === "1"
-  const { feed, failed } = await loadFeed(sport, { team: team || undefined, competition: competition || undefined })
+  const { feed, failed, withheld } = await loadFeed(sport, { team: team || undefined, competition: competition || undefined })
+  if (withheld) return <MemberDataPending />
   const country = viewerCountry((await headers()).get("cloudfront-viewer-country"))
   const broadcasts = [...feed.broadcasts].sort((a, b) => Number(b.country === country) - Number(a.country === country))
   const clips = feed.clips ?? []

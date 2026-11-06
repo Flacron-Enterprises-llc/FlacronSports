@@ -13,7 +13,7 @@ import { clubId, getClub, joinClub, joinExistingClub, leaveClub, listClubs, spor
 import { closeGroup, createGroup, getGroup, joinGroup, MAX_GROUP_MEMBERS, removeGroupMember, resolveGroupMemberRef, revokeGroupInvite } from "@/lib/community/groups"
 import { removeMessage, setLock } from "@/lib/community/moderation"
 import { getLeaderboard, POINTS, predictionKind, predictionOpen, scorePodium, scoreWinner, settleMatch, submitPrediction } from "@/lib/community/predictions"
-import { awardReferral, canonicalEmail, claimReferral, emailKeyOf, getReferralAccount, REFERRAL_CAP, REFERRAL_POINTS } from "@/lib/community/referrals"
+import { awardReferral, canonicalEmail, claimReferral, emailKeyOf, getReferralAccount, REFERRAL_CAP, REFERRAL_POINTS, reverseReferral } from "@/lib/community/referrals"
 import { listMyRooms, postRoomMessage } from "@/lib/community/rooms"
 import { APP_ID } from "@/lib/billing/plans"
 import { processStripeEvent, type EventMutation } from "@/lib/billing/webhook-core"
@@ -270,6 +270,42 @@ describe("referrals", () => {
   }
   const paid = (put: (path: string, data: object) => void, uid: string, id = `in_${uid}`) => put(`billing_payments/${id}`, { uid, amountPaid: 1999, stripeInvoiceId: id })
 
+  it("takes an award back on a full refund of the payment that earned it, once, for good", async () => {
+    const { db, docs, put, code: link } = await setup()
+    await claimReferral(db, { uid: "friend", email: "friend@example.test", code: link }, now)
+    paid(put, "friend")
+    await awardReferral(db, { uid: "friend", paymentId: "in_friend" }, now)
+    expect(await reverseReferral(db, { paymentId: "in_other" }, now)).toEqual({ reversed: false })
+    expect(docs.get("referral_accounts/ref")).toMatchObject({ points: REFERRAL_POINTS, awards: 1 })
+
+    expect(await reverseReferral(db, { paymentId: "in_friend" }, now)).toEqual({ reversed: true })
+    expect(await reverseReferral(db, { paymentId: "in_friend" }, now)).toEqual({ reversed: false })
+    expect(docs.get("referral_accounts/ref")).toMatchObject({ points: 0, awards: 0 })
+    expect(docs.get(`referral_claims/${emailKeyOf("friend@example.test")}`)).toMatchObject({ status: "reversed" })
+
+    paid(put, "friend", "in_next")
+    expect(await awardReferral(db, { uid: "friend", paymentId: "in_next" }, now)).toEqual({ awarded: false })
+    expect(docs.get("referral_accounts/ref")).toMatchObject({ points: 0, awards: 0 })
+  })
+  it("takes nothing from the referrer for a claim that was capped", async () => {
+    const { db, docs, put, code: link } = await setup()
+    put("referral_accounts/ref", { ...(docs.get("referral_accounts/ref") as object), points: REFERRAL_CAP * REFERRAL_POINTS, awards: REFERRAL_CAP })
+    await claimReferral(db, { uid: "friend", email: "friend@example.test", code: link }, now)
+    paid(put, "friend")
+    await awardReferral(db, { uid: "friend", paymentId: "in_friend" }, now)
+    expect(await reverseReferral(db, { paymentId: "in_friend" }, now)).toEqual({ reversed: true })
+    expect(docs.get("referral_accounts/ref")).toMatchObject({ points: REFERRAL_CAP * REFERRAL_POINTS, awards: REFERRAL_CAP })
+  })
+  it("keeps a hashed tombstone, so deleting an account does not free the email", async () => {
+    const { db, docs, code: link } = await setup()
+    const second = await getReferralAccount(db, { uid: "ref2", email: "second@example.test" }, now)
+    await claimReferral(db, { uid: "friend", email: "friend@example.test", code: link }, now)
+    await eraseCommunityData(db, "friend")
+    const key = emailKeyOf("friend@example.test")
+    expect(docs.has(`referral_claims/${key}`)).toBe(false)
+    expect(Object.keys(docs.get(`referral_tombstones/${key}`) as object)).toEqual(["erasedAtUTC"])
+    expect(await code(claimReferral(db, { uid: "reborn", email: "friend+new@example.test", code: second.code }, now))).toBe("referral_not_eligible")
+  })
   it("sees through address spellings without banning a shared domain", () => {
     expect(canonicalEmail("Ab.C+promo@GoogleMail.com")).toBe("abc@gmail.com")
     expect(canonicalEmail("a.b+x@example.test")).toBe("a.b@example.test")

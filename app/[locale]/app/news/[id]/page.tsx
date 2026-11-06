@@ -3,12 +3,14 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { ArrowLeft, ArrowRight, Flag } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
+import { MemberDataPending } from "@/components/dashboard/member-data-pending"
 import { AppPage, Notice } from "@/components/site/states"
 import { FullReportSection } from "@/components/reports/paid-report"
 import { SaveReportButton } from "@/components/reports/saved-reports"
 import { LocalTime, SpoilerGuard } from "@/components/sports/parts"
 import { getPublishedReport, type Report } from "@/lib/content/reports"
 import { isLocale } from "@/lib/i18n"
+import { MemberAccessRequired } from "@/lib/member-fetch"
 import { pageContext } from "@/lib/page-context"
 
 export const dynamic = "force-dynamic"
@@ -32,7 +34,8 @@ export default async function ReportPage({ params }: Props) {
   let failed = false
   try {
     report = await getPublishedReport(id, locale)
-  } catch {
+  } catch (error) {
+    if (error instanceof MemberAccessRequired) return <MemberDataPending />
     failed = true
   }
   if (!report && !failed) notFound()

@@ -20,6 +20,8 @@ export function isFollowed(following: Following, event: SportEvent): boolean {
   return followsEvent(followedNames(following), event) || following.leagues.some((league) => sameLeague(league, event))
 }
 
+export const followsAnything = ({ favorites, leagues, players }: Following): boolean => favorites.length + leagues.length + players.length > 0
+
 /** Lower comes first: the member's own team order, then players' teams, then leagues in their order. */
 export function followPriority(following: Following, event: SportEvent): number {
   const names = followedNames(following)

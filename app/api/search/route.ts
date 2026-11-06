@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { ApiError, apiErrorResponse, requireUser } from "@/lib/api-auth"
-import { requireSubscriber } from "@/lib/billing/require-plan"
+import { requireDataAccess } from "@/lib/billing/require-plan"
 import { rateLimit } from "@/lib/rate-limit"
 import { globalSearch } from "@/lib/search/global"
 import { SPORTS, type SportId } from "@/lib/sports/types"
@@ -18,7 +18,7 @@ const query = z.object({
 export async function GET(request: Request) {
   try {
     const user = await requireUser(request)
-    await requireSubscriber(user.uid)
+    await requireDataAccess(user)
     rateLimit(`search:${user.uid}`, 30, 60_000)
     const parsed = query.safeParse(Object.fromEntries(new URL(request.url).searchParams))
     if (!parsed.success) throw new ApiError(400, "invalid_request", "Invalid search")

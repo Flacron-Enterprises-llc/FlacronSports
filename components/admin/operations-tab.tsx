@@ -18,6 +18,7 @@ interface Run {
   job: string
   failed: string[]
   aborted: boolean
+  skipped: boolean
 }
 
 interface Operations {
@@ -158,7 +159,7 @@ export function OperationsTab() {
               {data.runs.map((run) => (
                 <li key={`${run.trigger}-${run.at}`} className="flex flex-wrap justify-between gap-x-3 py-1.5">
                   <span className="text-ink-2">{when(run.at)} · {run.job === "tick" ? copy.scheduled : copy.jobs[run.job as Job] ?? run.job}{run.trigger === "admin" ? ` · ${copy.manual}` : ""}</span>
-                  <span className="font-medium text-ink">{run.aborted ? copy.aborted : run.failed.length ? run.failed.map((name) => copy.jobs[name as Job] ?? name).join(", ") : copy.clean}</span>
+                  <span className="font-medium text-ink">{run.skipped ? copy.skipped : run.aborted ? copy.aborted : run.failed.length ? run.failed.map((name) => copy.jobs[name as Job] ?? name).join(", ") : copy.clean}</span>
                 </li>
               ))}
             </ul>

@@ -10,7 +10,7 @@ import type { PollVote, StoredReaction } from "./engagement"
 import { acceptancePath, type Acceptance } from "./gate"
 import type { CommunityReport } from "./moderation"
 import type { Prediction } from "./predictions"
-import type { ReferralAccount, ReferralClaim } from "./referrals"
+import { referralTombstonePath, type ReferralAccount, type ReferralClaim } from "./referrals"
 import { invitePath, memberPath, roomPath, type Member, type Room } from "./rooms"
 
 type Chat = { scope: ReportScope; scopeId: string }
@@ -155,10 +155,16 @@ export async function eraseCommunityData(db: DocDb, uid: string): Promise<void> 
     ...(await db.query<ReferralClaim>("referral_claims", { where: [["referrerUid", uid]] })),
   ]
 
+  for (const row of claims) {
+    await db.transaction(async (tx) => {
+      tx.set(referralTombstonePath(row.id), { erasedAtUTC: new Date().toISOString() })
+      tx.delete(`referral_claims/${row.id}`)
+    })
+  }
+
   const predictions = await db.query<Prediction>("predictions", { where: [["uid", uid]] })
   const votes = await db.query<PollVote>("poll_votes", { where: [["uid", uid]] })
   await Promise.all([
-    ...claims.map((row) => db.delete(`referral_claims/${row.id}`)),
     ...(referral ? [db.delete(`referral_links/${referral.code}`)] : []),
     db.delete(`referral_accounts/${uid}`),
     db.delete(`community_badges/${uid}`),

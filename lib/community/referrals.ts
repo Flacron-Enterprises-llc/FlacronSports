@@ -26,9 +26,10 @@ export interface ReferralAccount {
 export interface ReferralClaim {
   uid: string
   referrerUid: string
-  status: "pending" | "awarded" | "capped"
+  status: "pending" | "awarded" | "capped" | "reversed"
   claimedAtUTC: string
   settledAtUTC?: string
+  reversedAtUTC?: string
   paymentId?: string
 }
 
@@ -42,6 +43,8 @@ interface BillingPayment {
 const accountPath = (uid: string) => `referral_accounts/${uid}`
 const linkPath = (code: string) => `referral_links/${code}`
 const claimPath = (emailKey: string) => `referral_claims/${emailKey}`
+/** Outlives account deletion and holds only the hash, so a deleted claim cannot be made again. */
+export const referralTombstonePath = (emailKey: string) => `referral_tombstones/${emailKey}`
 
 /**
  * Two spellings of one mailbox come out the same. Sharing a domain does not: friends
@@ -87,7 +90,8 @@ export async function claimReferral(db: DocDb, input: { uid: string; email: stri
     if (!link) throw new ApiError(404, "invite_invalid", "This invitation is not valid")
     const referrer = await tx.get<ReferralAccount>(accountPath(link.uid))
     const existing = await tx.get<ReferralClaim>(claimPath(emailKey))
-    if (!referrer || link.uid === uid || referrer.emailKey === emailKey) throw refused()
+    const erased = await tx.get(referralTombstonePath(emailKey))
+    if (!referrer || erased || link.uid === uid || referrer.emailKey === emailKey) throw refused()
     if (existing) {
       if (existing.uid === uid && existing.referrerUid === link.uid) return { status: "pending" as const }
       throw refused()
@@ -121,6 +125,27 @@ export async function awardReferral(db: DocDb, input: { uid: string; paymentId: 
     tx.set(path, { status: capped ? "capped" : "awarded", settledAtUTC: now.toISOString(), paymentId }, { merge: true })
     if (!capped) tx.set(accountPath(claim.referrerUid), { points: referrer.points + REFERRAL_POINTS, awards: referrer.awards + 1 }, { merge: true })
     return { awarded: !capped }
+  })
+}
+
+/**
+ * The billing webhook calls this for a fully refunded invoice. Only the payment that
+ * earned the reward takes it back. The claim stays "reversed", so a later invoice
+ * cannot earn it again, and running this twice changes nothing.
+ */
+export async function reverseReferral(db: DocDb, input: { paymentId: string }, now: Date): Promise<{ reversed: boolean }> {
+  const [found] = await db.query<ReferralClaim>("referral_claims", { where: [["paymentId", input.paymentId]], limit: 1 })
+  if (!found) return { reversed: false }
+  const path = claimPath(found.id)
+
+  return db.transaction(async (tx) => {
+    const claim = await tx.get<ReferralClaim>(path)
+    if (claim?.status !== "awarded" && claim?.status !== "capped") return { reversed: false }
+    // A capped claim never added anything, so it has nothing to take back.
+    const referrer = claim.status === "awarded" ? await tx.get<ReferralAccount>(accountPath(claim.referrerUid)) : null
+    tx.set(path, { status: "reversed", reversedAtUTC: now.toISOString() }, { merge: true })
+    if (referrer) tx.set(accountPath(claim.referrerUid), { points: Math.max(0, referrer.points - REFERRAL_POINTS), awards: Math.max(0, referrer.awards - 1) }, { merge: true })
+    return { reversed: true }
   })
 }
 

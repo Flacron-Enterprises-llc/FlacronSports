@@ -5,6 +5,7 @@ import Link from "next/link"
 import { ArrowRight, Clapperboard } from "lucide-react"
 import { CardGridSkeleton } from "@/components/site/states"
 import { HighlightPlayer } from "@/components/video/highlight-player"
+import { authFetch } from "@/lib/auth-fetch"
 import { useLocale } from "@/lib/use-locale"
 import type { WatchFeed } from "@/lib/video/catalog"
 import { ErrorNotice } from "./controls"
@@ -20,7 +21,7 @@ export function HighlightsSection() {
 
   const load = useCallback(async () => {
     setFailed(false)
-    const response = await fetch("/api/watch").catch(() => null)
+    const response = await authFetch("/api/watch").catch(() => null)
     if (!response?.ok) return setFailed(true)
     setFeed(await response.json())
   }, [])

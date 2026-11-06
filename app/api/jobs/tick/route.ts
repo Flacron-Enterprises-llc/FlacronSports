@@ -14,7 +14,8 @@ export async function POST(request: Request) {
     // this acknowledges at once. Only a tick that truly could not start reaches the
     // retry and dead-letter path. job_runs and this log are the record of the outcome.
     void runTick()
-      .then((result) => console.log("Jobs tick", JSON.stringify(result)))
+      // A skip must not read "Jobs tick": the heartbeat alarm counts that text as work done.
+      .then((result) => console.log("skipped" in result ? "Tick skipped" : "Jobs tick", JSON.stringify(result)))
       .catch((error: unknown) => console.error("Tick aborted", error instanceof Error ? error.message : "unknown"))
     return NextResponse.json({ success: true, started: true }, { status: 202 })
   } catch (error) {

@@ -1,4 +1,5 @@
 import { DashboardHome } from "@/components/dashboard/dashboard-home"
+import { MemberDataPending } from "@/components/dashboard/member-data-pending"
 import { listPublishedReports } from "@/lib/content/reports"
 import { pageContext, titled, type LocaleParams } from "@/lib/page-context"
 import { getEvents } from "@/lib/sports/service"
@@ -8,7 +9,8 @@ export const generateMetadata = titled((t) => t.dash.dashboard)
 
 export default async function DashboardPage({ params }: LocaleParams) {
   const { locale } = await pageContext(params)
-  const [feed, { reports }] = await Promise.all([getEvents(), listPublishedReports(locale, 30)])
+  const [feed, { state, reports }] = await Promise.all([getEvents(), listPublishedReports(locale, 30)])
+  if (feed.state === "withheld" || state === "withheld") return <MemberDataPending />
   const teasers = reports.slice(0, 30).map(({ id, slug, title, competition, participants, publishedAt }) => ({ id, slug, title, competition, participants, publishedAt }))
   return <DashboardHome feed={feed} reports={teasers} />
 }

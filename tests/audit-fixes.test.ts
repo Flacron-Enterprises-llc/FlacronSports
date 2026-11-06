@@ -1,16 +1,17 @@
 // Synthetic Stripe objects, requests and stores for isolated tests only.
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { readFileSync } from "node:fs"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type Stripe from "stripe"
 import { NextRequest } from "next/server"
 
 const purchases: BillingPurchase[] = []
 let plan = "none"
 
-vi.mock("@/lib/firebase-admin", () => ({ getAdminAuth: () => null, getAdminDb: () => null }))
+vi.mock("@/lib/firebase-admin", () => ({ getAdminAuth: () => ({ verifyIdToken: async () => ({ uid: "member" }) }), getAdminDb: () => null }))
 vi.mock("@/lib/billing/firestore-store", () => ({ getEffectiveAccess: async () => ({ plan }), getUserPurchases: async () => purchases }))
 
 import { ApiError } from "@/lib/api-auth"
-import { ADDONS, applyPurchaseRefund, buildPurchase, hasLivePurchase, type AddonSku, type BillingPurchase } from "@/lib/billing/addons"
+import { addonOpensPath, ADDONS, applyPurchaseRefund, buildPurchase, hasLivePurchase, liveAccessAddons, type AddonSku, type BillingPurchase } from "@/lib/billing/addons"
 import { computeAccess, type EntitlementRecord } from "@/lib/billing/entitlements"
 import { settleOpenSessions } from "@/lib/billing/open-sessions"
 import { applyPlanChange, planChangeChargesNow } from "@/lib/billing/plan-change"
@@ -147,7 +148,7 @@ describe("add-on access without a plan", () => {
 
 describe("subscription refunds", () => {
   const charge = (overrides = {}) => ({ id: "ch_1", metadata: {}, customer: "cus_1", payment_intent: "pi_1", amount: 2999, amount_refunded: 2999, refunded: true, currency: "usd", ...overrides })
-  const invoice = (lineEnd: number) => ({ id: "in_1", parent: { subscription_details: { subscription: "sub_1" } }, lines: { data: [{ period: { end: lineEnd } }] } }) as unknown as Stripe.Invoice
+  const invoice = (lineEnd: number, billing_reason: string | null = "subscription_cycle") => ({ id: "in_1", billing_reason, parent: { subscription_details: { subscription: "sub_1" } }, lines: { data: [{ period: { end: lineEnd } }] } }) as unknown as Stripe.Invoice
 
   it("ends access in Stripe and here, and audits it, for the charge paying the current period", async () => {
     const { commits, canceled, deps } = harness([subscription("sub_1")], { invoiceForPayment: async () => invoice(9000) })
@@ -178,6 +179,26 @@ describe("subscription refunds", () => {
     await processStripeEvent(stripeEvent("charge.refunded", charge({ metadata: { app_id: "flacron-sport", sku: "day_pass" } })), deps)
     expect(lookup).not.toHaveBeenCalled()
     expect(canceled).toEqual([])
+  })
+  it("ends access for the first invoice too", async () => {
+    const { canceled, deps } = harness([subscription("sub_1")], { invoiceForPayment: async () => invoice(9000, "subscription_create") })
+    await processStripeEvent(stripeEvent("charge.refunded", charge()), deps)
+    expect(canceled).toEqual(["sub_1"])
+  })
+  it.each(["subscription_update", "manual", null])("keeps the paid period and asks for review when a %s invoice is refunded", async (reason) => {
+    const { canceled, commits, deps } = harness([subscription("sub_1")], { invoiceForPayment: async () => invoice(9000, reason) })
+    await processStripeEvent(stripeEvent("charge.refunded", charge()), deps)
+    expect(canceled).toEqual([])
+    expect(commits[0].entitlement).toBeUndefined()
+    expect(commits[0].quarantine).toEqual({ reason: "refund_needs_review", objectId: "ch_1" })
+    expect(commits[0].audit).toMatchObject({ action: "billing.refund_needs_review", detail: { billingReason: reason, stripeInvoiceId: "in_1" } })
+  })
+  it("tells the referral side about a full refund whichever way access went, and retries safely", async () => {
+    const onRefundedInvoice = vi.fn(async () => undefined)
+    const { deps } = harness([subscription("sub_1")], { invoiceForPayment: async () => invoice(4000), onRefundedInvoice })
+    await processStripeEvent(stripeEvent("charge.refunded", charge()), deps)
+    await processStripeEvent(stripeEvent("charge.refunded", charge({ refunded: false, amount_refunded: 100 })), deps)
+    expect(onRefundedInvoice.mock.calls).toEqual([["in_1"]])
   })
   it("sends a refund it cannot link to review", async () => {
     const { commits, deps } = harness([], { invoiceForPayment: async () => null })
@@ -235,6 +256,33 @@ describe("open checkout sessions", () => {
   })
 })
 
+describe("add-ons after a plan ends", () => {
+  const live = (sku: AddonSku) => purchase(sku, {}, Date.now() / 1000)
+
+  it("opens exactly the screens of a live matching purchase", () => {
+    expect(addonOpensPath("/app/rooms", ["room"])).toBe(true)
+    expect(addonOpensPath("/app/rooms/join/abc", ["room"])).toBe(true)
+    expect(addonOpensPath("/app/match/tsdb-1", ["room"])).toBe(true)
+    expect(addonOpensPath("/app/match/tsdb-1", ["export"])).toBe(true)
+    expect(addonOpensPath("/app/rooms", ["export"])).toBe(false)
+    expect(addonOpensPath("/app/roomsomething", ["room"])).toBe(false)
+    for (const path of ["/app", "/app/scores", "/app/clubs", "/app/watch", "/app/predictions"]) expect(addonOpensPath(path, ["room", "export"])).toBe(false)
+    expect(addonOpensPath("/app/match/tsdb-1", [])).toBe(false)
+  })
+  it("names only live room and export purchases", () => {
+    expect(liveAccessAddons([live("room_pass"), live("export_pack"), live("assistant_100"), live("day_pass")], Date.now())).toEqual(["room", "export"])
+    expect(liveAccessAddons([{ ...live("room_pass"), status: "revoked" }], Date.now())).toEqual([])
+    expect(liveAccessAddons([live("room_pass")], Date.now() + 200 * 3_600_000)).toEqual([])
+  })
+  it("uses the purchase check on every route a room needs", () => {
+    for (const route of ["rooms/join", "community/accept", "community/report", "community/block", "community/react"]) {
+      const source = readFileSync(`app/api/${route}/route.ts`, "utf8")
+      expect(source).toMatch(/requireSubscriberOrPurchase\(user\.uid, "room"\)/)
+      expect(source).not.toMatch(/requireSubscriber\(/)
+    }
+  })
+})
+
 describe("refunded day pass", () => {
   const at = (seconds: number) => new Date(seconds * 1000).toISOString()
 
@@ -277,26 +325,30 @@ describe("client address", () => {
   })
 })
 
-describe("public feed limits", () => {
+describe("feed limits", () => {
   const day = (offset: number) => new Date(Date.now() + offset * DAY * 1000).toISOString().slice(0, 10)
+  const signedIn = { headers: { authorization: "Bearer member" } }
+  beforeEach(() => {
+    plan = "basic"
+  })
 
   it.each([[-40], [40]])("refuses a date %i days away before any provider call", async (offset) => {
     const provider = vi.fn(async () => new Response("{}"))
     vi.stubGlobal("fetch", provider)
-    expect((await matchesRoute(new Request(`https://api.test/api/matches?date=${day(offset)}`))).status).toBe(400)
+    expect((await matchesRoute(new Request(`https://api.test/api/matches?date=${day(offset)}`, signedIn))).status).toBe(400)
     expect(provider).not.toHaveBeenCalled()
   })
   it("refuses a date that does not exist", async () => {
-    expect((await matchesRoute(new Request("https://api.test/api/matches?date=2026-13-45"))).status).toBe(400)
+    expect((await matchesRoute(new Request("https://api.test/api/matches?date=2026-13-45", signedIn))).status).toBe(400)
   })
   it("accepts today and the edges of the window", async () => {
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ events: [] })))
-    expect((await matchesRoute(new Request(`https://api.test/api/matches?date=${day(-30)}&sport=football`))).status).toBe(200)
-    expect((await matchesRoute(new Request(`https://api.test/api/matches?date=${day(30)}&sport=football`))).status).toBe(200)
+    expect((await matchesRoute(new Request(`https://api.test/api/matches?date=${day(-30)}&sport=football`, signedIn))).status).toBe(200)
+    expect((await matchesRoute(new Request(`https://api.test/api/matches?date=${day(30)}&sport=football`, signedIn))).status).toBe(200)
   })
-  it("answers 429 once a visitor passes the limit", async () => {
+  it("answers 429 once a member passes the limit", async () => {
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ events: [] })))
-    const call = () => matchesRoute(new Request("https://api.test/api/matches?sport=football", { headers: { "x-forwarded-for": "3.3.3.3, 4.4.4.4" } }))
+    const call = () => matchesRoute(new Request("https://api.test/api/matches?sport=football", signedIn))
     for (let index = 0; index < 240; index += 1) await call()
     expect((await call()).status).toBe(429)
   })

@@ -23,12 +23,14 @@ vi.mock("@/lib/firebase-admin", () => ({ getAdminAuth: () => null, getAdminDb: (
 
 const NOW = new Date("2026-11-05T18:00:00Z")
 const DAY = 86_400_000
+const HOUR = 3_600_000
 
 function memoryDb() {
   const store = new Map<string, Record<string, unknown>>()
   const ref = (key: string) => ({
     key,
     get: async () => ({ exists: store.has(key), data: () => store.get(key) }),
+    set: async (value: Record<string, unknown>) => void store.set(key, value),
   })
   type Ref = ReturnType<typeof ref>
   const db = {
@@ -110,6 +112,38 @@ describe("recaps", () => {
     await runRecaps(db, [event()], { detailFor, fetchedAt: "t" }, NOW)
     expect(detailFor).toHaveBeenCalledTimes(1)
     expect([...store.keys()].sort()).toEqual(["reports/tsdb-1-recap-en", "reports/tsdb-1-recap-fr"])
+  })
+  it("remembers a game with nothing to report, until its facts move or the wait is up", async () => {
+    const { db, store } = memoryDb()
+    const detailFor = vi.fn(async (_item: SportEvent, onFetch: () => void) => (onFetch(), detail([])))
+    await runRecaps(db, [event()], { detailFor, fetchedAt: "t" }, NOW)
+    await runRecaps(db, [event()], { detailFor, fetchedAt: "t" }, new Date(NOW.getTime() + 5 * HOUR))
+    expect(detailFor).toHaveBeenCalledTimes(1)
+    expect([...store.keys()]).toEqual(["recap_checks/tsdb-1"])
+    await runRecaps(db, [event({ score: { kind: "team", home: 3, away: 1 } })], { detailFor, fetchedAt: "t" }, new Date(NOW.getTime() + 5 * HOUR))
+    expect(detailFor).toHaveBeenCalledTimes(2)
+    await runRecaps(db, [event({ score: { kind: "team", home: 3, away: 1 } })], { detailFor, fetchedAt: "t" }, new Date(NOW.getTime() + 12 * HOUR))
+    expect(detailFor).toHaveBeenCalledTimes(3)
+  })
+  it("does not remember a provider failure", async () => {
+    const { db, store } = memoryDb()
+    const detailFor = vi.fn(async () => ({ ...detail([]), state: "unavailable" as const }))
+    await runRecaps(db, [event()], { detailFor, fetchedAt: "t" }, NOW)
+    expect(store.size).toBe(0)
+  })
+  it("lets games with no timeline stop starving the ones that have one", async () => {
+    const { db } = memoryDb()
+    const quiet = Array.from({ length: 40 }, (_, index) => event({ id: `quiet-${index}`, scheduledStartUTC: "2026-11-05T16:00:00.000Z" }))
+    const detailFor = vi.fn(async (item: SportEvent, onFetch: () => void) => (onFetch(), detail(item.id === "tsdb-1" ? goals : [])))
+    expect((await runRecaps(db, [...quiet, event()], { detailFor, fetchedAt: "t" }, NOW)).skipped).toBe(1)
+    expect((await runRecaps(db, [...quiet, event()], { detailFor, fetchedAt: "t" }, NOW)).created).toBe(2)
+  })
+  it("spends a slot only on a real fetch", async () => {
+    const { db } = memoryDb()
+    const stored = Array.from({ length: 45 }, (_, index) => event({ id: `stored-${index}` }))
+    const detailFor = vi.fn(async () => detail(goals))
+    const counts = await runRecaps(db, stored, { detailFor, fetchedAt: "t" }, NOW)
+    expect(counts).toMatchObject({ skipped: 0, created: 90 })
   })
   it("keeps going when one game's detail cannot be read", async () => {
     const { db } = memoryDb()

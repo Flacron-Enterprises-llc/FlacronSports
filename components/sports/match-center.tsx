@@ -5,6 +5,7 @@ import { Activity, ExternalLink, LayoutList, ListChecks, MessagesSquare, PlayCir
 import { usePreferences } from "@/components/account/prefs-provider"
 import { ErrorNotice, Tabs } from "@/components/dashboard/controls"
 import { btn, Panel, Skeleton } from "@/components/site/states"
+import { authFetch } from "@/lib/auth-fetch"
 import { useLocale } from "@/lib/use-locale"
 import type { MatchViewing } from "@/lib/video/catalog"
 import { HighlightPlayer } from "@/components/video/highlight-player"
@@ -50,7 +51,7 @@ export function ViewingProvider({ matchId, children }: { matchId: string; childr
 
   const check = useCallback(async () => {
     setState("loading")
-    const response = await fetch(`/api/matches/${encodeURIComponent(matchId)}/viewing-options`).catch(() => null)
+    const response = await authFetch(`/api/matches/${encodeURIComponent(matchId)}/viewing-options`).catch(() => null)
     if (!response?.ok) return setState("failed")
     setResult(await response.json())
     setState("idle")

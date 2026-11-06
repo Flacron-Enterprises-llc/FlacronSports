@@ -3,6 +3,7 @@ import type { Firestore } from "firebase-admin/firestore"
 import { ApiError, featureOn } from "@/lib/api-auth"
 import type { DocDb } from "@/lib/doc-db"
 import { getAdminDb } from "@/lib/firebase-admin"
+import { memberFetch, MemberAccessRequired } from "@/lib/member-fetch"
 import { getDictionary, LOCALES, type Locale } from "@/lib/i18n"
 import { eventTitle, resultLine } from "@/lib/sports/presentation"
 import type { EventScore, SportEvent } from "@/lib/sports/types"
@@ -283,7 +284,7 @@ export async function applyCorrection(db: DocDb, id: string, correction: { body:
 }
 
 export interface ReportList {
-  state: "ok" | "unavailable"
+  state: "ok" | "unavailable" | "withheld"
   reports: Report[]
 }
 
@@ -292,14 +293,14 @@ export interface ReportList {
 async function fromBackend<T>(path: string): Promise<T | null> {
   const origin = process.env.API_ORIGIN
   if (!origin) return null
-  const response = await fetch(`${origin}${path}`, { next: { revalidate: 60 } })
+  const response = await memberFetch(`${origin}${path}`)
   if (response.status === 404) return { report: null } as T
   if (!response.ok) throw new Error(`Backend responded ${response.status}`)
   return response.json() as Promise<T>
 }
 
 export async function listPublishedReports(locale: Locale, limit = 200): Promise<ReportList> {
-  const remote = await fromBackend<ReportList>(`/api/reports?locale=${locale}`).catch(() => ({ state: "unavailable", reports: [] }) as ReportList)
+  const remote = await fromBackend<ReportList>(`/api/reports?locale=${locale}`).catch((error) => ({ state: error instanceof MemberAccessRequired ? "withheld" : "unavailable", reports: [] }) as ReportList)
   if (remote) return remote
   const db = getAdminDb()
   if (!db) return { state: "unavailable", reports: [] }

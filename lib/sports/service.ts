@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { gunzipSync, gzipSync } from "node:zlib"
 import { ApiError } from "@/lib/api-auth"
 import { getAdminDb } from "@/lib/firebase-admin"
+import { memberFetch, MemberAccessRequired } from "@/lib/member-fetch"
 import { countMetric } from "@/lib/ops/metrics"
 import { Breaker, CircuitOpenError, type BreakerStatus } from "./breaker"
 import { coverageRules, eventAllowed, sportAllowed } from "./coverage"
@@ -16,8 +17,10 @@ const BACKEND_TIMEOUT_MS = 20_000
 // Every provider call in this process shares one queue, so traffic and the scheduled
 // job together stay under the rate limit. A visitor never waits long for a place.
 const PROVIDER_GAP_MS = 3000
-// The paid plan allows 100 calls a minute. This leaves room for the live score poll.
-const PAID_PROVIDER_GAP_MS = 1000
+// The paid plan allows 100 calls a minute across the service, and this gap holds per
+// task. Up to 3 tasks at 30 calls each leaves room for their live score polls. Raising
+// MaxCapacity in flacron-sport.yml means widening this.
+const PAID_PROVIDER_GAP_MS = 2000
 const RATE_LIMIT_COOLDOWN_MS = 60_000
 const VISITOR_MAX_WAIT_MS = 6000
 const VISITOR_BUDGET_MS = 8000
@@ -367,11 +370,15 @@ export function utcDate(date: Date = new Date()): string {
 export async function fromBackend<T>(path: string): Promise<T | null> {
   const origin = process.env.API_ORIGIN
   if (!origin) return null
-  const response = await fetch(`${origin}${path}`, { next: { revalidate: 60 }, signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS) })
+  const response = await memberFetch(`${origin}${path}`, { signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS) })
   if (response.status === 404) return { event: null } as T
   if (!response.ok) throw new ApiError(503, "provider_unavailable", "Sports data is temporarily unavailable")
   return response.json() as Promise<T>
 }
+
+const whenWithheld = <T,>(result: T) => (error: unknown): T | null => (error instanceof MemberAccessRequired ? result : null)
+// Carries no provider name, because this reaches the page of someone without a plan.
+const withheldFeed = (fetchedAt: string) => ({ state: "withheld" as const, source: "", fetchedAt, limited: false })
 
 /** Requests for the same day share one build, so a burst of visitors costs one pass over the feed. */
 export async function getEvents(options: { date?: string; sport?: SportId; refresh?: boolean } = {}): Promise<EventFeed> {
@@ -399,7 +406,7 @@ async function buildEvents(options: { date?: string; sport?: SportId; refresh?: 
   const base = { source: PROVIDER_NAME, fetchedAt, limited: apiKey().limited }
   // The frontend never calls the provider itself: its own retry would outlast the page timeout.
   if (process.env.API_ORIGIN && !options.refresh) {
-    return (await fromBackend<EventFeed>(`/api/matches?${query}`).catch(() => null)) ?? { ...base, state: "unavailable", events: [] }
+    return (await fromBackend<EventFeed>(`/api/matches?${query}`).catch(whenWithheld({ ...withheldFeed(fetchedAt), events: [] }))) ?? { ...base, state: "unavailable", events: [] }
   }
 
   // One at a time: every sport at once is what trips the provider's rate limit.
@@ -480,13 +487,14 @@ const DETAIL_DEFAULT_FRESH_MS = 15 * 60_000
  * Asked for by one game's page, so unlike the daily feeds it refreshes on the visit
  * itself. The last stored answer stands in if the provider cannot be reached.
  */
-async function loadDetail<T>(path: string, freshMs: number): Promise<T> {
+async function loadDetail<T>(path: string, freshMs: number, onFetch?: () => void): Promise<T> {
   const now = Date.now()
   const cached = memory.get(path)
   if (cached && now - cached.at < freshMs) return cached.data as T
   const snapshot = await readSnapshot(path)
   if (snapshot && now - snapshot.at < freshMs) return snapshot.data as T
   try {
+    onFetch?.()
     const data = await request<T>(path)
     remember(path, data, now)
     await writeSnapshot(path, data, now)
@@ -498,14 +506,14 @@ async function loadDetail<T>(path: string, freshMs: number): Promise<T> {
   }
 }
 
-/** Empty, not an error, for a game the provider has no detail on. */
-export async function getMatchDetail(event: SportEvent): Promise<MatchDetail> {
+/** Empty, not an error, for a game the provider has no detail on. onFetch fires when stored data will not do. */
+export async function getMatchDetail(event: SportEvent, onFetch?: () => void): Promise<MatchDetail> {
   const id = event.provider.eventId
   const freshMs = DETAIL_FRESH_MS[event.status] ?? DETAIL_DEFAULT_FRESH_MS
   const [timeline, stats, lineups] = await Promise.allSettled([
-    loadDetail<{ timeline?: RawTimeline[] | null }>(`lookuptimeline.php?id=${id}`, freshMs),
-    loadDetail<{ eventstats?: RawStat[] | null }>(`lookupeventstats.php?id=${id}`, freshMs),
-    loadDetail<{ lineup?: RawLineup[] | null }>(`lookuplineup.php?id=${id}`, freshMs),
+    loadDetail<{ timeline?: RawTimeline[] | null }>(`lookuptimeline.php?id=${id}`, freshMs, onFetch),
+    loadDetail<{ eventstats?: RawStat[] | null }>(`lookupeventstats.php?id=${id}`, freshMs, onFetch),
+    loadDetail<{ lineup?: RawLineup[] | null }>(`lookuplineup.php?id=${id}`, freshMs, onFetch),
   ])
   const value = <T,>(result: PromiseSettledResult<T>): T | null => (result.status === "fulfilled" ? result.value : null)
   const detail = {
@@ -600,7 +608,7 @@ export async function getTeamFixtures(name: string, sport?: SportId): Promise<Te
   const empty = { upcoming: [], recent: [] }
   if (process.env.API_ORIGIN) {
     const query = new URLSearchParams({ name, ...(sport ? { sport } : {}) })
-    return (await fromBackend<TeamFixtures>(`/api/teams?${query}`).catch(() => null)) ?? { team: null, ...empty, feed: { ...base, limited: false, state: "unavailable" } }
+    return (await fromBackend<TeamFixtures>(`/api/teams?${query}`).catch(whenWithheld({ team: null, ...empty, feed: withheldFeed(base.fetchedAt) }))) ?? { team: null, ...empty, feed: { ...base, limited: false, state: "unavailable" } }
   }
 
   let team: TeamFixtures["team"]
@@ -642,7 +650,7 @@ export interface StandingRow {
 }
 
 export interface Standings {
-  state: "ok" | "empty" | "unavailable"
+  state: "ok" | "empty" | "unavailable" | "withheld"
   league: string | null
   season: string | null
   rows: StandingRow[]
@@ -705,7 +713,7 @@ export async function getStandings(leagueId: string): Promise<Standings> {
   const base = { source: PROVIDER_NAME, fetchedAt: new Date().toISOString(), limited: apiKey().limited }
   const none = { league: null, season: null, rows: [], sourceUpdatedAt: null }
   if (process.env.API_ORIGIN) {
-    return (await fromBackend<Standings>(`/api/standings/${encodeURIComponent(leagueId)}`).catch(() => null)) ?? { ...base, ...none, limited: false, state: "unavailable" }
+    return (await fromBackend<Standings>(`/api/standings/${encodeURIComponent(leagueId)}`).catch(whenWithheld({ ...withheldFeed(base.fetchedAt), ...none }))) ?? { ...base, ...none, limited: false, state: "unavailable" }
   }
   try {
     const data = await fetchJson<{ table: RawStanding[] | null }>(`lookuptable.php?${new URLSearchParams({ l: leagueId })}`)

@@ -3,8 +3,9 @@ import type { PlanId } from "@/lib/billing/plans"
 import { brandedEmail } from "@/lib/email-service"
 import { getDictionary, localePath } from "@/lib/i18n"
 import type { Preferences } from "@/lib/me/preferences-defaults"
+import { followsAnything, isFollowed } from "@/lib/sports/following"
 import type { SportEvent } from "@/lib/sports/types"
-import { buildAlert, buildSummary, detailAlerts, dueAlerts, followsEvent, localClock, summaryDue, suppressionReason, type DueAlert, type NoticeType } from "./rules"
+import { buildAlert, buildSummary, detailAlerts, dueAlerts, localClock, summaryDue, suppressionReason, type DueAlert, type NoticeType } from "./rules"
 
 export const NOTIFICATIONS_COLLECTION = "notifications"
 // Holds no personal data: one line per followed event, the time it was last seen at.
@@ -205,9 +206,9 @@ export async function runAlerts(deps: AlertDeps): Promise<AlertCounts> {
       console.error("Summary delivery failed", error instanceof Error ? error.message : "unknown")
     }
     const reminded = new Set(prefs.reminders.map((reminder) => reminder.eventId))
-    if (!prefs.favorites.length && !reminded.size) continue
-    const mine = due.filter(({ event, type }) => followsEvent(prefs.favorites, event) || (type === "start" && reminded.has(event.id)))
-    const watched = movable.filter((event) => followsEvent(prefs.favorites, event) || reminded.has(event.id))
+    if (!followsAnything(prefs) && !reminded.size) continue
+    const mine = due.filter(({ event, type }) => isFollowed(prefs, event) || (type === "start" && reminded.has(event.id)))
+    const watched = movable.filter((event) => isFollowed(prefs, event) || reminded.has(event.id))
     if (!mine.length && !watched.length) continue
     try {
       const moves = (await Promise.all(watched.map(async (event) => ({ event, change: await kickoffs.changeFor(event) })))).filter(({ change }) => change)

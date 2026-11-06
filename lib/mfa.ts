@@ -8,6 +8,7 @@ import {
   type User,
 } from "firebase/auth"
 import { getAuthInstance } from "@/lib/firebase-auth"
+import { syncMemberCookie } from "@/lib/member-session"
 
 const DISABLED_CODES = new Set(["auth/operation-not-allowed", "auth/admin-restricted-operation", "auth/unsupported-first-factor"])
 
@@ -52,5 +53,6 @@ export function startSecondFactor(error: unknown): SecondFactorChallenge | "unsu
 export async function completeTotpSignIn(challenge: SecondFactorChallenge, code: string) {
   const assertion = TotpMultiFactorGenerator.assertionForSignIn(challenge.enrollmentId, code)
   const credential = await challenge.resolver.resolveSignIn(assertion)
+  await syncMemberCookie(credential.user)
   return credential.user
 }

@@ -13,7 +13,7 @@ import { canRemind, followPriority, isFollowed, moveItem, toggleReminder } from 
 import { resolveHomeFeed, trendingCompetitions } from "@/lib/sports/home-feed"
 import { normalizePlayer } from "@/lib/sports/player"
 import { sportSwitchPath } from "@/lib/sports/sport-link"
-import { tableAround, teamForm } from "@/lib/sports/team-form"
+import { formByGame, tableAround } from "@/lib/sports/detail"
 import type { SportEvent } from "@/lib/sports/types"
 import { fakeDb } from "./fake-db"
 
@@ -198,7 +198,7 @@ describe("home feed", () => {
 
 describe("team page", () => {
   it("works out form from finished games only, newest first", () => {
-    const form = teamForm([
+    const form = formByGame([
       finished(2, 0, { id: "a", scheduledStartUTC: "2026-11-01T00:00:00.000Z" }),
       finished(1, 1, { id: "b", scheduledStartUTC: "2026-11-02T00:00:00.000Z" }),
       finished(0, 3, { id: "c", scheduledStartUTC: "2026-11-03T00:00:00.000Z" }),
@@ -240,7 +240,7 @@ describe("sport switcher", () => {
 describe("wiring", () => {
   it("guards every new member route with the plan check", () => {
     for (const path of ["app/api/search/route.ts", "app/api/players/[id]/route.ts", "app/api/me/calendar/route.ts", "app/api/me/calendar-feed/route.ts", "app/api/me/board/route.ts", "app/api/me/saved-reports/route.ts", "app/api/share/route.ts"]) {
-      expect(readFileSync(path, "utf8"), path).toContain("requireSubscriber(user.uid)")
+      expect(readFileSync(path, "utf8"), path).toMatch(/requireSubscriber\(user\.uid\)|requireDataAccess\(user\)/)
     }
   })
   it("includes saved reports and calendar records in export and deletion", () => {

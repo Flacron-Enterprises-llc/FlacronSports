@@ -20,7 +20,8 @@ vi.mock("@/lib/use-locale", async () => {
 
 import { EventCard } from "@/components/sports/event-card"
 import { EventResult } from "@/components/sports/event-result"
-import { buildAlert, dueAlerts, followsEvent } from "@/lib/alerts/rules"
+import { buildAlert, dueAlerts } from "@/lib/alerts/rules"
+import { followsEvent } from "@/lib/sports/following"
 import { supportsScorePrediction } from "@/lib/community/predictions"
 import { buildReport, isGrounded, withholdReason } from "@/lib/content/reports"
 import { getDictionary } from "@/lib/i18n"

@@ -1,6 +1,7 @@
 // What the provider reports about a single game. Nothing here is estimated:
 // a section the provider does not cover comes back empty and is not shown.
 
+import type { Locale } from "@/lib/i18n"
 import type { EventStatus, SportEvent, SportId } from "./types"
 
 export type TimelineKind = "goal" | "penalty" | "missed-penalty" | "own-goal" | "yellow" | "red" | "substitution" | "var" | "other"
@@ -138,6 +139,22 @@ export function normalizeStats(rows: RawStat[] | null | undefined, sport: SportI
   })
 }
 
+// The source writes in English. A label with no term is dropped on other locales rather
+// than shown untranslated, as football's curated list already does.
+export function labelStats(rows: StatRow[], names: Record<string, string>, locale: Locale): (StatRow & { label: string })[] {
+  return rows.flatMap((row) => {
+    const label = names[row.key] ?? (locale === "en" ? row.label ?? row.key : null)
+    return label ? [{ ...row, label }] : []
+  })
+}
+
+export function labelTimeline(items: TimelineItem[], kinds: Record<Exclude<TimelineKind, "other">, string>, locale: Locale): (TimelineItem & { label: string })[] {
+  return items.flatMap((item) => {
+    const label = item.kind === "other" ? (locale === "en" ? item.label : null) : kinds[item.kind]
+    return label ? [{ ...item, label }] : []
+  })
+}
+
 function positionGroup(position: string | null | undefined): PositionGroup {
   const text = (position ?? "").toLowerCase()
   if (text.includes("goalkeeper")) return "goalkeeper"
@@ -174,13 +191,29 @@ function resultFor(event: SportEvent, team: string): FormResult | null {
   return ownKicks === otherKicks ? null : ownKicks > otherKicks ? "win" : "loss"
 }
 
-/** Most recent first, and only games before this one, so an old match page shows the form it had then. */
-export function teamForm(recent: SportEvent[], team: string, match: Pick<SportEvent, "id" | "scheduledStartUTC">, limit = 5): FormResult[] {
+/** Most recent first. Given a match, only games before it, so an old match page shows the form it had then. */
+export function formByGame(recent: SportEvent[], team: string, match?: Pick<SportEvent, "id" | "scheduledStartUTC">, limit = 5): { eventId: string; result: FormResult }[] {
   return recent
-    .filter((event) => event.id !== match.id && (!match.scheduledStartUTC || (event.scheduledStartUTC ?? "") < match.scheduledStartUTC))
+    .filter((event) => !match || (event.id !== match.id && (!match.scheduledStartUTC || (event.scheduledStartUTC ?? "") < match.scheduledStartUTC)))
     .sort((a, b) => (b.scheduledStartUTC ?? "").localeCompare(a.scheduledStartUTC ?? ""))
-    .flatMap((event) => resultFor(event, team) ?? [])
+    .flatMap((event) => {
+      const result = resultFor(event, team)
+      return result ? [{ eventId: event.id, result }] : []
+    })
     .slice(0, limit)
+}
+
+export function teamForm(recent: SportEvent[], team: string, match: Pick<SportEvent, "id" | "scheduledStartUTC">, limit = 5): FormResult[] {
+  return formByGame(recent, team, match, limit).map(({ result }) => result)
+}
+
+/** The rows around a team, so its page shows its place without the whole table. Empty when it is not listed. */
+export function tableAround<T extends { team: string }>(rows: T[], team: string, radius = 2): T[] {
+  const wanted = team.toLowerCase()
+  const index = rows.findIndex((row) => row.team.toLowerCase() === wanted)
+  if (index === -1) return []
+  const start = Math.max(0, Math.min(index - radius, rows.length - radius * 2 - 1))
+  return rows.slice(start, start + radius * 2 + 1)
 }
 
 const LIVE_STALE_MS = 5 * 60_000

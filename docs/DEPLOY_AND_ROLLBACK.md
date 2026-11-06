@@ -9,7 +9,7 @@ Pushing to the `main` branch on GitHub starts `.github/workflows/deploy.yml`, wh
 3. Starts the new image on ECS. If it fails its health checks, ECS puts the old one back and the deploy fails.
 4. Calls `/api/health` until it reports the new commit.
 5. Mirrors the code to CodeCommit and starts an Amplify build. Amplify builds from that mirror because the organization disables deploy keys.
-6. Checks the home page, pricing, `/api/health` and `/api/matches`.
+6. Checks the home page, pricing and `/api/health`, and that `/api/matches` refuses a request with no account.
 7. Runs the browser tests against the live site.
 
 To confirm a deploy, compare the commit on `main` with the `commit` value from `https://flacronsport.com/api/health`.

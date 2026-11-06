@@ -48,6 +48,21 @@ test("the footer has the seven company profiles", async ({ page }) => {
   await expect(page.locator('footer a[aria-label*="Flacron Enterprises on"]')).toHaveCount(7)
 })
 
+test("data needs an account, and the health check does not", async ({ request }) => {
+  expect((await request.get("/api/health")).status()).toBe(200)
+  for (const path of ["/api/matches?pageSize=3000", "/api/watch", "/api/reports", "/api/standings/4328", "/api/teams?name=Arsenal"]) {
+    expect((await request.get(path)).status(), path).toBe(401)
+  }
+})
+
+test("a product page holds no data for a visitor with no account", async ({ request }) => {
+  for (const path of ["/app", "/app/scores", "/app/news", "/app/match/tsdb-1"]) {
+    const response = await request.get(path)
+    expect(response.status(), path).toBe(200)
+    expect(await response.text(), path).not.toMatch(/"events":\[\{|\\"events\\":\[\{|TheSportsDB/)
+  }
+})
+
 test("signed-out visitors are sent to sign in", async ({ page }) => {
   await page.goto("/app/scores")
   await expect(page).toHaveURL(/\/signin\?next=/)

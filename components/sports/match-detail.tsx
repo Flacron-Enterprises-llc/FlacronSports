@@ -5,7 +5,8 @@ import { Activity, ArrowLeftRight, CircleDot, Flag, ListChecks, ShieldAlert, Squ
 import { usePreferences } from "@/components/account/prefs-provider"
 import { ErrorNotice } from "@/components/dashboard/controls"
 import { Panel, Skeleton } from "@/components/site/states"
-import type { LineupPlayer, MatchDetail, StatRow, TimelineItem } from "@/lib/sports/detail"
+import { authFetch } from "@/lib/auth-fetch"
+import { labelStats, labelTimeline, type LineupPlayer, type MatchDetail, type StatRow, type TimelineItem } from "@/lib/sports/detail"
 import type { ScoreBreakdown, ScoreSegment, SportEvent } from "@/lib/sports/types"
 import { useLocale } from "@/lib/use-locale"
 import { cn } from "@/lib/utils"
@@ -32,7 +33,7 @@ export function MatchDetailProvider({ matchId, live, children }: { matchId: stri
   const [wanted, setWanted] = useState(false)
 
   const load = useCallback(async () => {
-    const response = await fetch(`/api/matches/${encodeURIComponent(matchId)}/detail`).catch(() => null)
+    const response = await authFetch(`/api/matches/${encodeURIComponent(matchId)}/detail`).catch(() => null)
     if (!response?.ok) return setFailed(true)
     setFailed(false)
     setDetail(await response.json())
@@ -68,19 +69,17 @@ function KindIcon({ kind }: { kind: TimelineItem["kind"] }) {
   return <CircleDot aria-hidden className={cn(size, "text-hot-text")} />
 }
 
-function Timeline({ items }: { items: TimelineItem[] }) {
-  const { t } = useLocale()
+function Timeline({ items }: { items: (TimelineItem & { label: string })[] }) {
   return (
     <ol className="divide-y divide-line">
       {items.map((item) => {
-        const kind = item.kind === "other" ? item.label : t.match.timelineKinds[item.kind]
         return (
           <li key={item.id} className={cn("flex items-center gap-3 py-2 text-sm", item.side === "away" && "sm:flex-row-reverse sm:text-right")}>
             <span className="tabular w-9 shrink-0 font-semibold text-ink">{item.minute === null ? "" : `${item.minute}′`}</span>
             <KindIcon kind={item.kind} />
             <span className="min-w-0">
-              <span className="block font-medium text-ink">{item.player ?? kind}</span>
-              <span className="block text-xs text-ink-2">{kind}{item.secondary ? ` · ${item.secondary}` : ""}</span>
+              <span className="block font-medium text-ink">{item.player ?? item.label}</span>
+              <span className="block text-xs text-ink-2">{item.label}{item.secondary ? ` · ${item.secondary}` : ""}</span>
             </span>
           </li>
         )
@@ -104,9 +103,7 @@ function StatValue({ value }: { value: string | null }) {
   return <span className="text-ink-3"><span aria-hidden>–</span><span className="sr-only">{t.match.notAvailable}</span></span>
 }
 
-function Stats({ rows, home, away }: { rows: StatRow[]; home: string; away: string }) {
-  const { t } = useLocale()
-  const names = t.match.stats as Record<string, string>
+function Stats({ rows, home, away }: { rows: (StatRow & { label: string })[]; home: string; away: string }) {
   return (
     <div>
       <div className="mb-3 flex justify-between gap-3 text-xs font-semibold text-ink-2">
@@ -120,7 +117,7 @@ function Stats({ rows, home, away }: { rows: StatRow[]; home: string; away: stri
             <div key={row.key}>
               <div className="flex items-baseline justify-between gap-3 text-sm">
                 <StatValue value={row.home} />
-                <dt className="min-w-0 text-center text-xs text-ink-2">{names[row.key] ?? row.label ?? row.key}</dt>
+                <dt className="min-w-0 text-center text-xs text-ink-2">{row.label}</dt>
                 <StatValue value={row.away} />
               </div>
               {width !== null && (
@@ -142,7 +139,7 @@ function SegmentCell({ value }: { value: number | null }) {
 }
 
 function Breakdown({ breakdown, home, away }: { breakdown: ScoreBreakdown; home: string; away: string }) {
-  const { t } = useLocale()
+  const { t, locale } = useLocale()
   const { segments, hits, errors } = breakdown
   const overtimes = segments.filter((item) => item.kind === "overtime").length
   const heading = (item: ScoreSegment) => {
@@ -174,7 +171,7 @@ function Breakdown({ breakdown, home, away }: { breakdown: ScoreBreakdown; home:
           </tbody>
         </table>
       </div>
-      {totals.length > 0 && <Stats rows={totals} home={home} away={away} />}
+      {totals.length > 0 && <Stats rows={labelStats(totals, t.match.stats, locale)} home={home} away={away} />}
     </div>
   )
 }
@@ -214,25 +211,26 @@ function Empty({ title, icon, children }: { title: string; icon: React.ReactNode
 
 /** Updates state the result, so they stay behind the spoiler reveal. */
 export function LiveUpdatesTab() {
-  const { t } = useLocale()
+  const { t, locale } = useLocale()
   const { detail, failed, load } = useDetail()
   if (failed && !detail) return <ErrorNotice onRetry={load}>{t.match.detailFailed}</ErrorNotice>
   if (!detail) return <Waiting />
   if (detail.state === "unavailable") return <ErrorNotice onRetry={load}>{t.match.detailFailed}</ErrorNotice>
-  if (detail.timeline.length === 0) return <Empty title={t.match.liveUpdates} icon={<ListChecks aria-hidden />}>{t.match.noUpdates}</Empty>
+  const timeline = labelTimeline(detail.timeline, t.match.timelineKinds, locale)
+  if (timeline.length === 0) return <Empty title={t.match.liveUpdates} icon={<ListChecks aria-hidden />}>{t.match.noUpdates}</Empty>
   return (
     <div className="space-y-4">
       <SpoilerReveal label={t.match.revealDetails} />
-      <SpoilerGuard label={t.match.revealDetails} quiet><Panel title={t.match.liveUpdates} icon={<ListChecks aria-hidden />}><Timeline items={detail.timeline} /></Panel></SpoilerGuard>
+      <SpoilerGuard label={t.match.revealDetails} quiet><Panel title={t.match.liveUpdates} icon={<ListChecks aria-hidden />}><Timeline items={timeline} /></Panel></SpoilerGuard>
     </div>
   )
 }
 
 /** Period scores come with the event itself, so they show even when the detail feed fails. */
 export function StatisticsTab({ home, away, breakdown }: { home: string; away: string; breakdown?: ScoreBreakdown }) {
-  const { t } = useLocale()
+  const { t, locale } = useLocale()
   const { detail, failed, load } = useDetail()
-  const stats = detail?.stats ?? []
+  const stats = labelStats(detail?.stats ?? [], t.match.stats, locale)
   const icon = <Activity aria-hidden />
   if (!breakdown && failed && !detail) return <ErrorNotice onRetry={load}>{t.match.detailFailed}</ErrorNotice>
   if (!breakdown && !detail) return <Waiting />

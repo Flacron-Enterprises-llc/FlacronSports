@@ -1,5 +1,6 @@
 import { Star } from "lucide-react"
 import { MyTeams } from "@/components/account/my-teams"
+import { MemberDataPending } from "@/components/dashboard/member-data-pending"
 import { AppPage, PageHeader } from "@/components/site/states"
 import { pageContext, titled, type LocaleParams } from "@/lib/page-context"
 import { getEvents } from "@/lib/sports/service"
@@ -10,6 +11,7 @@ export const generateMetadata = titled((t) => t.myTeams.title, { robots: { index
 export default async function MyTeamsPage({ params }: LocaleParams) {
   const { t } = await pageContext(params)
   const feed = await getEvents()
+  if (feed.state === "withheld") return <MemberDataPending />
   return (
     <AppPage width="md">
       <PageHeader title={t.myTeams.title} lead={t.myTeams.lead} icon={<Star aria-hidden />} />

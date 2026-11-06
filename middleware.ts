@@ -6,6 +6,10 @@ const CANONICAL_HOSTS = new Map([["www.flacronsport.com", "flacronsport.com"]])
 // English is served without a prefix, French under /fr. A request for /en/... is
 // redirected so each page keeps one canonical URL.
 export function middleware(request: NextRequest) {
+  // ECS answers every path API Gateway sends it and reads the provider directly,
+  // so a page rendered there would skip the plan check pages get through the backend.
+  if (process.env.BACKEND_ONLY === "true") return new NextResponse(null, { status: 404 })
+
   const { pathname, search } = request.nextUrl
 
   const host = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "").split(",")[0].trim().split(":")[0].toLowerCase()
@@ -45,4 +49,4 @@ function alternates(request: NextRequest, path: string, locale: "en" | "fr"): st
 }
 
 // Team names can contain dots ("St. Louis Blues"), which the file rule below would skip.
-export const config = { matcher: ["/app/team/:name", "/((?!api|_next|brand|manifest.webmanifest|robots.txt|sitemap.xml|sw.js|.*\\..*).*)"] }
+export const config = { matcher: ["/app/team/:name", "/:locale(en|fr)/app/:path*", "/((?!api|_next|brand|manifest.webmanifest|robots.txt|sitemap.xml|sw.js|.*\\..*).*)"] }

@@ -1,9 +1,11 @@
 import type { Firestore } from "firebase-admin/firestore"
-import { followsEvent, localClock } from "@/lib/alerts/rules"
+import { localClock } from "@/lib/alerts/rules"
 import type { UserRow } from "@/lib/alerts/notifications"
 import { brandedEmail, type OutboundEmail } from "@/lib/email-service"
 import { getDictionary, localePath, type Locale } from "@/lib/i18n"
 import type { Preferences } from "@/lib/me/preferences-defaults"
+import type { PlanId } from "@/lib/billing/plans"
+import { followsAnything, isFollowed } from "@/lib/sports/following"
 import { eventTitle, isDuel, resultLine } from "@/lib/sports/presentation"
 import type { SportEvent } from "@/lib/sports/types"
 import { unsubscribeToken } from "./token"
@@ -39,7 +41,7 @@ export interface Digest {
 export function buildDigest(prefs: Preferences, events: SportEvent[], now: Date): Digest | null {
   const dictionary = getDictionary(prefs.locale)
   const { newsletter: copy } = dictionary
-  const pool = prefs.favorites.length ? events.filter((event) => followsEvent(prefs.favorites, event)) : events
+  const pool = followsAnything(prefs) ? events.filter((event) => isFollowed(prefs, event)) : events
   const today = localClock(now, prefs.timeZone).date
 
   const results = pool.flatMap((event) => {
@@ -91,6 +93,7 @@ export interface NewsletterDeps {
   db: Firestore
   events: SportEvent[]
   users: Iterable<UserRow> | AsyncIterable<UserRow>
+  planFor(uid: string): Promise<PlanId>
   emailFor(uid: string): Promise<string | null>
   send(email: OutboundEmail): Promise<boolean>
   siteUrl: string
@@ -136,8 +139,10 @@ export async function runNewsletter(deps: NewsletterDeps): Promise<NewsletterCou
 
   for await (const { uid, prefs } of deps.users) {
     if (!prefs.newsletter.optedIn || !isDeliveryHour(now, prefs.timeZone)) continue
-    counts.due += 1
     try {
+      // A plan benefit. Checked only for the people due now, since each check is a read.
+      if ((await deps.planFor(uid)) === "none") continue
+      counts.due += 1
       const digest = buildDigest(prefs, events, now)
       if (!digest) {
         counts.empty += 1

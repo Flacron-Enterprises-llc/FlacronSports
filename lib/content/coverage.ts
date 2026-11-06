@@ -16,6 +16,11 @@ export const COVERAGE_TEMPLATE_VERSION = "coverage-template-v1"
 
 const PREVIEW_WINDOW_MS = 36 * 3_600_000
 const RECAP_DETAILS_PER_TICK = 40
+// A game with nothing to report is left alone until its facts move, so it stops taking
+// a slot from games that have a timeline. Holds no personal data.
+const RECAP_CHECKS = "recap_checks"
+// The feed can post a timeline after full time, so an empty answer is asked again later.
+const RECAP_RECHECK_MS = 6 * 3_600_000
 const ROUNDUP_LINES = 30
 const DEFAULT_ROUNDUP_HOUR_UTC = 6
 
@@ -211,7 +216,7 @@ export async function runPreviews(db: Firestore, events: SportEvent[], fetchedAt
 export async function runRecaps(
   db: Firestore,
   events: SportEvent[],
-  input: { detailFor(event: SportEvent): Promise<MatchDetail>; fetchedAt: string },
+  input: { detailFor(event: SportEvent, onFetch: () => void): Promise<MatchDetail>; fetchedAt: string },
   now: Date = new Date(),
 ): Promise<ReportCounts & { skipped: number }> {
   const counts = { ...emptyCounts(), skipped: 0 }
@@ -220,20 +225,30 @@ export async function runRecaps(
   let fetched = 0
   for (const event of newestFirst) {
     // Match detail spends provider calls, so a game whose facts have not moved is left alone.
+    const factsVersion = sourceVersion(event)
     const existing = await db.collection(REPORTS_COLLECTION).doc(`${event.id}-recap-en`).get()
-    if (existing.exists && (existing.data() as Report).factsVersion === sourceVersion(event)) continue
+    if (existing.exists && (existing.data() as Report).factsVersion === factsVersion) continue
+    const checks = db.collection(RECAP_CHECKS).doc(event.id)
+    const check = (await checks.get()).data() as { factsVersion: string; checkedAt: string } | undefined
+    if (check?.factsVersion === factsVersion && now.getTime() - Date.parse(check.checkedAt) < RECAP_RECHECK_MS) continue
     if (fetched >= RECAP_DETAILS_PER_TICK) {
       counts.skipped += 1
       continue
     }
-    fetched += 1
+    let spent = false
     try {
-      const detail = await input.detailFor(event)
-      await saveAll(db, LOCALES.flatMap((locale) => buildRecap(event, detail, locale, input.fetchedAt, now) ?? []), counts)
+      const detail = await input.detailFor(event, () => {
+        spent = true
+      })
+      const reports = LOCALES.flatMap((locale) => buildRecap(event, detail, locale, input.fetchedAt, now) ?? [])
+      await saveAll(db, reports, counts)
+      // A provider failure says nothing about the game, so it is not remembered.
+      if (reports.length === 0 && detail.state !== "unavailable") await checks.set({ factsVersion, checkedAt: now.toISOString() })
     } catch (error) {
       counts.failed += 1
       console.error("Recap failed", event.id, error instanceof Error ? error.message : "unknown")
     }
+    if (spent) fetched += 1
   }
   return counts
 }

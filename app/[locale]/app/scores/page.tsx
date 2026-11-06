@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { ChevronLeft, ChevronRight, Globe2, Search, Trophy, X } from "lucide-react"
+import { MemberDataPending } from "@/components/dashboard/member-data-pending"
 import { SportIcon } from "@/components/site/sport-icon"
 import { AppPage, btn, EmptyState, PageHeader } from "@/components/site/states"
 import { DateJump } from "@/components/sports/date-jump"
@@ -16,6 +17,7 @@ import { competitionOptions, filterScores, parseFollowFilter } from "@/lib/sport
 import type { EventStatus, SportId } from "@/lib/sports/types"
 import { cn } from "@/lib/utils"
 
+export const dynamic = "force-dynamic"
 export const generateMetadata = titled((t) => t.scores.title)
 
 type Search = { sport?: string; status?: string; date?: string; q?: string; page?: string; competition?: string; fav?: string; favl?: string; region?: string }
@@ -43,6 +45,7 @@ export default async function ScoresPage({ params, searchParams }: Props) {
   const q = (search.q ?? "").trim().slice(0, 80)
 
   const feed = await getEvents({ date, sport })
+  if (feed.state === "withheld") return <MemberDataPending />
   // Built from the whole day, so choosing one competition leaves the others in the list.
   const competitions = competitionOptions(feed.events)
   const competition = competitions.find((option) => option.key === search.competition)?.key

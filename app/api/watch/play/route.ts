@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+import { apiErrorResponse } from "@/lib/api-auth"
+import { requireMember } from "@/lib/billing/require-plan"
 import { allowedClips, viewingFor } from "@/lib/video/catalog"
 import { storedClips } from "@/lib/video/scorebat"
 
@@ -7,6 +9,11 @@ export const dynamic = "force-dynamic"
 // The client sends only an id, so it can never choose what gets embedded.
 // A match is checked again here, uncached, because a video can be removed after listing.
 export async function GET(request: Request) {
+  try {
+    await requireMember(request, "watch-play", 60)
+  } catch (error) {
+    return apiErrorResponse(error)
+  }
   const params = new URL(request.url).searchParams
   const clip = params.get("clip")
   if (clip !== null) {

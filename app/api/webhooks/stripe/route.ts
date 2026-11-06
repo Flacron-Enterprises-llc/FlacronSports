@@ -3,7 +3,7 @@ import type Stripe from "stripe"
 import { firestoreBillingStore, ownsCustomer } from "@/lib/billing/firestore-store"
 import { getStripe, liveModeApproved } from "@/lib/billing/stripe-client"
 import { processStripeEvent } from "@/lib/billing/webhook-core"
-import { awardReferral } from "@/lib/community/referrals"
+import { awardReferral, reverseReferral } from "@/lib/community/referrals"
 import { firestoreDocDb } from "@/lib/doc-db"
 
 export const dynamic = "force-dynamic"
@@ -40,6 +40,7 @@ export async function POST(request: Request) {
       listSubscriptions: async (customer) => (await stripe.subscriptions.list({ customer, status: "all", limit: 20 })).data,
       cancelSubscription: async (id) => void (await stripe.subscriptions.cancel(id)),
       onPaidInvoice: (uid, invoiceId) => awardReferral(firestoreDocDb(), { uid, paymentId: invoiceId }, new Date()),
+      onRefundedInvoice: (invoiceId) => reverseReferral(firestoreDocDb(), { paymentId: invoiceId }, new Date()),
       allowLivemode: liveModeApproved(),
     })
     return NextResponse.json({ received: true, outcome })

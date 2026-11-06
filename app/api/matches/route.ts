@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { apiErrorResponse } from "@/lib/api-auth"
-import { rateLimitClient } from "@/lib/rate-limit"
+import { requireMember } from "@/lib/billing/require-plan"
 import { getEvents } from "@/lib/sports/service"
 import { SPORTS, type EventStatus, type SportId } from "@/lib/sports/types"
 
@@ -27,7 +27,7 @@ const query = z.object({
 
 export async function GET(request: Request) {
   try {
-    rateLimitClient(request, "feed", { visitor: 240, shared: 3000 }, 60_000)
+    await requireMember(request, "feed", 240)
   } catch (error) {
     return apiErrorResponse(error)
   }

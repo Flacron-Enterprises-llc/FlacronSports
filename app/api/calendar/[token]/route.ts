@@ -7,7 +7,7 @@ import { buildCalendar } from "@/lib/calendar/ics"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { getDictionary, localePath } from "@/lib/i18n"
 import { getPreferences } from "@/lib/me/preferences"
-import { clientIp, rateLimit } from "@/lib/rate-limit"
+import { rateLimitClient } from "@/lib/rate-limit"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -15,7 +15,7 @@ export const runtime = "nodejs"
 /** Calendar apps cannot sign in, so the secret token in the link is the credential. */
 export async function GET(request: Request, { params }: { params: Promise<{ token: string }> }) {
   try {
-    rateLimit(`calendar-ics:${clientIp(request)}`, 60, 60_000)
+    rateLimitClient(request, "calendar-ics", { visitor: 60, shared: 600 }, 60_000)
     const token = (await params).token.replace(/\.ics$/, "")
     const uid = await feedOwner(firestoreDocDb(), token)
     if (!uid) throw new ApiError(404, "not_found", "Calendar not found")

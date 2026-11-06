@@ -56,6 +56,7 @@ Written only after Stripe's signature is verified, or by server billing routes.
 |---|---|
 | `feed_snapshots` | A stored, compressed provider answer. Visitors read these instead of calling the provider |
 | `event_kickoffs` | The kickoff last seen for a game, to detect a moved game |
+| `recap_checks` | A finished game with nothing to recap, by facts version, so it stops using recap slots |
 | `coverage_seen` | One per sport: each competition's last data seen. Written by the scheduled job |
 | `admin_config/coverage` | One document: sports and competitions, and competition video, switched off by staff |
 
@@ -91,13 +92,15 @@ Written only after Stripe's signature is verified, or by server billing routes.
 | `prediction_points` | One person's leaderboard total |
 | `prediction_groups`, `prediction_group_members`, `prediction_group_owners`, `prediction_group_invites` | Private prediction groups |
 | `referral_accounts`, `referral_links`, `referral_claims` | Points-only referrals |
+| `referral_tombstones` | Hash of a claim's email, kept after account deletion so that email cannot be referred again |
 
 ### Operations
 
 | Collection | One document is |
 |---|---|
 | `ops_daily` | One UTC day of counters: provider calls, rate-limit hits, failures, email results, playback checks. Saved every few minutes |
-| `job_runs` | One job run. Ids are reused, so scheduled runs keep about a week and staff runs the last 200 |
+| `job_runs` | One job run. Ids are reused, so scheduled runs keep about a week and staff runs the last 200. A skipped tick has its own row |
+| `job_leases` | Which task holds the current tick. Expires by itself after 30 minutes |
 
 ## Backups
 

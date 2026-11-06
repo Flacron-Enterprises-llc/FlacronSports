@@ -17,6 +17,8 @@ export interface JobRun {
   /** Names of the jobs that failed, empty on a clean run. */
   failed: string[]
   aborted: boolean
+  /** Why a scheduled tick did no work. Such a row is not a sign the jobs are healthy. */
+  skipped?: string
   results: Record<string, unknown>
 }
 
@@ -31,7 +33,9 @@ export function failedJobs(results: Record<string, unknown>): string[] {
 
 /** Bookkeeping must never fail the job it describes. JSON drops the undefined values Firestore refuses. */
 export async function recordRun(db: Firestore, run: JobRun): Promise<void> {
-  await db.collection(JOB_RUNS).doc(runId(run.trigger, new Date(run.at))).set(JSON.parse(JSON.stringify(run))).catch((error: unknown) => {
+  // A skip shares its slot with the run it gave way to, so it must not replace that row.
+  const id = `${runId(run.trigger, new Date(run.at))}${run.skipped ? "-skipped" : ""}`
+  await db.collection(JOB_RUNS).doc(id).set(JSON.parse(JSON.stringify(run))).catch((error: unknown) => {
     console.error("Job run not stored", error instanceof Error ? error.message : "unknown")
   })
 }

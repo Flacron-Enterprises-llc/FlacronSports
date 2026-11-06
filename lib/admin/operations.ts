@@ -55,7 +55,7 @@ export async function operationsSummary(now: Date = new Date()) {
     subscriptionHealth(db).catch(() => null),
   ])
 
-  const lastScheduled = runs.find((run) => run.trigger === "schedule") ?? null
+  const lastScheduled = runs.find((run) => run.trigger === "schedule" && !run.skipped) ?? null
   return {
     feed: { state: feed.state, source: feed.source, fetchedAt: feed.fetchedAt, limited: feed.limited, events: feed.events.length },
     jobs: {
@@ -68,7 +68,7 @@ export async function operationsSummary(now: Date = new Date()) {
     providers: providerStatus(),
     sports: (lastScheduled?.results.sports ?? {}) as Partial<Record<SportId, string>>,
     staleSports: staleSports(seen, now.getTime()),
-    runs: runs.map(({ at, finishedAt, trigger, job, failed, aborted }) => ({ at, finishedAt, trigger, job, failed, aborted })),
+    runs: runs.map(({ at, finishedAt, trigger, job, failed, aborted, skipped }) => ({ at, finishedAt, trigger, job, failed, aborted, skipped: Boolean(skipped) })),
     days,
     unflushed: pendingMetrics(),
     subscriptions,

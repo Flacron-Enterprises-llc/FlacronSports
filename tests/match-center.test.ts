@@ -1,7 +1,7 @@
 // Result text below follows the shapes the provider really returned; events are synthetic.
 import { describe, expect, it } from "vitest"
 import { getDictionary } from "@/lib/i18n"
-import { isStaleUpdate, normalizeStats, normalizeTimeline, teamForm } from "@/lib/sports/detail"
+import { formByGame, isStaleUpdate, labelStats, labelTimeline, normalizeStats, normalizeTimeline, teamForm } from "@/lib/sports/detail"
 import { parseBreakdown, parseClassification } from "@/lib/sports/results"
 import { competitionOptions, filterScores, followFilter, parseFollowFilter } from "@/lib/sports/score-filters"
 import { currentPeriod, normalizeEvent, normalizeStatus } from "@/lib/sports/thesportsdb"
@@ -144,6 +144,28 @@ describe("form", () => {
       played("3", "2026-11-03T00:00:00.000Z", "A", "B", 0, 0, { conclusion: "penalties", shootout: { home: 4, away: 3 } }),
     ]
     expect(teamForm(games, "A", match)).toEqual(["win"])
+  })
+})
+
+describe("one form calculation", () => {
+  it("reads a level shootout win the same on the team page and the match page", () => {
+    const games = [played("1", "2026-11-01T00:00:00.000Z", "A", "B", 1, 1, { conclusion: "penalties", shootout: { home: 3, away: 5 } })]
+    expect(formByGame(games, "B")).toEqual([{ eventId: "1", result: "win" }])
+    expect(teamForm(games, "B", { id: "now", scheduledStartUTC: "2026-11-05T00:00:00.000Z" })).toEqual(["win"])
+  })
+})
+
+describe("provider wording on French pages", () => {
+  const { stats, timelineKinds } = getDictionary("fr").match
+  it("hides a stat with no term and keeps one that has a term", () => {
+    const rows = normalizeStats([{ strStat: "Rebounds", intHome: 40, intAway: 38 }, { strStat: "Fouls", intHome: 3, intAway: 4 }], "basketball")
+    expect(labelStats(rows, stats, "fr")).toEqual([expect.objectContaining({ key: "fouls", label: stats.fouls })])
+    expect(labelStats(rows, getDictionary("en").match.stats, "en").map((row) => row.label)).toEqual(["Rebounds", "Fouls"])
+  })
+  it("hides an other row, and leaves rows with a term alone", () => {
+    const items = normalizeTimeline([{ idTimeline: "1", strTimeline: "Goal", strTimelineDetail: "Normal Goal", intTime: "3" }, { idTimeline: "2", strTimeline: "Injury", intTime: "4" }])
+    expect(labelTimeline(items, timelineKinds, "fr").map((item) => item.label)).toEqual([timelineKinds.goal])
+    expect(labelTimeline(items, getDictionary("en").match.timelineKinds, "en").map((item) => item.label)).toEqual(["Goal", "Injury"])
   })
 })
 

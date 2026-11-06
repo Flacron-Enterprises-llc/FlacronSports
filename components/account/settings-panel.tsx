@@ -38,7 +38,7 @@ function Row({ title, help, children }: { title: string; help?: string; children
 export function SettingsPanel() {
   const { locale, t, href } = useLocale()
   const router = useRouter()
-  const { user, plan } = useAccount()
+  const { user, plan, loaded } = useAccount()
   const { prefs, ready, update } = usePreferences()
   const filters = prefs.alerts.filters ?? { sports: [], majorOnly: false }
   const { confirm, dialog } = useConfirm()
@@ -142,7 +142,7 @@ export function SettingsPanel() {
             <p aria-hidden className="mb-1 text-[13px] font-semibold text-ink">{t.settings.alertTypes}</p>
             <div className="divide-y divide-line">
               {ALERT_ROWS.map((type) => {
-                const locked = plan === "free" && PAID_ALERTS.includes(type)
+                const locked = loaded && plan === "free" && PAID_ALERTS.includes(type)
                 return (
                   <Row key={type} title={t.settings.alertNames[type]} help={locked ? t.settings.alertPaid : undefined}>
                     {(id) => <Switch labelledBy={id} disabled={prefs.alerts.muted || locked} checked={!locked && prefs.alerts.types.includes(type)} onChange={() => toggleAlert(type)} />}
@@ -170,7 +170,7 @@ export function SettingsPanel() {
                   })}
                 </div>
               </>
-            ) : (
+            ) : loaded && (
               <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-2"><Lock aria-hidden className="size-3.5" />{t.settings.alertFiltersLocked}</p>
             )}
           </div>

@@ -59,3 +59,7 @@ Built means code and unit tests exist. LIVE means it was also observed on the de
 ## Pricing update, 2026-11-06
 
 Section 12 prices are superseded by the client's table in D-034: Basic, Plus and Premium are all paid, and an account with no plan is held at a paywall. All benefits in that table are built. Stripe remains in test mode.
+
+## Spec audit, 2026-11-07
+
+The audit, fixes and live results are in `docs/QA_REPORT.md`, which replaces the SPORT, WATCH, ADMIN and CONTENT notes above where they differ. Open items are listed there under "Before launch".

@@ -126,6 +126,7 @@ jobs:
           curl -fsS -o /dev/null "$APP_BASE_URL/"
           curl -fsS -o /dev/null "$APP_BASE_URL/pricing"
           test "$(curl -fsS "$APP_BASE_URL/api/health" | jq -r .commit)" = "$GITHUB_SHA"
+          curl -fsS -o /dev/null "$APP_BASE_URL/api/matches?pageSize=500"
 
   browser-tests:
     needs: deploy-frontend

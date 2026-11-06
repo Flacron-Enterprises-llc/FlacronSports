@@ -10,6 +10,7 @@ import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin"
 import { DEFAULT_PREFERENCES, type Preferences } from "@/lib/me/preferences"
 import { runNewsletter } from "@/lib/newsletter/digest"
 import type { SportId } from "@/lib/sports/types"
+import { refreshClips } from "@/lib/video/scorebat"
 import { enabledSports, getEvent, getEvents, refreshBroadcasts, utcDate } from "@/lib/sports/service"
 import type { SportEvent } from "@/lib/sports/types"
 
@@ -132,5 +133,7 @@ async function tick(now: Date) {
   }
   for (const target of listingTargets(now)) await refreshBroadcasts(target.date, target.sportId).catch(() => undefined)
 
-  return { feed: { yesterday: yesterday.state, today: today.state, events: events.length, calendar }, ...jobs }
+  const clips = await refreshClips()
+
+  return { feed: { yesterday: yesterday.state, today: today.state, events: events.length, calendar, clips }, ...jobs }
 }

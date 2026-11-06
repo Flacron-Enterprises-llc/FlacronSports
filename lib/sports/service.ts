@@ -75,7 +75,7 @@ interface Snapshot {
 const snapshotDoc = (path: string) =>
   getAdminDb()?.collection("feed_snapshots").doc(createHash("sha1").update(path).digest("hex"))
 
-async function readSnapshot(path: string): Promise<Snapshot | null> {
+export async function readSnapshot(path: string): Promise<Snapshot | null> {
   try {
     const doc = await snapshotDoc(path)?.get()
     if (!doc?.exists) return null
@@ -86,7 +86,7 @@ async function readSnapshot(path: string): Promise<Snapshot | null> {
   }
 }
 
-async function writeSnapshot(path: string, data: unknown, at: number): Promise<void> {
+export async function writeSnapshot(path: string, data: unknown, at: number): Promise<void> {
   await snapshotDoc(path)?.set({ body: JSON.stringify(data), at }).catch(() => undefined)
 }
 

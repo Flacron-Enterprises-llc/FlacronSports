@@ -15,7 +15,7 @@ import { getWatchFeed, type WatchFeed } from "@/lib/video/catalog"
 export const dynamic = "force-dynamic"
 export const generateMetadata = titled((t) => t.watch.title)
 
-const EMPTY: WatchFeed = { live: [], highlights: [], broadcasts: [] }
+const EMPTY: WatchFeed = { live: [], highlights: [], clips: [], broadcasts: [] }
 
 async function loadFeed(sport?: SportId): Promise<WatchFeed> {
   const query = sport ? `?sport=${sport}` : ""
@@ -40,7 +40,8 @@ export default async function WatchPage({ params, searchParams }: LocaleParams &
   const feed = await loadFeed(sport)
   const country = viewerCountry((await headers()).get("cloudfront-viewer-country"))
   const broadcasts = [...feed.broadcasts].sort((a, b) => Number(b.country === country) - Number(a.country === country))
-  const nothing = feed.live.length + feed.highlights.length + feed.broadcasts.length === 0
+  const clips = feed.clips ?? []
+  const nothing = feed.live.length + feed.highlights.length + clips.length + feed.broadcasts.length === 0
   const [liveTitle, upcomingTitle, highlightsTitle, replaysTitle] = t.watch.sections
   const chip = (active: boolean) => cn("inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-[13px] font-medium transition-colors", active ? "border-navy bg-navy text-white dark:border-brand dark:bg-brand dark:text-brand-on" : "border-line bg-surface text-ink-2 hover:border-line-strong hover:text-ink")
 
@@ -61,13 +62,21 @@ export default async function WatchPage({ params, searchParams }: LocaleParams &
 
       <section aria-labelledby="watch-highlights" className="mt-6">
         <h2 id="watch-highlights" className="flex items-center gap-2 text-[17px] font-semibold text-ink"><Clapperboard aria-hidden className="size-[18px] text-brand" /> {highlightsTitle}</h2>
-        {feed.highlights.length === 0 ? <p className="mt-2 text-sm text-ink-2">{t.watch.noHighlights}</p> : (
+        {feed.highlights.length + clips.length === 0 ? <p className="mt-2 text-sm text-ink-2">{t.watch.noHighlights}</p> : (
           <ul className="fs-stagger mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {feed.highlights.map((item) => (
               <li key={item.matchId} className="min-w-0 rounded-xl border border-line bg-surface p-3 shadow-[var(--shadow-sm)]">
                 <HighlightPlayer matchId={item.matchId} title={item.title} thumbnailUrl={item.thumbnailUrl} channel={item.channel} />
                 <Link href={href(`/app/match/${item.matchId}`)} className="mt-2 block font-semibold text-ink hover:underline">{item.title}</Link>
                 <p className="mt-0.5 truncate text-[13px] text-ink-2">{item.competition}</p>
+              </li>
+            ))}
+            {clips.map((item) => (
+              <li key={item.id} className="min-w-0 rounded-xl border border-line bg-surface p-3 shadow-[var(--shadow-sm)]">
+                <HighlightPlayer clipId={item.id} title={item.title} thumbnailUrl={item.thumbnailUrl} channel="ScoreBat" />
+                <p className="mt-2 font-semibold text-ink">{item.title}</p>
+                <p className="mt-0.5 truncate text-[13px] text-ink-2">{item.competition}</p>
+                {item.dateUTC && <p className="mt-0.5 text-xs text-ink-2"><LocalTime iso={item.dateUTC} mode="datetime" /></p>}
               </li>
             ))}
           </ul>

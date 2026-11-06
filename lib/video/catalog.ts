@@ -1,5 +1,6 @@
 import { getEvent, storedBroadcasts, storedEvents, utcDate, type Broadcast } from "@/lib/sports/service"
 import type { SportEvent, SportId } from "@/lib/sports/types"
+import { storedClips, type Clip } from "./scorebat"
 import { evaluateViewing, type ViewingResult, type VideoSource } from "./viewing"
 
 /**
@@ -17,6 +18,7 @@ const OEMBED_TIMEOUT_MS = 5000
 const DAY_MS = 86_400_000
 const HIGHLIGHT_DAYS = 4
 const HIGHLIGHT_LIMIT = 24
+const CLIP_LIMIT = 24
 const BROADCAST_LIMIT = 30
 const BROADCAST_GRACE_MS = 3 * 3_600_000
 
@@ -37,6 +39,8 @@ export interface Highlight extends VerifiedVideo {
 export interface WatchFeed {
   live: SportEvent[]
   highlights: Highlight[]
+  /** Football only, and older than a week on the current plan. */
+  clips: Clip[]
   broadcasts: Broadcast[]
 }
 
@@ -142,5 +146,8 @@ export async function getWatchFeed(sport?: SportId, now: Date = new Date()): Pro
     .sort((a, b) => (a.startUTC ?? "").localeCompare(b.startUTC ?? ""))
     .slice(0, BROADCAST_LIMIT)
 
-  return { live: events.filter((event) => event.status === "live").slice(0, 6), highlights, broadcasts }
+  const stored = !sport || sport === "football" ? await storedClips(now.getTime()).catch(() => []) : []
+  const clips = stored.slice(0, CLIP_LIMIT).map(({ id, title, competition, thumbnailUrl, dateUTC }) => ({ id, title, competition, thumbnailUrl, dateUTC }))
+
+  return { live: events.filter((event) => event.status === "live").slice(0, 6), highlights, clips, broadcasts }
 }

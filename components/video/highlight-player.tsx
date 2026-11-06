@@ -7,27 +7,28 @@ import { btn } from "@/components/site/states"
 import { useLocale } from "@/lib/use-locale"
 
 /** Loads nothing from the video provider until the viewer presses play. */
-export function HighlightPlayer({ matchId, title, thumbnailUrl, channel }: { matchId: string; title: string; thumbnailUrl?: string | null; channel: string }) {
+export function HighlightPlayer({ matchId, clipId, title, thumbnailUrl, channel }: { matchId?: string; clipId?: string; title: string; thumbnailUrl?: string | null; channel: string }) {
   const { t } = useLocale()
   const { prefs } = usePreferences()
   const [state, setState] = useState<"idle" | "checking" | "gone">("idle")
-  const [youtubeId, setYoutubeId] = useState<string | null>(null)
+  const [video, setVideo] = useState<{ embedUrl: string; youtubeId?: string } | null>(null)
 
   const play = async () => {
     setState("checking")
-    const response = await fetch(`/api/watch/play?match=${encodeURIComponent(matchId)}`).catch(() => null)
-    const body = response?.ok ? ((await response.json().catch(() => null)) as { video: { youtubeId: string } | null } | null) : null
+    const query = clipId ? `clip=${encodeURIComponent(clipId)}` : `match=${encodeURIComponent(matchId ?? "")}`
+    const response = await fetch(`/api/watch/play?${query}`).catch(() => null)
+    const body = response?.ok ? ((await response.json().catch(() => null)) as { video: { embedUrl: string; youtubeId?: string } | null } | null) : null
     if (!body?.video) return setState("gone")
-    setYoutubeId(body.video.youtubeId)
+    setVideo(body.video)
     setState("idle")
   }
 
-  if (youtubeId) {
+  if (video) {
     return (
       <div>
         <div className="aspect-video overflow-hidden rounded-lg bg-black">
           <iframe
-            src={`https://www.youtube-nocookie.com/embed/${youtubeId}?rel=0&autoplay=1`}
+            src={video.embedUrl}
             title={title}
             allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
             allowFullScreen
@@ -35,9 +36,11 @@ export function HighlightPlayer({ matchId, title, thumbnailUrl, channel }: { mat
             className="size-full"
           />
         </div>
-        <a href={`https://www.youtube.com/watch?v=${youtubeId}`} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-semibold text-hot-text hover:underline">
-          <ExternalLink aria-hidden className="size-3.5" /> {t.watch.openOnYoutube}<span className="sr-only"> {t.footer.newTab}</span>
-        </a>
+        {video.youtubeId && (
+          <a href={`https://www.youtube.com/watch?v=${video.youtubeId}`} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-semibold text-hot-text hover:underline">
+            <ExternalLink aria-hidden className="size-3.5" /> {t.watch.openOnYoutube}<span className="sr-only"> {t.footer.newTab}</span>
+          </a>
+        )}
       </div>
     )
   }

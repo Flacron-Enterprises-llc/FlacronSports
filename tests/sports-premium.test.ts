@@ -135,6 +135,10 @@ describe("match detail", () => {
     ])).toEqual([{ key: "shots on goal", home: "0", away: "4" }])
   })
 
+  it("always writes percentages with the sign", () => {
+    expect(normalizeStats([{ strStat: "Ball Possession", intHome: "58", intAway: "42%" }])).toEqual([{ key: "ball possession", home: "58%", away: "42%" }])
+  })
+
   it("splits sides and puts the bench last", () => {
     const { home, away } = normalizeLineups([
       { strPlayer: "Bench", strHome: "Yes", strSubstitute: "Yes", strPosition: "Goalkeeper" },

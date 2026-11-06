@@ -91,6 +91,9 @@ export function normalizeTimeline(rows: RawTimeline[] | null | undefined): Timel
 // than shown untranslated, since this list is what the French dictionary covers.
 const STATS = ["ball possession", "expected_goals", "total shots", "shots on goal", "shots off goal", "blocked shots", "corner kicks", "offsides", "fouls", "yellow cards", "red cards", "goalkeeper saves", "total passes", "passes accurate", "passes %"]
 
+// The source sends these both with and without the sign.
+const PERCENT_STATS = new Set(["ball possession", "passes %"])
+
 const statKey = (name: string) => name.trim().toLowerCase()
 
 export function normalizeStats(rows: RawStat[] | null | undefined): StatRow[] {
@@ -100,7 +103,11 @@ export function normalizeStats(rows: RawStat[] | null | undefined): StatRow[] {
     if (!row) return []
     const present = (value: string | number | null | undefined) => value !== null && value !== undefined && value !== ""
     if (!present(row.intHome) && !present(row.intAway)) return []
-    return [{ key, home: present(row.intHome) ? String(row.intHome) : "0", away: present(row.intAway) ? String(row.intAway) : "0" }]
+    const shown = (value: string | number | null | undefined) => {
+      const text = present(value) ? String(value).trim() : "0"
+      return PERCENT_STATS.has(key) && !text.endsWith("%") ? `${text}%` : text
+    }
+    return [{ key, home: shown(row.intHome), away: shown(row.intAway) }]
   })
 }
 

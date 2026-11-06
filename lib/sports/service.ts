@@ -109,8 +109,10 @@ async function request<T>(path: string, background = false): Promise<T> {
     await takeTurn(background ? Number.POSITIVE_INFINITY : VISITOR_MAX_WAIT_MS)
     feedBreaker.assertReady()
     countMetric("feed_calls")
+    // Our own memory and snapshot caches do this job. Next's data cache would also log the
+    // full URL, key included, whenever a busy day is too big for it.
     const response = await fetch(`${BASE}/${apiKey().key}/${path}`, {
-      next: { revalidate: REVALIDATE_SECONDS },
+      cache: "no-store",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     }).catch((error: unknown) => {
       noteResult(feedBreaker, "feed", null)

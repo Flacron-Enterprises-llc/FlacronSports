@@ -56,6 +56,19 @@ describe("snapshots", () => {
   })
 })
 
+describe("provider requests", () => {
+  it("stay out of the framework cache, which would log the key in the URL", async () => {
+    let init: RequestInit | undefined
+    vi.stubGlobal("fetch", async (_url: string, options?: RequestInit) => {
+      init = options
+      return new Response(JSON.stringify({ events: [] }), { status: 200 })
+    })
+    await getEvents({ date: today(), sport: "football", refresh: true })
+    expect(init?.cache).toBe("no-store")
+    expect(init).not.toHaveProperty("next")
+  })
+})
+
 describe("live scores", () => {
   const stub = (live: unknown[]) => {
     const calls: string[] = []

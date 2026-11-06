@@ -93,7 +93,7 @@ const en = {
   },
   paywall: {
     title: "Choose your plan", lead: "A plan unlocks your dashboard, scores, alerts and reports. Cancel any time.",
-    noPlan: "No plan", failed: "We could not check your plan. Try again.",
+    noPlan: "No plan", failed: "We could not check your plan. Try again.", signOut: "Sign out",
   },
   compare: {
     title: "Compare", lead: "Put two teams or two players side by side.",
@@ -627,7 +627,7 @@ const fr: Dictionary = {
   },
   paywall: {
     title: "Choisissez votre offre", lead: "Une offre débloque votre tableau de bord, les scores, les alertes et les comptes rendus. Annulez à tout moment.",
-    noPlan: "Aucune offre", failed: "Impossible de vérifier votre offre. Réessayez.",
+    noPlan: "Aucune offre", failed: "Impossible de vérifier votre offre. Réessayez.", signOut: "Se déconnecter",
   },
   compare: {
     title: "Comparer", lead: "Mettez deux équipes ou deux joueurs côte à côte.",

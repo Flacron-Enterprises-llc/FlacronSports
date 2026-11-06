@@ -1,4 +1,5 @@
 // Synthetic tokens, cookies and backend replies for isolated tests only.
+import { shellState } from "@/components/dashboard/paywall"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const plans: Record<string, string> = { paid: "basic", none: "none" }
@@ -223,5 +224,31 @@ describe("the member cookie", () => {
     expect(claimRecovery("/app/x", 62_000)).toBe(true)
     forgetRecovery("/app/x")
     expect(claimRecovery("/app/x", 62_001)).toBe(true)
+  })
+})
+
+describe("the dashboard frame", () => {
+  const base = { path: "/app", role: null, loaded: true, hasAccess: true, plan: "none" as const, addons: [] }
+
+  it("shows no dashboard without a plan, on any product page", () => {
+    for (const path of ["/app", "/app/scores", "/app/watch", "/app/news", "/app/compare", "/app/admin"]) expect(shellState({ ...base, path })).toBe("plans")
+  })
+
+  it("keeps paying and account pages reachable, with no dashboard around them", () => {
+    for (const path of ["/app/billing", "/app/billing/invite/x", "/app/payment-success", "/app/settings", "/app/settings/security"]) expect(shellState({ ...base, path })).toBe("account")
+  })
+
+  it("shows nothing of the dashboard until the plan is known", () => {
+    expect(shellState({ ...base, loaded: false })).toBe("checking")
+    expect(shellState({ ...base, plan: "premium", loaded: false })).toBe("checking")
+  })
+
+  it("does not ask a paying member to subscribe when the read fails", () => {
+    expect(shellState({ ...base, hasAccess: false })).toBe("failed")
+  })
+
+  it("opens the dashboard for every plan and for staff", () => {
+    for (const plan of ["basic", "plus", "premium"] as const) expect(shellState({ ...base, plan })).toBe("member")
+    expect(shellState({ ...base, role: "admin" })).toBe("member")
   })
 })

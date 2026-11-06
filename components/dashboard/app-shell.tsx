@@ -1,7 +1,7 @@
 "use client"
 
 import { HouseAd } from "./house-ad"
-import { PaywallGate } from "./paywall"
+import { ChoosePlan, PlanCheckFailed, useShellState } from "./paywall"
 import { Suspense, useEffect, useId, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
@@ -384,7 +384,55 @@ function TopBar({ path, drawer, onMenu }: { path: string; drawer: boolean; onMen
   )
 }
 
+/** An account with no plan gets this instead of the dashboard: no navigation, search or feeds. */
+function PlanFrame({ path, children }: { path: string; children: React.ReactNode }) {
+  const { t, href } = useLocale()
+  const router = useRouter()
+  const signOut = async () => {
+    await signOutUser()
+    router.replace(href("/"))
+  }
+  return (
+    <div className="flex min-h-dvh flex-col bg-bg">
+      <NavProgress />
+      <RevealObserver />
+      <header className="border-b border-line bg-surface print:hidden">
+        <div className="mx-auto flex min-h-16 w-full max-w-7xl flex-wrap items-center justify-between gap-2 px-4 sm:px-6">
+          <Logo href={href("/")} />
+          <div className="flex items-center gap-1">
+            <LanguageSwitch path={path} />
+            <ThemeToggle />
+            <Link href={href("/app/settings")} className="inline-flex min-h-10 items-center rounded-md px-3 text-sm font-medium text-ink-2 hover:bg-surface-muted hover:text-ink">{t.dash.settings}</Link>
+            <button type="button" onClick={signOut} className="inline-flex min-h-10 items-center rounded-md px-3 text-sm font-medium text-ink-2 hover:bg-surface-muted hover:text-ink">{t.paywall.signOut}</button>
+          </div>
+        </div>
+      </header>
+      <OfflineBanner />
+      <div className="flex-1 pb-8">{children}</div>
+      <footer className="px-6 pb-6 text-xs text-ink-3 print:hidden">
+        <ul className="mx-auto flex max-w-7xl flex-wrap gap-x-4 gap-y-1">
+          {POLICIES.map((policy) => <li key={policy.slug}><Link className="hover:text-ink" href={href(`/${policy.slug}`)}>{policy.label}</Link></li>)}
+        </ul>
+      </footer>
+    </div>
+  )
+}
+
 function Frame({ path, children }: { path: string; children: React.ReactNode }) {
+  const { t } = useLocale()
+  const state = useShellState(path)
+  if (state === "checking") return <BootLoader status={t.dash.loading} />
+  if (state === "member") return <MemberFrame path={path}>{children}</MemberFrame>
+  return (
+    <PlanFrame path={path}>
+      {state === "plans" && <ChoosePlan />}
+      {state === "failed" && <PlanCheckFailed />}
+      {state === "account" && children}
+    </PlanFrame>
+  )
+}
+
+function MemberFrame({ path, children }: { path: string; children: React.ReactNode }) {
   const { href } = useLocale()
   const [drawer, setDrawer] = useState(false)
   useEffect(() => setDrawer(false), [path])
@@ -397,7 +445,7 @@ function Frame({ path, children }: { path: string; children: React.ReactNode }) 
       <div className="flex min-h-dvh min-w-0 flex-col">
         <TopBar path={path} drawer={drawer} onMenu={() => setDrawer(true)} />
         <OfflineBanner />
-        <div className="flex-1 pb-20 lg:pb-4"><PaywallGate path={path}>{children}<HouseAd /></PaywallGate></div>
+        <div className="flex-1 pb-20 lg:pb-4">{children}<HouseAd /></div>
         <footer className="hidden px-10 pb-6 text-xs text-ink-3 lg:block print:hidden">
           <ul className="mx-auto flex max-w-[1280px] flex-wrap gap-x-4 gap-y-1">
             {POLICIES.map((policy) => <li key={policy.slug}><Link className="hover:text-ink" href={href(`/${policy.slug}`)}>{policy.label}</Link></li>)}

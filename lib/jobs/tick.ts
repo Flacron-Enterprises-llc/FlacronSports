@@ -11,8 +11,9 @@ import { DEFAULT_PREFERENCES, type Preferences } from "@/lib/me/preferences"
 import { runNewsletter } from "@/lib/newsletter/digest"
 import { isMajorCompetition } from "@/lib/sports/priority"
 import type { SportId } from "@/lib/sports/types"
+import { videoFor } from "@/lib/video/catalog"
 import { refreshClips } from "@/lib/video/scorebat"
-import { enabledSports, feedIsLimited, getEvent, getEvents, refreshBroadcasts, utcDate } from "@/lib/sports/service"
+import { enabledSports, feedIsLimited, getEvent, getEvents, getMatchDetail, refreshBroadcasts, utcDate } from "@/lib/sports/service"
 import type { SportEvent } from "@/lib/sports/types"
 
 const PAGE_SIZE = 300
@@ -82,6 +83,10 @@ export function listingTargets(now: Date): { date: string; sportId: SportId }[] 
   return Array.from({ length: perTick }, (_, index) => pairs[(start + index) % pairs.length])
 }
 
+export function reportableEvents(events: SportEvent[], followed: Set<string>): SportEvent[] {
+  return events.filter((event) => isMajorCompetition(event.competition.name) || event.participants.some((participant) => followed.has(participant.name)))
+}
+
 let ticking = false
 
 export async function runTick(now: Date = new Date()) {
@@ -108,13 +113,24 @@ async function tick(now: Date) {
 
   const jobs = await runIsolated({
     // The full feed has hundreds of finished games a day. A written report for every
-    // regional fixture would bury the news page, so it covers the major competitions.
-    reports: () => runReports(db, feedIsLimited() ? events : events.filter((event) => isMajorCompetition(event.competition.name)), today.fetchedAt, now),
+    // regional fixture would bury the news page, so it covers the major competitions
+    // and any game a member follows, which is what personalized reports are made from.
+    reports: async () => {
+      if (feedIsLimited()) return runReports(db, events, today.fetchedAt, now)
+      const followed = new Set<string>()
+      for await (const { prefs } of preferenceRows(db)) for (const name of prefs.favorites) followed.add(name)
+      return runReports(db, reportableEvents(events, followed), today.fetchedAt, now)
+    },
     alerts: () =>
       runAlerts({
         db, events, now, siteUrl, send: sendEmail, emailFor: verifiedEmail,
         users: preferenceRows(db),
         planFor: async (uid) => (await getEffectiveAccess(uid)).plan,
+        confirm: async (event, type) => {
+          if (type === "highlights") return Boolean(await videoFor(event))
+          const { home, away } = (await getMatchDetail(event)).lineups
+          return home.length > 0 && away.length > 0
+        },
       }),
     predictions: async () => {
       if (process.env.COMMUNITY_ENABLED !== "true") return { skipped: "community_disabled" }

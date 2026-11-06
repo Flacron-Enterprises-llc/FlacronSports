@@ -2,6 +2,7 @@ import Link from "next/link"
 import { Newspaper, Search, X } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
 import { AppPage, btn, EmptyState, PageHeader } from "@/components/site/states"
+import { ForYouReports } from "@/components/reports/paid-report"
 import { LocalTime } from "@/components/sports/parts"
 import { listPublishedReports } from "@/lib/content/reports"
 import { pageContext, titled } from "@/lib/page-context"
@@ -23,6 +24,7 @@ export default async function NewsPage({ params, searchParams }: Props) {
     <AppPage>
       <PageHeader title={t.news.title} lead={t.news.lead} icon={<Newspaper aria-hidden />} />
 
+      <ForYouReports />
       {state === "unavailable" && <ErrorNotice>{t.reports.unavailable}</ErrorNotice>}
       {state === "ok" && reports.length === 0 && <EmptyState icon={<Newspaper aria-hidden />} title={t.news.empty} body={t.news.emptyBody} action={{ href: href("/app/scores"), label: t.news.cta }} />}
 

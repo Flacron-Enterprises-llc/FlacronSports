@@ -4,6 +4,7 @@ import { notFound } from "next/navigation"
 import { ArrowLeft, ArrowRight, Flag } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
 import { AppPage, Notice } from "@/components/site/states"
+import { FullReportSection } from "@/components/reports/paid-report"
 import { LocalTime, SpoilerGuard } from "@/components/sports/parts"
 import { getPublishedReport, type Report } from "@/lib/content/reports"
 import { isLocale } from "@/lib/i18n"
@@ -62,6 +63,7 @@ export default async function ReportPage({ params }: Props) {
         <div className="mt-6 text-[15.5px] leading-7 text-ink">
           <SpoilerGuard label={t.reports.reveal}><p>{report.body}</p></SpoilerGuard>
         </div>
+        <FullReportSection slug={report.slug} />
         {report.correctionNote && (
           <Notice className="mt-5" role="note" title={t.reports.correction}>
             <SpoilerGuard label={t.reports.reveal}>{report.correctionNote}</SpoilerGuard>

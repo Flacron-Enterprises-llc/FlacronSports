@@ -18,6 +18,7 @@ export const preferencesSchema = z.object({
     quietStart: z.number().int().min(0).max(23).nullable(),
     quietEnd: z.number().int().min(0).max(23).nullable(),
     email: z.boolean().default(false),
+    filters: z.object({ sports: z.array(z.string().max(40)).max(20), majorOnly: z.boolean() }).optional(),
   }),
   newsletter: z.object({ optedIn: z.boolean(), consentedAt: z.string().nullable() }),
   tourVersion: z.number().int().min(0),
@@ -66,6 +67,8 @@ export async function updatePreferences(uid: string, patch: unknown): Promise<Pr
   if (plan === "free") {
     next.alerts = { ...next.alerts, types: next.alerts.types.filter((type) => (FREE_ALERTS as readonly string[]).includes(type)) }
   }
+  // Filters are a Premium benefit: others keep what was saved but cannot change it.
+  if (plan !== "premium") next.alerts = { ...next.alerts, filters: current.alerts.filters }
   if (next.newsletter.optedIn && !current.newsletter.optedIn) {
     next.newsletter = { optedIn: true, consentedAt: new Date().toISOString() }
   }

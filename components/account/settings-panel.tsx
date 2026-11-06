@@ -14,12 +14,12 @@ import { signOutUser } from "@/lib/firebase-auth"
 import { localePath } from "@/lib/i18n"
 import type { AlertType } from "@/lib/me/preferences-defaults"
 import { readStored, SPOILER_DECIDED_KEY, writeStored } from "@/lib/storage-consent"
+import { SPORTS } from "@/lib/sports/types"
 import { useLocale } from "@/lib/use-locale"
 import { usePreferences } from "./prefs-provider"
 
-// Only these two are delivered today; the others stay visible and clearly marked rather than doing nothing.
-const LIVE_ALERTS: AlertType[] = ["start", "final"]
-const LATER_ALERTS: AlertType[] = ["participants", "scoring", "interval", "highlights"]
+const ALERT_ROWS: AlertType[] = ["start", "final", "participants", "scoring", "interval", "highlights"]
+const PAID_ALERTS: AlertType[] = ["participants", "scoring", "interval", "highlights"]
 const DETECTED_KEY = "fs-time-zone-detected"
 
 function Row({ title, help, children }: { title: string; help?: string; children: (labelId: string) => React.ReactNode }) {
@@ -38,8 +38,9 @@ function Row({ title, help, children }: { title: string; help?: string; children
 export function SettingsPanel() {
   const { locale, t, href } = useLocale()
   const router = useRouter()
-  const { user } = useAccount()
+  const { user, plan } = useAccount()
   const { prefs, ready, update } = usePreferences()
+  const filters = prefs.alerts.filters ?? { sports: [], majorOnly: false }
   const { confirm, dialog } = useConfirm()
   const [zones, setZones] = useState<string[]>(["UTC"])
 
@@ -140,19 +141,39 @@ export function SettingsPanel() {
             <legend className="sr-only">{t.settings.alertTypes}</legend>
             <p aria-hidden className="mb-1 text-[13px] font-semibold text-ink">{t.settings.alertTypes}</p>
             <div className="divide-y divide-line">
-              {LIVE_ALERTS.map((type) => (
-                <Row key={type} title={t.settings.alertNames[type]}>
-                  {(id) => <Switch labelledBy={id} disabled={prefs.alerts.muted} checked={prefs.alerts.types.includes(type)} onChange={() => toggleAlert(type)} />}
-                </Row>
-              ))}
-              {LATER_ALERTS.map((type) => (
-                <div key={type} className="flex items-center justify-between gap-4 py-3 last:pb-0">
-                  <p className="text-sm font-medium text-ink-2">{t.settings.alertNames[type]}</p>
-                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-[11.5px] font-semibold text-ink-2"><Lock aria-hidden className="size-3" />{t.nav.soon}</span>
-                </div>
-              ))}
+              {ALERT_ROWS.map((type) => {
+                const locked = plan === "free" && PAID_ALERTS.includes(type)
+                return (
+                  <Row key={type} title={t.settings.alertNames[type]} help={locked ? t.settings.alertPaid : undefined}>
+                    {(id) => <Switch labelledBy={id} disabled={prefs.alerts.muted || locked} checked={!locked && prefs.alerts.types.includes(type)} onChange={() => toggleAlert(type)} />}
+                  </Row>
+                )
+              })}
             </div>
           </fieldset>
+          <div className="mt-4 border-t border-line pt-4">
+            <p className="text-[13px] font-semibold text-ink">{t.settings.alertFilters}</p>
+            {plan === "premium" ? (
+              <>
+                <p className="mt-1 text-xs leading-5 text-ink-2">{t.settings.alertFiltersHelp}</p>
+                <Row title={t.settings.majorOnly}>
+                  {(id) => <Switch labelledBy={id} disabled={prefs.alerts.muted} checked={filters.majorOnly} onChange={(majorOnly) => save({ alerts: { ...prefs.alerts, filters: { ...filters, majorOnly } } })} />}
+                </Row>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {SPORTS.filter((sport) => sport.enabled).map((sport) => {
+                    const active = filters.sports.includes(sport.id)
+                    return (
+                      <button key={sport.id} type="button" aria-pressed={active} disabled={prefs.alerts.muted} onClick={() => save({ alerts: { ...prefs.alerts, filters: { ...filters, sports: active ? filters.sports.filter((item) => item !== sport.id) : [...filters.sports, sport.id] } } })} className={`min-h-8 rounded-full border px-3 text-[13px] font-medium ${active ? "border-navy bg-navy text-white dark:border-brand dark:bg-brand dark:text-brand-on" : "border-line bg-surface text-ink-2 hover:text-ink"}`}>
+                        {sport.name[locale]}
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            ) : (
+              <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-2"><Lock aria-hidden className="size-3.5" />{t.settings.alertFiltersLocked}</p>
+            )}
+          </div>
           <div className="mt-4 border-t border-line pt-4">
             <p className="text-[13px] leading-5 text-ink-2">{t.ui.quietHelp}</p>
             <div className="mt-2 flex flex-wrap gap-4 text-sm text-ink">

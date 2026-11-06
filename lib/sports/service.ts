@@ -447,6 +447,17 @@ function chooseTeam(teams: RawTeam[], name: string, sport?: SportId) {
   return candidates.find((team) => team.sportId === sport) ?? candidates[0] ?? null
 }
 
+const MAX_SEARCH_RESULTS = 10
+
+/** Team names matching what a member has typed, for sports this site covers. */
+export async function searchTeams(text: string): Promise<{ name: string; sportId: SportId }[]> {
+  const found = await fetchJson<{ teams: RawTeam[] | null }>(`searchteams.php?${new URLSearchParams({ t: text })}`).catch(() => ({ teams: null }))
+  return (found.teams ?? []).flatMap((team) => {
+    const definition = enabledSports().find((item) => item.providerKey === team.strSport)
+    return definition ? [{ name: team.strTeam, sportId: definition.id }] : []
+  }).slice(0, MAX_SEARCH_RESULTS)
+}
+
 /** A name the provider does not know gives team: null, which is not the same as a failed lookup. */
 export async function getTeamFixtures(name: string, sport?: SportId): Promise<TeamFixtures> {
   const base = { source: PROVIDER_NAME, fetchedAt: new Date().toISOString(), limited: apiKey().limited }

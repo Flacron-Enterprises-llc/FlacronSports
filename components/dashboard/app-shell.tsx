@@ -1,10 +1,11 @@
 "use client"
 
+import { HouseAd } from "./house-ad"
 import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
-  ChevronDown, ChevronRight, Compass, CreditCard, Home, LayoutDashboard, LogOut, Medal, Menu, MessageCircleQuestion, Newspaper, PlayCircle, Settings, Shield, ShieldCheck, Sparkles, Star, Trophy, Users, X,
+  ChevronDown, ChevronRight, Compass, CreditCard, Home, LayoutDashboard, LogOut, Medal, Menu, GitCompareArrows, MessageCircleQuestion, Newspaper, PlayCircle, Settings, Shield, ShieldCheck, Sparkles, Star, Trophy, Users, X,
 } from "lucide-react"
 import { usePreferences } from "@/components/account/prefs-provider"
 import { CookiePreferencesButton } from "@/components/consent/consent-ui"
@@ -57,6 +58,7 @@ function useNav() {
         title: t.dash.tools,
         items: [
           { to: "/app/assistant", label: t.nav.assistant, icon: MessageCircleQuestion },
+          { to: "/app/compare", label: t.compare.title, icon: GitCompareArrows },
           ...(community ? [{ to: "/app/rooms", label: t.dash.rooms, icon: Users }, { to: "/app/predictions", label: t.dash.predictions, icon: Medal }] : []),
         ],
       },
@@ -193,7 +195,7 @@ function Crumbs({ path }: { path: string }) {
   const { t, href } = useLocale()
   const roots: [string, string][] = [
     ["/app/scores", t.nav.scores], ["/app/watch", t.nav.watch], ["/app/news", t.nav.news], ["/app/my-teams", t.nav.myTeams], ["/app/notifications", t.dash.notifications],
-    ["/app/assistant", t.nav.assistant], ["/app/rooms", t.dash.rooms], ["/app/predictions", t.dash.predictions], ["/app/billing", t.dash.billing], ["/app/settings", t.dash.settings], ["/app/admin", t.dash.admin],
+    ["/app/assistant", t.nav.assistant], ["/app/compare", t.compare.title], ["/app/rooms", t.dash.rooms], ["/app/predictions", t.dash.predictions], ["/app/billing", t.dash.billing], ["/app/settings", t.dash.settings], ["/app/admin", t.dash.admin],
   ]
   const details: [RegExp, string, string, string][] = [
     [/^\/app\/match\//, "/app/scores", t.nav.scores, t.ui.matchCenter],
@@ -349,7 +351,7 @@ function Frame({ path, children }: { path: string; children: React.ReactNode }) 
       <div className="flex min-h-dvh min-w-0 flex-col">
         <TopBar path={path} drawer={drawer} onMenu={() => setDrawer(true)} />
         <OfflineBanner />
-        <div className="flex-1 pb-20 lg:pb-4">{children}</div>
+        <div className="flex-1 pb-20 lg:pb-4">{children}<HouseAd /></div>
         <footer className="hidden px-10 pb-6 text-xs text-ink-3 lg:block print:hidden">
           <ul className="mx-auto flex max-w-[1280px] flex-wrap gap-x-4 gap-y-1">
             {POLICIES.map((policy) => <li key={policy.slug}><Link className="hover:text-ink" href={href(`/${policy.slug}`)}>{policy.label}</Link></li>)}

@@ -1,13 +1,19 @@
 // Browser-safe copy of the shape and defaults; lib/me/preferences.ts is server only.
 export type AlertType = "start" | "final" | "participants" | "scoring" | "interval" | "highlights"
 
+/** Premium. An empty sport list means every sport. */
+export interface AlertFilters {
+  sports: string[]
+  majorOnly: boolean
+}
+
 export interface Preferences {
   locale: "en" | "fr"
   timeZone: string
   spoilerMode: boolean
   lowData: boolean
   favorites: string[]
-  alerts: { muted: boolean; types: AlertType[]; quietStart: number | null; quietEnd: number | null; email: boolean }
+  alerts: { muted: boolean; types: AlertType[]; quietStart: number | null; quietEnd: number | null; email: boolean; filters?: AlertFilters }
   newsletter: { optedIn: boolean; consentedAt: string | null }
   tourVersion: number
 }

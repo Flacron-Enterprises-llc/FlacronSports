@@ -32,3 +32,9 @@ GitHub Support purge of PR #1, paid TheSportsDB and API-Football keys, ScoreBat 
 - TheSportsDB paid key is in Secrets Manager as `flacron-sport/production/thesportsdb`. See D-033.
 - API-Football key is kept in `.env.local` only and is not wired: its plan reads Free. Wire it only if a real paid plan is confirmed and something needs it.
 - ScoreBat token unchanged. Its feed still reads as the free tier; waiting on the client's plan confirmation.
+
+## 2026-11-06: Pricing and plan benefits
+
+- `lib/billing/matrix.ts` is the section 12 table in both languages. Prices and limits come from `lib/billing/plans.ts`.
+- Every benefit in the table is now built: score, break, lineup and highlight alerts; Premium alert filters; `/app/compare` with saved views; full and personalized reports; a first-party ad for the Free plan.
+- Alerts run on the 15 minute job, so a score alert can arrive up to 15 minutes late.

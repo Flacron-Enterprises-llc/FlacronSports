@@ -9,7 +9,7 @@ const CSP = [
   "img-src 'self' data: https:",
   "font-src 'self'",
   "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com",
-  "frame-src https://*.firebaseapp.com",
+  "frame-src https://*.firebaseapp.com https://www.youtube-nocookie.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self' https://checkout.stripe.com https://billing.stripe.com",

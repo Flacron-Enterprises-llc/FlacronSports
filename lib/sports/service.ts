@@ -7,8 +7,11 @@ import { SPORTS, type EventFeed, type SportDefinition, type SportEvent, type Spo
 const BASE = "https://www.thesportsdb.com/api/v1/json"
 const TIMEOUT_MS = 6000
 const BACKEND_TIMEOUT_MS = 20_000
-const CALL_SPACING_MS = 400
-const REFRESH_SPACING_MS = 2500
+// Every provider call in this process shares one queue, so traffic and the scheduled
+// job together stay under the rate limit. A visitor never waits long for a place.
+const PROVIDER_GAP_MS = 3000
+const RATE_LIMIT_COOLDOWN_MS = 60_000
+const VISITOR_MAX_WAIT_MS = 6000
 const SNAPSHOT_FRESH_MS = 45 * 60_000
 // Other days refresh in rotation, so their snapshots are older between visits.
 const CALENDAR_FRESH_MS = 2 * 3_600_000
@@ -23,6 +26,7 @@ function apiKey(): { key: string; limited: boolean } {
 
 const FRESH_MS = REVALIDATE_SECONDS * 1000
 const STALE_LIMIT_MS = 6 * 3_600_000
+const PEEK_LIMIT_MS = 48 * 3_600_000
 
 const memory = new Map<string, { data: unknown; at: number }>()
 const inFlight = new Map<string, Promise<unknown>>()
@@ -32,15 +36,28 @@ export function clearFeedCache(): void {
   inFlight.clear()
 }
 
-async function request<T>(path: string): Promise<T> {
+let nextCallAt = 0
+
+async function takeTurn(maxWaitMs: number): Promise<void> {
+  if (process.env.NODE_ENV !== "production") return
+  const now = Date.now()
+  const at = Math.max(now, nextCallAt)
+  if (at - now > maxWaitMs) throw new Error("Provider queue is full")
+  nextCallAt = at + PROVIDER_GAP_MS
+  if (at > now) await new Promise((resolve) => setTimeout(resolve, at - now))
+}
+
+async function request<T>(path: string, background = false): Promise<T> {
   const running = inFlight.get(path)
   if (running) return running as Promise<T>
 
   const task = (async () => {
+    await takeTurn(background ? Number.POSITIVE_INFINITY : VISITOR_MAX_WAIT_MS)
     const response = await fetch(`${BASE}/${apiKey().key}/${path}`, {
       next: { revalidate: REVALIDATE_SECONDS },
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
+    if (response.status === 429) nextCallAt = Math.max(nextCallAt, Date.now() + RATE_LIMIT_COOLDOWN_MS)
     if (!response.ok) throw new Error(`Provider responded ${response.status}`)
     return response.json() as Promise<T>
   })().finally(() => inFlight.delete(path))
@@ -89,7 +106,7 @@ async function load<T>(path: string, refresh = false, snapshotFreshMs = SNAPSHOT
   }
 
   try {
-    const data = await request<T>(path)
+    const data = await request<T>(path, refresh)
     memory.set(path, { data, at: now })
     await writeSnapshot(path, data, now)
     return { data, stale: false }
@@ -98,6 +115,17 @@ async function load<T>(path: string, refresh = false, snapshotFreshMs = SNAPSHOT
     if (fallback && now - fallback.at < STALE_LIMIT_MS) return { data: fallback.data as T, stale: true }
     throw new ApiError(503, "provider_unavailable", "Sports data is temporarily unavailable")
   }
+}
+
+/** What is already stored, with no provider call. For views that must never spend the quota. */
+async function peek<T>(path: string): Promise<T | null> {
+  const now = Date.now()
+  const cached = memory.get(path)
+  if (cached && now - cached.at < FRESH_MS) return cached.data as T
+  const snapshot = await readSnapshot(path)
+  if (!snapshot || now - snapshot.at >= PEEK_LIMIT_MS) return (cached?.data as T | undefined) ?? null
+  memory.set(path, { data: snapshot.data, at: now })
+  return snapshot.data as T
 }
 
 async function fetchJson<T>(path: string): Promise<T> {
@@ -109,8 +137,73 @@ async function eventsForSport(sport: SportDefinition, date: string, refresh = fa
   const nearToday = Math.abs(Date.parse(date) - Date.parse(utcDate())) <= 86_400_000
   const { data, stale } = await load<{ events: RawEvent[] | null }>(`eventsday.php?${query}`, refresh, nearToday ? SNAPSHOT_FRESH_MS : CALENDAR_FRESH_MS)
   // The sport is rechecked per record, so a stray row can never be filed under the wrong sport.
-  const rows = (data.events ?? []).filter((raw) => (!raw.strSport || raw.strSport === sport.providerKey) && isCovered(raw, sport.id))
-  return { events: rows.map((raw) => normalizeEvent(raw, sport.id)), stale }
+  return { events: rowsToEvents(data.events, sport), stale }
+}
+
+function rowsToEvents(rows: RawEvent[] | null | undefined, sport: SportDefinition): SportEvent[] {
+  return (rows ?? []).filter((raw) => (!raw.strSport || raw.strSport === sport.providerKey) && isCovered(raw, sport.id)).map((raw) => normalizeEvent(raw, sport.id))
+}
+
+/** The stored day for every enabled sport. Spends no provider calls. */
+export async function storedEvents(date: string, sport?: SportId): Promise<SportEvent[]> {
+  const sports = enabledSports().filter((item) => !sport || item.id === sport)
+  const days = await Promise.all(sports.map(async (item) => {
+    const query = new URLSearchParams({ d: date, s: item.providerKey as string })
+    return rowsToEvents((await peek<{ events: RawEvent[] | null }>(`eventsday.php?${query}`))?.events, item)
+  }))
+  return days.flat()
+}
+
+interface RawBroadcast {
+  id?: string
+  idEvent?: string | null
+  strSport?: string | null
+  strEvent?: string | null
+  strChannel?: string | null
+  strCountry?: string | null
+  strLogo?: string | null
+  strTimeStamp?: string | null
+}
+
+export interface Broadcast {
+  id: string
+  matchId: string | null
+  eventName: string
+  sportId: SportId
+  channel: string
+  country: string | null
+  logoUrl: string | null
+  startUTC: string | null
+}
+
+const tvPath = (date: string, sport: SportDefinition) => `eventstv.php?${new URLSearchParams({ d: date, s: sport.providerKey as string })}`
+
+function toBroadcasts(rows: RawBroadcast[] | null | undefined, sport: SportDefinition): Broadcast[] {
+  return (rows ?? []).flatMap((raw) => {
+    if (!raw.strChannel || !raw.strEvent || (raw.strSport && raw.strSport !== sport.providerKey)) return []
+    return [{
+      id: raw.id ?? `${raw.idEvent}-${raw.strChannel}`,
+      matchId: raw.idEvent ? `tsdb-${raw.idEvent}` : null,
+      eventName: raw.strEvent,
+      sportId: sport.id,
+      channel: raw.strChannel,
+      country: raw.strCountry || null,
+      logoUrl: raw.strLogo || null,
+      startUTC: toUtc(raw.strTimeStamp),
+    }]
+  })
+}
+
+/** Called by the scheduled job only. */
+export async function refreshBroadcasts(date: string, sportId: SportId): Promise<void> {
+  const sport = enabledSports().find((item) => item.id === sportId)
+  if (sport) await load(tvPath(date, sport), true)
+}
+
+export async function storedBroadcasts(date: string, sport?: SportId): Promise<Broadcast[]> {
+  const sports = enabledSports().filter((item) => !sport || item.id === sport)
+  const days = await Promise.all(sports.map(async (item) => toBroadcasts((await peek<{ tvevents: RawBroadcast[] | null }>(tvPath(date, item)))?.tvevents, item)))
+  return days.flat()
 }
 
 export function enabledSports(): SportDefinition[] {
@@ -122,7 +215,7 @@ export function utcDate(date: Date = new Date()): string {
 }
 
 /** Set on Amplify. Keeping provider calls on one server is what keeps them under the rate limit. */
-async function fromBackend<T>(path: string): Promise<T | null> {
+export async function fromBackend<T>(path: string): Promise<T | null> {
   const origin = process.env.API_ORIGIN
   if (!origin) return null
   const response = await fetch(`${origin}${path}`, { next: { revalidate: 60 }, signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS) })
@@ -144,7 +237,6 @@ export async function getEvents(options: { date?: string; sport?: SportId; refre
   const succeeded: Awaited<ReturnType<typeof eventsForSport>>[] = []
   for (const sport of sports) {
     await eventsForSport(sport, date, options.refresh).then((result) => succeeded.push(result)).catch(() => undefined)
-    if (process.env.NODE_ENV === "production") await new Promise((resolve) => setTimeout(resolve, options.refresh ? REFRESH_SPACING_MS : CALL_SPACING_MS))
   }
 
   if (sports.length > 0 && succeeded.length === 0) return { ...base, state: "unavailable", events: [] }

@@ -28,6 +28,8 @@ export interface RawEvent {
   strStatus?: string | null
   strTimestamp?: string | null
   strVenue?: string | null
+  strVideo?: string | null
+  strThumb?: string | null
   strPostponed?: string | null
 }
 
@@ -188,6 +190,8 @@ export function normalizeEvent(raw: RawEvent, sportId: SportId, now: Date = new 
     venue: raw.strVenue || null,
     provider: { name: PROVIDER_NAME, eventId: raw.idEvent },
     sourceUpdatedAt: null,
+    videoUrl: raw.strVideo || null,
+    thumbnailUrl: raw.strThumb || null,
     coverageFlags: { liveScores: false, statistics: false, video: false },
   }
   const teams = {

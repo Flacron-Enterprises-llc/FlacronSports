@@ -136,7 +136,7 @@ export default async function MatchPage({ params }: Props) {
         <MatchTabs
           overview={overview}
           result={hasResultPanel ? <Panel><EventResult event={event} t={t} /></Panel> : undefined}
-          viewing={<ViewingPanel matchId={event.id} />}
+          viewing={<ViewingPanel matchId={event.id} title={event.eventName || event.participants.map((participant) => participant.name).join(" vs ")} />}
           community={community ? (
             <MatchCommunity
               matchId={event.id}

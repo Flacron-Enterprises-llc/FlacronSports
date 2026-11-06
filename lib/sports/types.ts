@@ -110,6 +110,9 @@ export interface SportEvent {
   providerStatus: string | null
   score: EventScore
   venue: string | null
+  /** A video link listed by the feed. Listing it is not permission: see lib/video/catalog. */
+  videoUrl?: string | null
+  thumbnailUrl?: string | null
   provider: { name: string; eventId: string }
   sourceUpdatedAt: string | null
   coverageFlags: { liveScores: boolean; statistics: boolean; video: boolean }

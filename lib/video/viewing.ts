@@ -21,6 +21,8 @@ export interface VideoSource {
   type: VideoType
   /** ISO country codes. Empty means the source has no confirmed territory, so it is blocked. */
   territories: string[]
+  /** A public embed: the provider applies the uploader's territory rules inside its own player. */
+  providerEnforcesTerritory?: boolean
   validFromUTC: string
   validToUTC: string
   permitted: boolean
@@ -58,7 +60,7 @@ const ACTION: Record<VideoType, ViewingAction> = {
 function blockReason(source: VideoSource, context: ViewingContext): BlockReason | null {
   if (!source.permitted) return "not_permitted"
   if (!source.available) return "unavailable"
-  if (!context.country || !source.territories.includes(context.country)) return "territory_blocked"
+  if (!source.providerEnforcesTerritory && (!context.country || !source.territories.includes(context.country))) return "territory_blocked"
   const now = context.now.getTime()
   if (now < Date.parse(source.validFromUTC) || now > Date.parse(source.validToUTC)) return "outside_window"
   if (!source.platforms.includes(context.platform)) return "platform_unsupported"

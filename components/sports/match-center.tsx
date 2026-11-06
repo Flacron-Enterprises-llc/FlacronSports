@@ -6,7 +6,8 @@ import { usePreferences } from "@/components/account/prefs-provider"
 import { ErrorNotice, Tabs } from "@/components/dashboard/controls"
 import { btn, Panel, Skeleton } from "@/components/site/states"
 import { useLocale } from "@/lib/use-locale"
-import type { ViewingResult } from "@/lib/video/viewing"
+import type { MatchViewing } from "@/lib/video/catalog"
+import { HighlightPlayer } from "@/components/video/highlight-player"
 
 type TabId = "overview" | "result" | "viewing" | "community"
 
@@ -31,10 +32,10 @@ export function MatchTabs({ overview, result, viewing, community }: { overview: 
 }
 
 /** Viewing is checked for this browser's country at request time. Low-data mode checks only when asked. */
-export function ViewingPanel({ matchId }: { matchId: string }) {
+export function ViewingPanel({ matchId, title }: { matchId: string; title: string }) {
   const { t } = useLocale()
   const { prefs, ready } = usePreferences()
-  const [result, setResult] = useState<ViewingResult | null>(null)
+  const [result, setResult] = useState<MatchViewing | null>(null)
   const [state, setState] = useState<"idle" | "loading" | "failed">("idle")
 
   const check = useCallback(async () => {
@@ -64,7 +65,16 @@ export function ViewingPanel({ matchId }: { matchId: string }) {
       )}
       {state === "idle" && result && (
         <div className="space-y-3">
-          {!official && <p className="text-sm leading-6 text-ink-2">{t.match.noVideo}</p>}
+          {result.video && <div className="max-w-xl"><HighlightPlayer matchId={matchId} title={title} channel={result.video.channel} /></div>}
+          {result.broadcasts.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-ink">{t.ui.officialBroadcaster}</h3>
+              <ul className="mt-1 space-y-1 text-sm text-ink-2">
+                {result.broadcasts.map((item) => <li key={item.id}>{item.channel}{item.country ? ` · ${item.country}` : ""}</li>)}
+              </ul>
+            </div>
+          )}
+          {!official && !result.video && result.broadcasts.length === 0 && <p className="text-sm leading-6 text-ink-2">{t.match.noVideo}</p>}
           {official?.url && <a href={official.url} rel="noreferrer" target="_blank" className={btn("navy")}><ExternalLink aria-hidden className="size-4" /> {t.ui.officialBroadcaster}<span className="sr-only"> {t.footer.newTab}</span></a>}
           {following && <p className="flex items-center gap-2 text-sm font-semibold text-ink"><Radio aria-hidden className="size-4 text-live" /> {t.match.followLive}</p>}
         </div>

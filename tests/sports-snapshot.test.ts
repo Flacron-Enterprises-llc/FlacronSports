@@ -75,10 +75,10 @@ describe("calendar refresh", () => {
     for (let tick = 0; tick < 8; tick++) expect(calendarDates(new Date(now.getTime() + tick * TICK))).toContain(isoDay(1))
   })
 
-  it("covers a week each side of today within four ticks, wherever the rotation starts", () => {
+  it("covers a week each side of today within six ticks, wherever the rotation starts", () => {
     for (let start = 0; start < 12; start++) {
       const covered = new Set<string>()
-      for (let tick = 0; tick < 4; tick++) for (const date of calendarDates(new Date(now.getTime() + (start + tick) * TICK))) covered.add(date)
+      for (let tick = 0; tick < 6; tick++) for (const date of calendarDates(new Date(now.getTime() + (start + tick) * TICK))) covered.add(date)
       for (let offset = -7; offset <= 7; offset++) if (![-1, 0].includes(offset)) expect(covered).toContain(isoDay(offset))
     }
   })

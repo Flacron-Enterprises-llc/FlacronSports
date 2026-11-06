@@ -9,7 +9,8 @@ import { sendEmail } from "@/lib/email-service"
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin"
 import { DEFAULT_PREFERENCES, type Preferences } from "@/lib/me/preferences"
 import { runNewsletter } from "@/lib/newsletter/digest"
-import { getEvent, getEvents, utcDate } from "@/lib/sports/service"
+import type { SportId } from "@/lib/sports/types"
+import { enabledSports, getEvent, getEvents, refreshBroadcasts, utcDate } from "@/lib/sports/service"
 import type { SportEvent } from "@/lib/sports/types"
 
 const PAGE_SIZE = 300
@@ -52,7 +53,8 @@ export async function runIsolated<T extends Record<string, () => Promise<unknown
 
 const TICK_MS = 15 * 60_000
 const ROTATING_OFFSETS = [-7, -6, -5, -4, -3, -2, 2, 3, 4, 5, 6, 7]
-const ROTATING_PER_TICK = 3
+const ROTATING_PER_TICK = 2
+const LISTINGS_PER_TICK = 2
 
 /**
  * The days a visitor can open beyond yesterday and today. Tomorrow is kept current
@@ -64,7 +66,29 @@ export function calendarDates(now: Date): string[] {
   return [1, ...rotating].map((offset) => utcDate(new Date(now.getTime() + offset * DAY)))
 }
 
+/** TV listings for today and tomorrow, one sport and day at a time. */
+export function listingTargets(now: Date): { date: string; sportId: SportId }[] {
+  const sports = enabledSports()
+  const pairs = [0, 1].flatMap((offset) => sports.map((sport) => ({ date: utcDate(new Date(now.getTime() + offset * DAY)), sportId: sport.id })))
+  if (pairs.length === 0) return []
+  const start = Math.floor(now.getTime() / TICK_MS) * LISTINGS_PER_TICK
+  return Array.from({ length: LISTINGS_PER_TICK }, (_, index) => pairs[(start + index) % pairs.length])
+}
+
+let ticking = false
+
 export async function runTick(now: Date = new Date()) {
+  // A long provider cooldown can outlast the 15 minute schedule.
+  if (ticking) return { skipped: "already_running" }
+  ticking = true
+  try {
+    return await tick(now)
+  } finally {
+    ticking = false
+  }
+}
+
+async function tick(now: Date) {
   const db = getAdminDb()
   if (!db) throw new ApiError(503, "storage_unavailable", "Storage is not available")
 
@@ -102,7 +126,11 @@ export async function runTick(now: Date = new Date()) {
 
   // Last, so a slow provider cannot hold up the jobs above.
   const calendar: Record<string, string> = {}
-  for (const date of calendarDates(now)) calendar[date] = (await getEvents({ date, refresh: true })).state
+  for (const date of calendarDates(now)) {
+    calendar[date] = (await getEvents({ date, refresh: true })).state
+    if (calendar[date] === "unavailable") break
+  }
+  for (const target of listingTargets(now)) await refreshBroadcasts(target.date, target.sportId).catch(() => undefined)
 
   return { feed: { yesterday: yesterday.state, today: today.state, events: events.length, calendar }, ...jobs }
 }

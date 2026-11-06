@@ -6,8 +6,11 @@ import { usePreferences } from "@/components/account/prefs-provider"
 import { btn } from "@/components/site/states"
 import { useLocale } from "@/lib/use-locale"
 
-/** Loads nothing from the video provider until the viewer presses play. */
-export function HighlightPlayer({ matchId, clipId, title, thumbnailUrl, channel }: { matchId?: string; clipId?: string; title: string; thumbnailUrl?: string | null; channel: string }) {
+/**
+ * Loads nothing from the video provider until the viewer presses play.
+ * Clip thumbnails are frames of the video and can show the score, so spoiler mode hides them.
+ */
+export function HighlightPlayer({ matchId, clipId, title, thumbnailUrl, channel }: { matchId?: string; clipId?: string; title: string; thumbnailUrl?: string | null; channel?: string }) {
   const { t } = useLocale()
   const { prefs } = usePreferences()
   const [state, setState] = useState<"idle" | "checking" | "gone">("idle")
@@ -48,7 +51,7 @@ export function HighlightPlayer({ matchId, clipId, title, thumbnailUrl, channel 
   return (
     <div>
       <div className="relative aspect-video overflow-hidden rounded-lg bg-navy">
-        {thumbnailUrl && !prefs.lowData && <img src={thumbnailUrl} alt="" loading="lazy" decoding="async" className="absolute inset-0 size-full object-cover opacity-80" />}
+        {thumbnailUrl && !prefs.lowData && !(clipId && prefs.spoilerMode) && <img src={thumbnailUrl} alt="" loading="lazy" decoding="async" className="absolute inset-0 size-full object-cover opacity-80" />}
         <div className="absolute inset-0 flex items-center justify-center">
           <button type="button" onClick={play} disabled={state === "checking"} aria-label={`${t.watch.playHighlights}: ${title}`} className={btn("navy", "md", "shadow-lg")}>
             {state === "checking" ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Play aria-hidden className="size-4" />}
@@ -56,7 +59,7 @@ export function HighlightPlayer({ matchId, clipId, title, thumbnailUrl, channel 
           </button>
         </div>
       </div>
-      <p className="mt-2 text-xs text-ink-2">{t.watch.from.replace("{channel}", channel)}</p>
+      {channel && <p className="mt-2 text-xs text-ink-2">{t.watch.from.replace("{channel}", channel)}</p>}
       {prefs.spoilerMode && <p className="mt-1 text-xs text-ink-2">{t.watch.spoilerNote}</p>}
       {state === "gone" && <p role="alert" className="mt-1 text-sm text-bad">{t.watch.gone}</p>}
     </div>

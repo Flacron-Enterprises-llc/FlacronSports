@@ -21,7 +21,7 @@ Built means code and unit tests exist. LIVE means it was also observed on the de
 | SPORT-05 | LIVE | Account favorites and server limit |
 | SPORT-06 | PARTIAL | Start and final alerts, quiet hours, mute, spoiler, moved kickoffs. Other alert types need a live event feed |
 | SPORT-07 | PARTIAL | Team pages, standings, filters. No global search or African discovery |
-| WATCH-01, WATCH-02, WATCH-03 | BLOCKED | Decision logic tested. Needs a licensed video provider |
+| WATCH-01, WATCH-02, WATCH-03 | PARTIAL | Highlights and TV listings live. Live streams and replays need a licensed provider, and a human has not yet watched a clip play |
 | WATCH-04 | LIVE | Spoiler mode observed in the browser |
 | AUTH-01 | PARTIAL | Live sign-up, tokens, SES accepted through the live route. Real inbox not observed |
 | AUTH-02 | PARTIAL | TOTP enabled on the project and enforced by the API. Enrolment UI not run; no admin enrolled yet |

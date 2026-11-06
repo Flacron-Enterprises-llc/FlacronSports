@@ -73,7 +73,7 @@ export default async function WatchPage({ params, searchParams }: LocaleParams &
             ))}
             {clips.map((item) => (
               <li key={item.id} className="min-w-0 rounded-xl border border-line bg-surface p-3 shadow-[var(--shadow-sm)]">
-                <HighlightPlayer clipId={item.id} title={item.title} thumbnailUrl={item.thumbnailUrl} channel="ScoreBat" />
+                <HighlightPlayer clipId={item.id} title={item.title} thumbnailUrl={item.thumbnailUrl} />
                 <p className="mt-2 font-semibold text-ink">{item.title}</p>
                 <p className="mt-0.5 truncate text-[13px] text-ink-2">{item.competition}</p>
                 {item.dateUTC && <p className="mt-0.5 text-xs text-ink-2"><LocalTime iso={item.dateUTC} mode="datetime" /></p>}

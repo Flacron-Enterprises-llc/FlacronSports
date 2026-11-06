@@ -1,6 +1,6 @@
 # Work state
 
-Last updated 2026-11-05. Deployment branch `main`. Live site: https://flacronsport.com
+Last updated 2026-11-06. Deployment branch `main`. Live site: https://flacronsport.com
 Backend: https://43sqn0qz7a.execute-api.us-east-1.amazonaws.com (account 482881544977, us-east-1, stack `flacron-sport`).
 
 ## Resume here
@@ -17,7 +17,7 @@ Stack updates must pass the running image as `ImageTag` and `DesiredCount=1`, or
 
 ## Owner actions
 
-GitHub Support purge of PR #1, MFA upgrade decision, commercial sports feed, video license, community decisions, counsel review.
+GitHub Support purge of PR #1, paid TheSportsDB and API-Football keys, ScoreBat plan decision and terms, approved channel review, rotate the Stripe and ScoreBat keys shared in chat, video license, community decisions, counsel review.
 
 ## Next tasks
 
@@ -25,3 +25,4 @@ GitHub Support purge of PR #1, MFA upgrade decision, commercial sports feed, vid
 2. Real iPhone and Android pass, and a screen reader pass.
 3. Refund of an add-on on the live stack, and a real inbox check.
 4. Admin coverage controls, global search, African discovery.
+5. Build richer match pages once the paid data keys arrive.

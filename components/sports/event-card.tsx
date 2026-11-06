@@ -59,7 +59,10 @@ export function EventCard({ event, t, href, timeMode = "time" }: { event: SportE
               <span className="min-w-0 truncate">{event.competition.name}</span>
             )}
           </span>
-          <StatusLabel status={event.status} t={t} />
+          <span className="flex shrink-0 items-center gap-1.5">
+            {event.clock && <span className="tabular text-xs font-semibold text-ink-2">{event.clock}&prime;</span>}
+            <StatusLabel status={event.status} t={t} />
+          </span>
         </div>
         {!teams && <p className="mt-2 text-xs text-ink-3">{t.event.types[event.eventType]}</p>}
         {event.eventName && <p className={cn(teams ? "mt-2" : "mt-0.5", "truncate font-semibold text-ink")}>{event.eventName}</p>}

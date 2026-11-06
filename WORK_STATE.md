@@ -26,3 +26,9 @@ GitHub Support purge of PR #1, paid TheSportsDB and API-Football keys, ScoreBat 
 3. Refund of an add-on on the live stack, and a real inbox check.
 4. Admin coverage controls, global search, African discovery.
 5. Build richer match pages once the paid data keys arrive.
+
+## 2026-11-06: Paid sports feed
+
+- TheSportsDB paid key is in Secrets Manager as `flacron-sport/production/thesportsdb`. See D-033.
+- API-Football key is kept in `.env.local` only and is not wired: its plan reads Free. Wire it only if a real paid plan is confirmed and something needs it.
+- ScoreBat token unchanged. Its feed still reads as the free tier; waiting on the client's plan confirmation.

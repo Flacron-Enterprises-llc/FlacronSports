@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { ExternalLink, FileText, LayoutList, MessagesSquare, PlayCircle, Radio } from "lucide-react"
+import { Activity, ExternalLink, FileText, LayoutList, MessagesSquare, PlayCircle, Radio } from "lucide-react"
 import { usePreferences } from "@/components/account/prefs-provider"
 import { ErrorNotice, Tabs } from "@/components/dashboard/controls"
 import { btn, Panel, Skeleton } from "@/components/site/states"
@@ -9,14 +9,15 @@ import { useLocale } from "@/lib/use-locale"
 import type { MatchViewing } from "@/lib/video/catalog"
 import { HighlightPlayer } from "@/components/video/highlight-player"
 
-type TabId = "overview" | "result" | "viewing" | "community"
+type TabId = "overview" | "details" | "result" | "viewing" | "community"
 
-export function MatchTabs({ overview, result, viewing, community }: { overview: React.ReactNode; result?: React.ReactNode; viewing: React.ReactNode; community?: React.ReactNode }) {
+export function MatchTabs({ overview, details, result, viewing, community }: { overview: React.ReactNode; details?: React.ReactNode; result?: React.ReactNode; viewing: React.ReactNode; community?: React.ReactNode }) {
   const { t } = useLocale()
   const [tab, setTab] = useState<TabId>("overview")
   const icon = "size-4"
   const tabs = [
     { value: "overview" as const, label: t.match.overview, icon: <LayoutList aria-hidden className={icon} /> },
+    ...(details ? [{ value: "details" as const, label: t.match.details, icon: <Activity aria-hidden className={icon} /> }] : []),
     ...(result ? [{ value: "result" as const, label: t.event.result, icon: <FileText aria-hidden className={icon} /> }] : []),
     { value: "viewing" as const, label: t.match.viewing, icon: <PlayCircle aria-hidden className={icon} /> },
     ...(community ? [{ value: "community" as const, label: t.community.title, icon: <MessagesSquare aria-hidden className={icon} /> }] : []),
@@ -24,6 +25,7 @@ export function MatchTabs({ overview, result, viewing, community }: { overview: 
   return (
     <Tabs<TabId> value={tab} onChange={setTab} tabs={tabs} label={t.ui.matchCenter}>
       {tab === "overview" && overview}
+      {tab === "details" && details}
       {tab === "result" && result}
       {tab === "viewing" && viewing}
       {tab === "community" && community}

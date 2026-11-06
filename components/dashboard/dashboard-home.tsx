@@ -1,5 +1,6 @@
 "use client"
 
+import { byImportance } from "@/lib/sports/priority"
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { ArrowRight, CalendarDays, Check, Circle, MessageCircleQuestion, Newspaper, PlayCircle, Radio, Star, Trophy, X } from "lucide-react"
@@ -167,12 +168,11 @@ export function DashboardHome({ feed, reports }: { feed: EventFeed; reports: Rep
 
   const known = feed.state !== "unavailable"
   const mine = feed.events.filter((event) => followsEvent(prefs.favorites, event))
-  const others = feed.events.filter((event) => !mine.includes(event))
+  const others = feed.events.filter((event) => !mine.includes(event)).sort(byImportance)
   const live = others.filter((event) => event.status === "live").slice(0, 6)
   const liveTotal = feed.events.filter((event) => event.status === "live").length
   const upcoming = others
     .filter((event) => event.status === "scheduled")
-    .sort((a, b) => (a.scheduledStartUTC ?? "").localeCompare(b.scheduledStartUTC ?? ""))
     .slice(0, 6)
   const results = others.filter((event) => event.status === "finished").slice(0, 6)
 

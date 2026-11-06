@@ -10,7 +10,7 @@ const query = z.object({
   competition: z.string().max(120).optional(),
   team: z.string().max(120).optional(),
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(500).default(50),
+  pageSize: z.coerce.number().int().min(1).max(3000).default(50),
 })
 
 export async function GET(request: Request) {

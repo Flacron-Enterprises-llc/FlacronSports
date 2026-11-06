@@ -1,4 +1,5 @@
 import { getEvent, storedBroadcasts, storedEvents, utcDate, type Broadcast } from "@/lib/sports/service"
+import { byImportance, isMajorCompetition } from "@/lib/sports/priority"
 import type { SportEvent, SportId } from "@/lib/sports/types"
 import { storedClips, type Clip } from "./scorebat"
 import { evaluateViewing, type ViewingResult, type VideoSource } from "./viewing"
@@ -20,6 +21,10 @@ const HIGHLIGHT_DAYS = 4
 const HIGHLIGHT_LIMIT = 24
 const CLIP_LIMIT = 24
 const BROADCAST_LIMIT = 30
+// The full feed lists hundreds of videos. Each is checked with the video host, so
+// they go in small batches and stop once the page has enough.
+const CHECK_BATCH = 12
+const CHECK_LIMIT = 96
 const BROADCAST_GRACE_MS = 3 * 3_600_000
 
 export interface VerifiedVideo {
@@ -125,18 +130,23 @@ export async function getWatchFeed(sport?: SportId, now: Date = new Date()): Pro
   const events = recent.flat().filter((event) => !seen.has(event.id) && seen.add(event.id))
   const withVideo = events
     .filter((event) => youtubeId(event.videoUrl))
-    .sort((a, b) => (b.scheduledStartUTC ?? "").localeCompare(a.scheduledStartUTC ?? ""))
+    .sort((a, b) => Number(isMajorCompetition(b.competition.name)) - Number(isMajorCompetition(a.competition.name)) || (b.scheduledStartUTC ?? "").localeCompare(a.scheduledStartUTC ?? ""))
 
-  const checked = await Promise.all(withVideo.map(async (event) => ({ event, video: await videoFor(event) })))
-  const highlights = checked.flatMap(({ event, video }) => video ? [{
-    ...video,
-    matchId: event.id,
-    title: eventTitle(event),
-    competition: event.competition.name,
-    sportId: event.sportId,
-    thumbnailUrl: event.thumbnailUrl ?? null,
-    dateUTC: event.scheduledStartUTC,
-  }] : []).slice(0, HIGHLIGHT_LIMIT)
+  const highlights: WatchFeed["highlights"] = []
+  const candidates = withVideo.slice(0, CHECK_LIMIT)
+  for (let index = 0; index < candidates.length && highlights.length < HIGHLIGHT_LIMIT; index += CHECK_BATCH) {
+    const checked = await Promise.all(candidates.slice(index, index + CHECK_BATCH).map(async (event) => ({ event, video: await videoFor(event) })))
+    highlights.push(...checked.flatMap(({ event, video }) => video ? [{
+      ...video,
+      matchId: event.id,
+      title: eventTitle(event),
+      competition: event.competition.name,
+      sportId: event.sportId,
+      thumbnailUrl: event.thumbnailUrl ?? null,
+      dateUTC: event.scheduledStartUTC,
+    }] : []))
+  }
+  highlights.splice(HIGHLIGHT_LIMIT)
 
   const earliest = now.getTime() - BROADCAST_GRACE_MS
   const shown = new Set<string>()
@@ -149,5 +159,5 @@ export async function getWatchFeed(sport?: SportId, now: Date = new Date()): Pro
   const stored = !sport || sport === "football" ? await storedClips(now.getTime()).catch(() => []) : []
   const clips = stored.slice(0, CLIP_LIMIT).map(({ id, title, competition, thumbnailUrl, dateUTC }) => ({ id, title, competition, thumbnailUrl, dateUTC }))
 
-  return { live: events.filter((event) => event.status === "live").slice(0, 6), highlights, clips, broadcasts }
+  return { live: events.filter((event) => event.status === "live").sort(byImportance).slice(0, 6), highlights, clips, broadcasts }
 }

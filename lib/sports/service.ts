@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto"
+import { gunzipSync, gzipSync } from "node:zlib"
 import { ApiError } from "@/lib/api-auth"
 import { getAdminDb } from "@/lib/firebase-admin"
+import { normalizeLineups, normalizeStats, normalizeTimeline, type MatchDetail, type RawLineup, type RawStat, type RawTimeline } from "./detail"
 import { isCovered, normalizeEvent, PROVIDER_NAME, toUtc, type RawEvent } from "./thesportsdb"
 import { SPORTS, type EventFeed, type SportDefinition, type SportEvent, type SportId } from "./types"
 
@@ -10,6 +12,8 @@ const BACKEND_TIMEOUT_MS = 20_000
 // Every provider call in this process shares one queue, so traffic and the scheduled
 // job together stay under the rate limit. A visitor never waits long for a place.
 const PROVIDER_GAP_MS = 3000
+// The paid plan allows 100 calls a minute. This leaves room for the live score poll.
+const PAID_PROVIDER_GAP_MS = 1000
 const RATE_LIMIT_COOLDOWN_MS = 60_000
 const VISITOR_MAX_WAIT_MS = 6000
 const VISITOR_BUDGET_MS = 8000
@@ -17,6 +21,10 @@ const SNAPSHOT_FRESH_MS = 45 * 60_000
 // Other days refresh in rotation, so their snapshots are older between visits.
 const CALENDAR_FRESH_MS = 2 * 3_600_000
 const REVALIDATE_SECONDS = 120
+const LIVE_BASE = "https://www.thesportsdb.com/api/v2/json"
+const LIVE_FRESH_MS = 60_000
+const LIVE_LIMIT_MS = 5 * 60_000
+const LIVE_TIMEOUT_MS = 4000
 
 // "123" is the provider's public test key: a handful of events per query and no
 // commercial licence. The feed is reported as limited until a paid key is set.
@@ -24,6 +32,8 @@ function apiKey(): { key: string; limited: boolean } {
   const key = process.env.THESPORTSDB_API_KEY
   return key ? { key, limited: false } : { key: "123", limited: true }
 }
+
+export const feedIsLimited = (): boolean => apiKey().limited
 
 const FRESH_MS = REVALIDATE_SECONDS * 1000
 const STALE_LIMIT_MS = 6 * 3_600_000
@@ -35,6 +45,7 @@ const inFlight = new Map<string, Promise<unknown>>()
 export function clearFeedCache(): void {
   memory.clear()
   inFlight.clear()
+  liveScores = { rows: new Map(), at: 0, tried: 0 }
 }
 
 let nextCallAt = 0
@@ -44,7 +55,7 @@ async function takeTurn(maxWaitMs: number): Promise<void> {
   const now = Date.now()
   const at = Math.max(now, nextCallAt)
   if (at - now > maxWaitMs) throw new Error("Provider queue is full")
-  nextCallAt = at + PROVIDER_GAP_MS
+  nextCallAt = at + (apiKey().limited ? PROVIDER_GAP_MS : PAID_PROVIDER_GAP_MS)
   if (at > now) await new Promise((resolve) => setTimeout(resolve, at - now))
 }
 
@@ -79,15 +90,19 @@ export async function readSnapshot(path: string): Promise<Snapshot | null> {
   try {
     const doc = await snapshotDoc(path)?.get()
     if (!doc?.exists) return null
-    const { body, at } = doc.data() as { body: string; at: number }
-    return { data: JSON.parse(body), at }
+    const { body, packed, at } = doc.data() as { body?: string; packed?: Uint8Array; at: number }
+    return { data: JSON.parse(packed ? gunzipSync(packed).toString("utf8") : (body as string)), at }
   } catch {
     return null
   }
 }
 
 export async function writeSnapshot(path: string, data: unknown, at: number): Promise<void> {
-  await snapshotDoc(path)?.set({ body: JSON.stringify(data), at }).catch(() => undefined)
+  // A busy football day is over 1 MB of JSON, the most one Firestore document can hold.
+  const packed = gzipSync(JSON.stringify(data))
+  await snapshotDoc(path)?.set({ packed, at }).catch((error: unknown) => {
+    console.error("Snapshot not stored", error instanceof Error ? error.message : "unknown")
+  })
 }
 
 /**
@@ -141,19 +156,76 @@ async function eventsForSport(sport: SportDefinition, date: string, refresh = fa
   const nearToday = Math.abs(Date.parse(date) - Date.parse(utcDate())) <= 86_400_000
   const { data, stale } = await load<{ events: RawEvent[] | null }>(`eventsday.php?${query}`, refresh, nearToday ? SNAPSHOT_FRESH_MS : CALENDAR_FRESH_MS, storedOnly)
   // The sport is rechecked per record, so a stray row can never be filed under the wrong sport.
-  return { events: rowsToEvents(data.events, sport), stale }
+  return { events: rowsToEvents(data.events, sport, nearToday ? await liveRows() : NO_LIVE), stale }
 }
 
-function rowsToEvents(rows: RawEvent[] | null | undefined, sport: SportDefinition): SportEvent[] {
-  return (rows ?? []).filter((raw) => (!raw.strSport || raw.strSport === sport.providerKey) && isCovered(raw, sport.id)).map((raw) => normalizeEvent(raw, sport.id))
+function rowsToEvents(rows: RawEvent[] | null | undefined, sport: SportDefinition, live: LiveRows = NO_LIVE): SportEvent[] {
+  return (rows ?? []).filter((raw) => (!raw.strSport || raw.strSport === sport.providerKey) && isCovered(raw, sport.id)).map((raw) => normalizeEvent(withLive(raw, live), sport.id))
+}
+
+interface RawLive {
+  idEvent?: string | null
+  intHomeScore?: string | number | null
+  intAwayScore?: string | number | null
+  strStatus?: string | null
+  strProgress?: string | number | null
+}
+
+type LiveRows = Map<string, RawLive>
+
+const NO_LIVE: LiveRows = new Map()
+// The live feed carries one number per side, which only fits these sports' scores.
+const NO_LIVE_OVERLAY = new Set(["Cricket", "Tennis", "Motorsport", "Fighting", "Golf"])
+
+let liveScores: { rows: LiveRows; at: number; tried: number } = { rows: new Map(), at: 0, tried: 0 }
+let liveLoading: Promise<void> | null = null
+
+async function pollLiveScores(key: string): Promise<void> {
+  const response = await fetch(`${LIVE_BASE}/livescore/all`, { headers: { "X-API-KEY": key }, cache: "no-store", signal: AbortSignal.timeout(LIVE_TIMEOUT_MS) })
+  if (!response.ok) throw new Error(`Provider responded ${response.status}`)
+  const { livescore } = (await response.json()) as { livescore?: RawLive[] | null }
+  const rows: LiveRows = new Map()
+  for (const row of livescore ?? []) if (row.idEvent) rows.set(row.idEvent, row)
+  liveScores = { rows, at: Date.now(), tried: Date.now() }
+}
+
+/**
+ * The fifteen minute job is far too slow for a game in progress, so this one call
+ * runs at most once a minute however many people are watching. Failing leaves the
+ * stored scores in place, and rows older than a few minutes are never presented as live.
+ */
+async function liveRows(): Promise<LiveRows> {
+  const { key, limited } = apiKey()
+  if (limited || process.env.API_ORIGIN) return NO_LIVE
+  const now = Date.now()
+  if (now - liveScores.tried >= LIVE_FRESH_MS) {
+    liveScores.tried = now
+    liveLoading ??= pollLiveScores(key).catch(() => undefined).finally(() => { liveLoading = null })
+  }
+  if (liveLoading) await liveLoading
+  return Date.now() - liveScores.at < LIVE_LIMIT_MS ? liveScores.rows : NO_LIVE
+}
+
+function withLive(raw: RawEvent, live: LiveRows): RawEvent {
+  const row = live.get(raw.idEvent)
+  const status = row?.strStatus?.trim()
+  if (!row || !status || status === "NS" || (raw.strSport && NO_LIVE_OVERLAY.has(raw.strSport))) return raw
+  return {
+    ...raw,
+    strStatus: status,
+    intHomeScore: row.intHomeScore ?? raw.intHomeScore,
+    intAwayScore: row.intAwayScore ?? raw.intAwayScore,
+    strProgress: row.strProgress === null || row.strProgress === undefined ? null : String(row.strProgress),
+  }
 }
 
 /** The stored day for every enabled sport. Spends no provider calls. */
 export async function storedEvents(date: string, sport?: SportId): Promise<SportEvent[]> {
   const sports = enabledSports().filter((item) => !sport || item.id === sport)
+  const live = await liveRows()
   const days = await Promise.all(sports.map(async (item) => {
     const query = new URLSearchParams({ d: date, s: item.providerKey as string })
-    return rowsToEvents((await peek<{ events: RawEvent[] | null }>(`eventsday.php?${query}`))?.events, item)
+    return rowsToEvents((await peek<{ events: RawEvent[] | null }>(`eventsday.php?${query}`))?.events, item, live)
   }))
   return days.flat()
 }
@@ -230,7 +302,7 @@ export async function fromBackend<T>(path: string): Promise<T | null> {
 
 export async function getEvents(options: { date?: string; sport?: SportId; refresh?: boolean } = {}): Promise<EventFeed> {
   const date = options.date ?? utcDate()
-  const query = new URLSearchParams({ date, pageSize: "500", ...(options.sport ? { sport: options.sport } : {}) })
+  const query = new URLSearchParams({ date, pageSize: "3000", ...(options.sport ? { sport: options.sport } : {}) })
   const sports = enabledSports().filter((sport) => !options.sport || sport.id === options.sport)
   const fetchedAt = new Date().toISOString()
   const base = { source: PROVIDER_NAME, fetchedAt, limited: apiKey().limited }
@@ -283,7 +355,53 @@ export async function getEvent(id: string): Promise<SportEvent | null> {
   const raw = await lookupRaw(match[1])
   if (!raw) return null
   const sport = enabledSports().find((candidate) => candidate.providerKey === raw.strSport)
-  return sport && isCovered(raw, sport.id) ? normalizeEvent(raw, sport.id) : null
+  return sport && isCovered(raw, sport.id) ? normalizeEvent(withLive(raw, await liveRows()), sport.id) : null
+}
+
+const DETAIL_FRESH_MS: Partial<Record<SportEvent["status"], number>> = { live: 90_000, finished: 6 * 3_600_000 }
+const DETAIL_DEFAULT_FRESH_MS = 15 * 60_000
+
+/**
+ * Asked for by one game's page, so unlike the daily feeds it refreshes on the visit
+ * itself. The last stored answer stands in if the provider cannot be reached.
+ */
+async function loadDetail<T>(path: string, freshMs: number): Promise<T> {
+  const now = Date.now()
+  const cached = memory.get(path)
+  if (cached && now - cached.at < freshMs) return cached.data as T
+  const snapshot = await readSnapshot(path)
+  if (snapshot && now - snapshot.at < freshMs) return snapshot.data as T
+  try {
+    const data = await request<T>(path)
+    memory.set(path, { data, at: now })
+    await writeSnapshot(path, data, now)
+    return data
+  } catch (error) {
+    if (cached) return cached.data as T
+    if (snapshot) return snapshot.data as T
+    throw error
+  }
+}
+
+/** Empty, not an error, for a game the provider has no detail on. */
+export async function getMatchDetail(event: SportEvent): Promise<MatchDetail> {
+  const id = event.provider.eventId
+  const freshMs = DETAIL_FRESH_MS[event.status] ?? DETAIL_DEFAULT_FRESH_MS
+  const [timeline, stats, lineups] = await Promise.allSettled([
+    loadDetail<{ timeline?: RawTimeline[] | null }>(`lookuptimeline.php?id=${id}`, freshMs),
+    loadDetail<{ eventstats?: RawStat[] | null }>(`lookupeventstats.php?id=${id}`, freshMs),
+    loadDetail<{ lineup?: RawLineup[] | null }>(`lookuplineup.php?id=${id}`, freshMs),
+  ])
+  const value = <T,>(result: PromiseSettledResult<T>): T | null => (result.status === "fulfilled" ? result.value : null)
+  const detail = {
+    timeline: normalizeTimeline(value(timeline)?.timeline),
+    stats: normalizeStats(value(stats)?.eventstats),
+    lineups: normalizeLineups(value(lineups)?.lineup),
+    fetchedAt: new Date().toISOString(),
+  }
+  const hasData = detail.timeline.length > 0 || detail.stats.length > 0 || detail.lineups.home.length > 0 || detail.lineups.away.length > 0
+  const failed = [timeline, stats, lineups].every((result) => result.status === "rejected")
+  return { ...detail, state: hasData ? "ok" : failed ? "unavailable" : "empty" }
 }
 
 interface RawTeam {
@@ -312,6 +430,10 @@ function chooseTeam(teams: RawTeam[], name: string, sport?: SportId) {
 export async function getTeamFixtures(name: string, sport?: SportId): Promise<TeamFixtures> {
   const base = { source: PROVIDER_NAME, fetchedAt: new Date().toISOString(), limited: apiKey().limited }
   const empty = { upcoming: [], recent: [] }
+  if (process.env.API_ORIGIN) {
+    const query = new URLSearchParams({ name, ...(sport ? { sport } : {}) })
+    return (await fromBackend<TeamFixtures>(`/api/teams?${query}`).catch(() => null)) ?? { team: null, ...empty, feed: { ...base, limited: false, state: "unavailable" } }
+  }
 
   let team: TeamFixtures["team"]
   try {
@@ -399,6 +521,9 @@ export function normalizeStandings(table: RawStanding[]): Pick<Standings, "leagu
 export async function getStandings(leagueId: string): Promise<Standings> {
   const base = { source: PROVIDER_NAME, fetchedAt: new Date().toISOString(), limited: apiKey().limited }
   const none = { league: null, season: null, rows: [], sourceUpdatedAt: null }
+  if (process.env.API_ORIGIN) {
+    return (await fromBackend<Standings>(`/api/standings/${encodeURIComponent(leagueId)}`).catch(() => null)) ?? { ...base, ...none, limited: false, state: "unavailable" }
+  }
   try {
     const data = await fetchJson<{ table: RawStanding[] | null }>(`lookuptable.php?${new URLSearchParams({ l: leagueId })}`)
     if (!data.table?.length) return { ...base, ...none, state: "empty" }

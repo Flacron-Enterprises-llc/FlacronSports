@@ -31,17 +31,22 @@ export interface RawEvent {
   strVideo?: string | null
   strThumb?: string | null
   strPostponed?: string | null
+  /** Added from the live feed: minutes played, or the clock in the current period. */
+  strProgress?: string | null
 }
 
 const FINISHED = new Set(["FT", "AET", "PEN", "AOT", "MATCH FINISHED", "FINISHED"])
 const LIVE = new Set(["1H", "2H", "HT", "ET", "BT", "P", "Q1", "Q2", "Q3", "Q4", "OT", "LIVE", "IN PLAY"])
 const SCHEDULED = new Set(["NS", "NOT STARTED", "TBD", ""])
 
+// Hockey periods and baseball innings, as the live feed writes them.
+const LIVE_PERIOD = /^(?:P[1-5]|IN\d{1,2}|ET\d)$/
+
 export function normalizeStatus(raw: RawEvent): EventStatus {
   if (raw.strPostponed?.toLowerCase() === "yes") return "postponed"
   const status = (raw.strStatus ?? "").trim().toUpperCase()
   if (FINISHED.has(status)) return "finished"
-  if (LIVE.has(status)) return "live"
+  if (LIVE.has(status) || LIVE_PERIOD.test(status)) return "live"
   if (SCHEDULED.has(status)) return "scheduled"
   if (status === "PST" || status === "POSTPONED") return "postponed"
   if (status === "CANC" || status === "CANCELLED" || status === "CANCELED") return "canceled"
@@ -210,5 +215,6 @@ export function normalizeEvent(raw: RawEvent, sportId: SportId, now: Date = new 
   if (sportId === "motorsport") return { ...shared, ...individual, ...motorsportFields(raw, now) }
 
   const status = normalizeStatus(raw)
-  return { ...shared, ...teams, status, score: normalizeScore(raw, status) }
+  const clock = status === "live" && raw.strProgress ? raw.strProgress : null
+  return { ...shared, ...teams, status, score: normalizeScore(raw, status), ...(clock ? { clock } : {}) }
 }

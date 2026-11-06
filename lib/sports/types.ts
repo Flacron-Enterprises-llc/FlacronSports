@@ -106,6 +106,8 @@ export interface SportEvent {
   /** The source gave a date with a midnight placeholder, so no start time is known. */
   dateOnly?: boolean
   status: EventStatus
+  /** Minutes played or the period clock, while a game is live and the feed states it. */
+  clock?: string | null
   /** Raw provider status, kept so unmapped values stay visible to operators. */
   providerStatus: string | null
   score: EventScore

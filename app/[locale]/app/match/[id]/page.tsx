@@ -9,6 +9,7 @@ import { AppPage, Panel } from "@/components/site/states"
 import { nameOf, StatusLabel } from "@/components/sports/event-card"
 import { EventResult } from "@/components/sports/event-result"
 import { ExportButton } from "@/components/sports/export-button"
+import { MatchDetailPanel } from "@/components/sports/match-detail"
 import { MatchTabs, ViewingPanel } from "@/components/sports/match-center"
 import { Crest, FavoriteStar, LiveRefresh, LocalTime, MatchScore } from "@/components/sports/parts"
 import { supportsScorePrediction } from "@/lib/community/predictions"
@@ -135,6 +136,7 @@ export default async function MatchPage({ params }: Props) {
       <div className="fs-rise mt-5" style={{ ["--i" as string]: 1 }}>
         <MatchTabs
           overview={overview}
+          details={duel && event.participantType === "team" ? <MatchDetailPanel matchId={event.id} home={home.name} away={away.name} live={event.status === "live"} /> : undefined}
           result={hasResultPanel ? <Panel><EventResult event={event} t={t} /></Panel> : undefined}
           viewing={<ViewingPanel matchId={event.id} title={event.eventName || event.participants.map((participant) => participant.name).join(" vs ")} />}
           community={community ? (

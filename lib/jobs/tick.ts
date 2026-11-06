@@ -9,9 +9,10 @@ import { sendEmail } from "@/lib/email-service"
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin"
 import { DEFAULT_PREFERENCES, type Preferences } from "@/lib/me/preferences"
 import { runNewsletter } from "@/lib/newsletter/digest"
+import { isMajorCompetition } from "@/lib/sports/priority"
 import type { SportId } from "@/lib/sports/types"
 import { refreshClips } from "@/lib/video/scorebat"
-import { enabledSports, getEvent, getEvents, refreshBroadcasts, utcDate } from "@/lib/sports/service"
+import { enabledSports, feedIsLimited, getEvent, getEvents, refreshBroadcasts, utcDate } from "@/lib/sports/service"
 import type { SportEvent } from "@/lib/sports/types"
 
 const PAGE_SIZE = 300
@@ -56,14 +57,18 @@ const TICK_MS = 15 * 60_000
 const ROTATING_OFFSETS = [-7, -6, -5, -4, -3, -2, 2, 3, 4, 5, 6, 7]
 const ROTATING_PER_TICK = 2
 const LISTINGS_PER_TICK = 2
+// The paid feed allows far more calls, so every stored day stays under an hour old.
+const PAID_ROTATING_PER_TICK = 4
+const PAID_LISTINGS_PER_TICK = 6
 
 /**
  * The days a visitor can open beyond yesterday and today. Tomorrow is kept current
  * and the rest take turns, so the calendar stays stored without tripping the rate limit.
  */
 export function calendarDates(now: Date): string[] {
-  const start = Math.floor(now.getTime() / TICK_MS) * ROTATING_PER_TICK
-  const rotating = Array.from({ length: ROTATING_PER_TICK }, (_, index) => ROTATING_OFFSETS[(start + index) % ROTATING_OFFSETS.length])
+  const perTick = feedIsLimited() ? ROTATING_PER_TICK : PAID_ROTATING_PER_TICK
+  const start = Math.floor(now.getTime() / TICK_MS) * perTick
+  const rotating = Array.from({ length: perTick }, (_, index) => ROTATING_OFFSETS[(start + index) % ROTATING_OFFSETS.length])
   return [1, ...rotating].map((offset) => utcDate(new Date(now.getTime() + offset * DAY)))
 }
 
@@ -72,8 +77,9 @@ export function listingTargets(now: Date): { date: string; sportId: SportId }[] 
   const sports = enabledSports()
   const pairs = [0, 1].flatMap((offset) => sports.map((sport) => ({ date: utcDate(new Date(now.getTime() + offset * DAY)), sportId: sport.id })))
   if (pairs.length === 0) return []
-  const start = Math.floor(now.getTime() / TICK_MS) * LISTINGS_PER_TICK
-  return Array.from({ length: LISTINGS_PER_TICK }, (_, index) => pairs[(start + index) % pairs.length])
+  const perTick = feedIsLimited() ? LISTINGS_PER_TICK : PAID_LISTINGS_PER_TICK
+  const start = Math.floor(now.getTime() / TICK_MS) * perTick
+  return Array.from({ length: perTick }, (_, index) => pairs[(start + index) % pairs.length])
 }
 
 let ticking = false
@@ -101,7 +107,9 @@ async function tick(now: Date) {
   const siteUrl = process.env.APP_BASE_URL || "https://flacronsport.com"
 
   const jobs = await runIsolated({
-    reports: () => runReports(db, events, today.fetchedAt, now),
+    // The full feed has hundreds of finished games a day. A written report for every
+    // regional fixture would bury the news page, so it covers the major competitions.
+    reports: () => runReports(db, feedIsLimited() ? events : events.filter((event) => isMajorCompetition(event.competition.name)), today.fetchedAt, now),
     alerts: () =>
       runAlerts({
         db, events, now, siteUrl, send: sendEmail, emailFor: verifiedEmail,

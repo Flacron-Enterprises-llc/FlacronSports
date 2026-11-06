@@ -36,3 +36,15 @@ Owner direction takes priority over older code. Each entry records why.
 | D-030 | 2026-11-06 | Watch shows highlights from an approved list of official YouTube channels, through YouTube's own player, checked at listing and again at playback. Unapproved channels are left out and logged. | A feed listing a video is not permission. Territory stays with the provider's player. The list needs owner or counsel review. |
 | D-031 | 2026-11-06 | ScoreBat football clips are stored by the scheduled job every six hours. The current Free plan gives limited competitions, at least 7 days old, with ScoreBat ads and logo. | Calls spend quota, so visitors read the stored copy. Commercial use on the Free plan needs checking in ScoreBat's terms. |
 | D-032 | 2026-11-06 | All provider calls share one queue, and visitors get the stored snapshot rather than wait for the provider. | Visitors and the job together tripped the rate limit, and waiting caused a 500 on `/app/scores`. |
+
+## D-033: One paid sports feed covers games, live scores and match detail
+
+The paid TheSportsDB key returns every game of the day (1,008 football fixtures on a checked Saturday), live scores for all sports on one call, and lineups, statistics and timelines for covered games. It is the only sports feed the site calls.
+
+- Snapshots are gzip compressed, because that Saturday is 1.42 MB of JSON and one Firestore document holds 1 MB.
+- Live scores are polled at most once a minute by the backend and laid over stored games. Match detail is fetched when a game's page asks for it.
+- Scores groups games by competition and pages them. Major competitions lead, and every other competition stays reachable by paging and search.
+- Written reports cover major competitions only, so regional fixtures do not bury the news page.
+- Standings and team pages go through the backend, so the frontend never calls the provider.
+
+Checked on 2026-11-06: the API-Football key supplied as paid reports plan Free, 100 requests a day, ending 2026-11-19, so it is not used. The ScoreBat feed still reports limited competitions and clips at least 7 days old.

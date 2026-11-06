@@ -28,6 +28,8 @@ Parameters:
     Type: String
   ScorebatSecretArn:
     Type: String
+  TheSportsDbSecretArn:
+    Type: String
   PricePlusMonthly:
     Type: String
   PricePlusAnnual:
@@ -211,6 +213,7 @@ Resources:
             - { Name: STRIPE_WEBHOOK_SECRET, ValueFrom: !Ref StripeWebhookSecretArn }
             - { Name: CRON_SECRET, ValueFrom: !Ref CronSecretArn }
             - { Name: SCOREBAT_TOKEN, ValueFrom: !Ref ScorebatSecretArn }
+            - { Name: THESPORTSDB_API_KEY, ValueFrom: !Ref TheSportsDbSecretArn }
             - { Name: FIREBASE_ADMIN_PROJECT_ID, ValueFrom: !Sub "${FirebaseSecretArn}:project_id::" }
             - { Name: FIREBASE_ADMIN_CLIENT_EMAIL, ValueFrom: !Sub "${FirebaseSecretArn}:client_email::" }
             - { Name: FIREBASE_ADMIN_PRIVATE_KEY, ValueFrom: !Sub "${FirebaseSecretArn}:private_key::" }

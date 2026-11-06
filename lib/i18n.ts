@@ -23,6 +23,7 @@ const en = {
     all: "All", live: "Live", upcoming: "Upcoming", finished: "Finished", other: "Other",
     allSports: "All sports", date: "Date", search: "Filter by team, athlete or competition",
     empty: "No fixtures match these filters.", apply: "Apply",
+    pageOf: "Page {page} of {pages}", previous: "Previous", next: "Next", games: "{count} games",
   },
   feed: {
     source: "Source", updated: "Updated",
@@ -37,6 +38,14 @@ const en = {
   match: {
     back: "Back to scores", overview: "Overview", kickoff: "Kickoff", venue: "Venue", competition: "Competition",
     viewing: "Viewing options", followLive: "Follow Live",
+    details: "Match details", timeline: "Timeline", statistics: "Statistics", lineups: "Lineups", substitutes: "Substitutes",
+    detailEmpty: "No lineups, statistics or timeline have been published for this game yet.", detailFailed: "Match details could not be loaded.", revealDetails: "Show match details",
+    timelineKinds: { goal: "Goal", penalty: "Penalty goal", "own-goal": "Own goal", yellow: "Yellow card", red: "Red card", substitution: "Substitution", var: "VAR review" },
+    positions: { goalkeeper: "GK", defender: "DEF", midfielder: "MID", forward: "FWD" },
+    stats: {
+      "ball possession": "Possession", expected_goals: "Expected goals", "total shots": "Total shots", "shots on goal": "Shots on target", "shots off goal": "Shots off target", "blocked shots": "Blocked shots",
+      "corner kicks": "Corners", offsides: "Offsides", fouls: "Fouls", "yellow cards": "Yellow cards", "red cards": "Red cards", "goalkeeper saves": "Goalkeeper saves", "total passes": "Total passes", "passes accurate": "Accurate passes", "passes %": "Pass accuracy",
+    },
     noVideo: "No authorized video source is available for this event, so nothing can be played here.",
     exportPdf: "Download PDF report", exportNoCredits: "You have no export credits.", exportBuy: "See add-ons", notFound: "We could not find this match.", tbd: "Time to be confirmed", noScore: "Score not available",
   },
@@ -377,6 +386,7 @@ const fr: Dictionary = {
     all: "Tous", live: "En direct", upcoming: "À venir", finished: "Terminés", other: "Autres",
     allSports: "Tous les sports", date: "Date", search: "Filtrer par équipe, athlète ou compétition",
     empty: "Aucune rencontre ne correspond à ces filtres.", apply: "Appliquer",
+    pageOf: "Page {page} sur {pages}", previous: "Précédent", next: "Suivant", games: "{count} rencontres",
   },
   feed: {
     source: "Source", updated: "Mis à jour",
@@ -391,6 +401,14 @@ const fr: Dictionary = {
   match: {
     back: "Retour aux scores", overview: "Aperçu", kickoff: "Coup d'envoi", venue: "Lieu", competition: "Compétition",
     viewing: "Options de visionnage", followLive: "Suivre en direct",
+    details: "Détails du match", timeline: "Chronologie", statistics: "Statistiques", lineups: "Compositions", substitutes: "Remplaçants",
+    detailEmpty: "Aucune composition, statistique ni chronologie n'a encore été publiée pour cette rencontre.", detailFailed: "Impossible de charger les détails du match.", revealDetails: "Afficher les détails du match",
+    timelineKinds: { goal: "But", penalty: "But sur penalty", "own-goal": "But contre son camp", yellow: "Carton jaune", red: "Carton rouge", substitution: "Remplacement", var: "Vérification VAR" },
+    positions: { goalkeeper: "G", defender: "DÉF", midfielder: "MIL", forward: "ATT" },
+    stats: {
+      "ball possession": "Possession", expected_goals: "Buts attendus", "total shots": "Tirs", "shots on goal": "Tirs cadrés", "shots off goal": "Tirs non cadrés", "blocked shots": "Tirs contrés",
+      "corner kicks": "Corners", offsides: "Hors-jeu", fouls: "Fautes", "yellow cards": "Cartons jaunes", "red cards": "Cartons rouges", "goalkeeper saves": "Arrêts du gardien", "total passes": "Passes", "passes accurate": "Passes réussies", "passes %": "Précision des passes",
+    },
     noVideo: "Aucune source vidéo autorisée n'est disponible pour cet événement : rien ne peut être lu ici.",
     exportPdf: "Télécharger le rapport PDF", exportNoCredits: "Vous n'avez plus de crédits d'export.", exportBuy: "Voir les options", notFound: "Nous n'avons pas trouvé ce match.", tbd: "Horaire à confirmer", noScore: "Score non disponible",
   },

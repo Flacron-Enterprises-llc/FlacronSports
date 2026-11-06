@@ -154,8 +154,10 @@ export async function getMatchChatState(db: Pick<DocDb, "get" | "query" | "count
   const poll = polls.sort((a, b) => b.createdAtUTC.localeCompare(a.createdAtUTC))[0] ?? null
   const votes = poll ? await Promise.all(poll.options.map((_, option) => db.count("poll_votes", { where: [["tally", tallyKey(poll.id, option)]] }))) : []
   const mine = poll && viewerUid ? await db.get<PollVote>(votePath(poll.id, viewerUid)) : null
+  const participants = await db.count("match_chat_participants", { where: [["matchId", matchId]] })
   return {
     locked: chat?.locked === true,
+    participants,
     notice: chat?.notice ? { text: chat.notice.text, pinnedAtUTC: chat.notice.pinnedAtUTC } : null,
     poll: poll && {
       question: poll.question,

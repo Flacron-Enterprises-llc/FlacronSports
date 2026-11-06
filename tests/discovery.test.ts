@@ -230,6 +230,7 @@ describe("sport switcher", () => {
   it("stays on a page with a sport filter and keeps its other filters", () => {
     expect(sportSwitchPath("/app/scores", "status=live&page=3", "tennis")).toBe("/app/scores?status=live&sport=tennis")
     expect(sportSwitchPath("/app/watch", "sport=tennis", null)).toBe("/app/watch")
+    expect(sportSwitchPath("/app/watch", "sport=tennis&athlete=Fritz&tournament=Basel&q=fr", "cricket")).toBe("/app/watch?sport=cricket&q=fr")
     expect(sportSwitchPath("/app/search", "q=abc", "cricket")).toBe("/app/search?q=abc&sport=cricket")
   })
   it("opens Scores from any other page", () => {

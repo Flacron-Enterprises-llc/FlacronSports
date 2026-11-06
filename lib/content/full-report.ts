@@ -24,7 +24,7 @@ const COPY: Record<Locale, { goals: string; cards: string; subs: string; venue: 
     goals: "{count} goals were scored.",
     cards: "{count} red cards were shown.",
     subs: "The teams made {count} substitutions between them.",
-    venue: "The game was played at {venue}.",
+    venue: "It took place at {venue}.",
     xg: "{team} scored {goals} from {xg} expected goals.",
     shots: "{team} put {on} of {total} shots on target.",
     possession: "{team} had {value} of the ball.",

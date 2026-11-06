@@ -1,5 +1,5 @@
 import { ApiError } from "@/lib/api-auth"
-import { nextVersions, REPORT_VERSIONS, versionOf, type Report, type ReportStatus, type ReportVersion } from "@/lib/content/reports"
+import { nextVersions, REPORT_VERSIONS, sportFeedKey, versionOf, type Report, type ReportStatus, type ReportVersion } from "@/lib/content/reports"
 import type { DocDb } from "@/lib/doc-db"
 
 export type ReviewStatus = "published" | "rejected"
@@ -30,9 +30,9 @@ export async function reviewReport(db: DocDb, input: { id: string; status: Revie
     if (status === "published") {
       if (!report.body || !report.title) throw new ApiError(409, "nothing_to_publish", "This report has no text to publish")
       const publishedAt = report.publishedAt ?? stamp
-      Object.assign(review, { publishedAt, feedKey: `${report.locale}#${publishedAt}`, withheldReason: null })
+      Object.assign(review, { publishedAt, feedKey: `${report.locale}#${publishedAt}`, sportFeedKey: sportFeedKey(report, publishedAt), withheldReason: null })
     } else {
-      review.feedKey = null
+      Object.assign(review, { feedKey: null, sportFeedKey: null })
     }
     const versions = nextVersions(stored, versionOf(report, status, actorUid, stamp))
     tx.set(historyPath, { versions })
@@ -56,7 +56,7 @@ export async function rollbackReport(db: DocDb, input: { id: string }, now: Date
     const stamp = now.toISOString()
     tx.set(historyPath, { versions: versions.slice(0, -1) })
     // editedAt stays set, so the job cannot replace the restored text.
-    tx.set(path, { title, body, status, correctionNote, withheldReason, publishedAt, feedKey, editedAt: stamp, updatedAt: stamp, previousVersions: versions.length - 1 }, { merge: true })
+    tx.set(path, { title, body, status, correctionNote, withheldReason, publishedAt, feedKey, sportFeedKey: feedKey && publishedAt ? sportFeedKey(report, publishedAt) : null, editedAt: stamp, updatedAt: stamp, previousVersions: versions.length - 1 }, { merge: true })
     return { status }
   })
 }

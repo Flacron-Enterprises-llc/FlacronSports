@@ -65,6 +65,59 @@ export interface Innings {
   runs: number
   wickets: number | null
   overs: string | null
+  declared?: boolean
+  followOn?: boolean
+}
+
+export type CricketFormat = "test" | "first-class" | "odi" | "t20" | "hundred"
+export type CricketOutcome = "won" | "drawn" | "tied" | "no-result"
+export type CricketStage = "final" | "semi-final" | "playoff" | "qualifier" | "eliminator"
+
+export interface CricketDetails {
+  kind: "cricket"
+  format: CricketFormat | null
+  /** What the format schedules. The source never states which day a match has reached. */
+  scheduledDays: number | null
+  stage: CricketStage | null
+  /** "3rd Test", as the source numbers it. */
+  matchLabel: string | null
+  round: number | null
+  season: string | null
+  dayNight: boolean
+  city: string | null
+  country: string | null
+  women: boolean
+  toss: { side: string; choice: "bat" | "field" } | null
+  spectators: number | null
+}
+
+export interface TennisRound {
+  key: "final" | "semi-final" | "quarter-final" | "round-robin" | "round"
+  number?: number
+}
+
+/** One match inside a team tie. Games read winner first. */
+export interface TennisRubber {
+  winner: string
+  loser: string
+  games: [number, number][]
+  /** The set loser's tiebreak points, where a set went to one. */
+  tiebreaks: (number | null)[]
+}
+
+export interface TennisDetails {
+  kind: "tennis"
+  format: "singles" | "doubles" | "team-tie"
+  tournament: string | null
+  city: string | null
+  country: string | null
+  round: TennisRound | null
+  gender: "men" | "women" | "mixed" | null
+  /** World rankings at the time of the draw, in participant order. */
+  ranks: (number | null)[]
+  rubbers: TennisRubber[]
+  group: string | null
+  season: string | null
 }
 
 export type CombatMethod =
@@ -77,6 +130,36 @@ export type CombatMethod =
   | "submission"
   | "disqualification"
 
+export type CombatDiscipline = "boxing" | "mma" | "kickboxing" | "muay-thai" | "bare-knuckle"
+
+/** Names read alphabetically, because the source lists the winner first. */
+export interface CombatBout {
+  names: [string, string]
+  winner: string | null
+  method: CombatMethod | null
+  round: number | null
+  time: string | null
+  weightClass: string | null
+  scheduledRounds: number | null
+  section: "main" | "preliminary" | null
+  /** The judges' scores, as the source writes them. */
+  scorecards: string | null
+}
+
+export interface CombatDetails {
+  kind: "combat"
+  discipline: CombatDiscipline | null
+  card: string | null
+  bouts: CombatBout[]
+  weightClass: string | null
+  scheduledRounds: number | null
+  title: string | null
+  city: string | null
+  country: string | null
+  season: string | null
+  spectators: number | null
+}
+
 export interface ClassificationEntry {
   position: number
   name: string
@@ -84,34 +167,111 @@ export interface ClassificationEntry {
   time: string | null
   laps?: number | null
   grid?: number | null
+  /** Started from the pit lane, which the source marks in place of a grid slot. */
+  pitLane?: boolean
+  /** Car or rider number. */
+  number?: number
+  points?: number
+  /** The entrant's own record, when the source links one. */
+  playerId?: string
+}
+
+/** An entrant with no classified place. */
+export interface ClassifiedOut {
+  name: string
+  team: string | null
+  /** The source's own code: RET, DNF, DNS, DQ, DSQ, NC. */
+  status: string | null
+  /** A reason or a distance, as the source words it. */
+  note: string | null
+  laps?: number
+}
+
+export interface StandingEntry {
+  position: number
+  name: string
+  team?: string
+  points: number
+}
+
+export type MotorsportSession = "practice" | "testing" | "sprint-qualifying" | "qualifying" | "sprint" | "race"
+
+export interface MotorsportDetails {
+  kind: "motorsport"
+  session: MotorsportSession
+  sessionNumber: number | null
+  weekend: string | null
+  /** Category within a multi-class session. */
+  className: string | null
+  round: number | null
+  circuit: string | null
+  city: string | null
+  country: string | null
+  season: string | null
+  scheduledLaps: number | null
 }
 
 /** One period of a game. A side the source left blank stays null, never zero. */
 export interface ScoreSegment {
-  kind: "quarter" | "half" | "inning" | "set" | "overtime"
+  kind: "quarter" | "half" | "period" | "inning" | "extras" | "set" | "overtime" | "shootout"
   number: number
   home: number | null
   away: number | null
 }
 
-/** Period scores read from the source's result text. Other sports get no statistics feed. */
+/** Period scores read from the source's result text. Empty segments mean only the totals below are known. */
 export interface ScoreBreakdown {
   segments: ScoreSegment[]
   /** Baseball box score totals. */
   hits?: { home: number; away: number }
   errors?: { home: number; away: number }
+  /** Rugby, where the feed states them. */
+  tries?: { home: number; away: number }
 }
 
 /** How a finished game ended, when it was not in regular time. */
 export type EventConclusion = "extra-time" | "overtime" | "penalties" | "shootout" | "awarded" | "walkover"
 
+export type SportDetails = CricketDetails | TennisDetails | CombatDetails | MotorsportDetails
+
 export type EventScore =
   | { kind: "none" }
   | { kind: "team"; home: number; away: number }
-  | { kind: "sets"; lines: SetLine[]; winner: string | null; retired: string | null }
-  | { kind: "innings"; home: Innings | null; away: Innings | null; winner: string | null; margin: { value: number; unit: "runs" | "wickets" } | null }
+  | { kind: "sets"; lines: SetLine[]; winner: string | null; retired: string | null; walkover?: boolean; tiebreaks?: (number | null)[] }
+  | {
+      kind: "innings"
+      home: Innings | null
+      away: Innings | null
+      winner: string | null
+      margin: { value: number; unit: "runs" | "wickets" } | null
+      outcome?: CricketOutcome
+      /** Each innings, for formats where a side bats twice. */
+      homeInnings?: Innings[]
+      awayInnings?: Innings[]
+      /** home and away are match totals with no innings to break them down. */
+      totalsOnly?: boolean
+      byInnings?: boolean
+      ballsLeft?: number
+      method?: "dls"
+      rain?: boolean
+      reducedOvers?: number
+      revisedOvers?: number
+      target?: number
+      playerOfMatch?: string
+    }
   | { kind: "combat"; winner: string; method: CombatMethod | null; round: number | null; time: string | null }
-  | { kind: "classification"; entries: ClassificationEntry[] }
+  | {
+      kind: "classification"
+      entries: ClassificationEntry[]
+      /** The class these entries belong to, when a session classifies several. */
+      className?: string
+      classes?: { name: string; entries: ClassificationEntry[] }[]
+      out?: ClassifiedOut[]
+      pole?: string
+      fastestLap?: { name: string; time: string | null } | null
+      /** The championship as the source printed it after this session. */
+      standings?: StandingEntry[]
+    }
 
 export interface SportEvent {
   id: string
@@ -133,6 +293,8 @@ export interface SportEvent {
   /** Only when the source states it. */
   shootout?: { home: number; away: number }
   breakdown?: ScoreBreakdown
+  /** Facts particular to the sport. What reveals a result lives in score, not here. */
+  details?: SportDetails
   /** Raw provider status, kept so unmapped values stay visible to operators. */
   providerStatus: string | null
   score: EventScore
@@ -155,4 +317,6 @@ export interface EventFeed {
   fetchedAt: string
   /** Set while the feed is a limited tier that must not be presented as full coverage. */
   limited: boolean
+  /** For one sport with nothing still to come on this day: the next dates that have games. */
+  nextDates?: { date: string; games: number }[]
 }

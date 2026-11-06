@@ -424,7 +424,7 @@ describe("data rights for the new records", () => {
 
 describe("every new route", () => {
   const routes = [
-    "app/api/predictions/route.ts", "app/api/predictions/entrants/route.ts", "app/api/community/badges/route.ts", "app/api/referrals/route.ts",
+    "app/api/predictions/route.ts", "app/api/predictions/mine/route.ts", "app/api/predictions/entrants/route.ts", "app/api/community/badges/route.ts", "app/api/referrals/route.ts",
     "app/api/groups/route.ts", "app/api/groups/join/route.ts", "app/api/groups/[id]/route.ts", "app/api/groups/[id]/invite/route.ts", "app/api/groups/[id]/members/[uid]/route.ts",
     "app/api/clubs/route.ts", "app/api/clubs/[id]/route.ts",
   ]

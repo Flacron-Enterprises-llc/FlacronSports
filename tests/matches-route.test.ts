@@ -35,4 +35,12 @@ describe("frontend to backend contract", () => {
     const body = await (await GET(new Request(`https://backend.example/api/matches?date=${utcDate()}&sport=football&pageSize=500`, { headers: { authorization: "Bearer member" } }))).json()
     expect(body.events).toHaveLength(150)
   })
+
+  it("lets a sport filed by league open its next dates, and no other sport go that far", async () => {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ events: [] }), { status: 200 }))
+    const far = utcDate(new Date(Date.now() + 100 * 86_400_000))
+    const request = (sport: string) => new Request(`https://backend.example/api/matches?date=${far}&sport=${sport}`, { headers: { authorization: "Bearer member" } })
+    expect((await GET(request("cricket"))).status).toBe(200)
+    expect((await GET(request("football"))).status).toBe(400)
+  })
 })

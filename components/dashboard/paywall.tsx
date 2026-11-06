@@ -21,6 +21,8 @@ export type ShellState = "member" | "account" | "plans" | "checking" | "failed"
 
 export function shellState(input: { path: string; role: string | null; loaded: boolean; hasAccess: boolean; plan: PlanId; addons: AccessAddon[] }): ShellState {
   const { path, role, loaded, hasAccess, plan, addons } = input
+  // Paying comes before the dashboard for everyone, so the confirmation stays outside it.
+  if (/^\/app\/payment-success/.test(path)) return "account"
   if (role) return "member"
   if (!loaded) return "checking"
   if (!hasAccess) return "failed"

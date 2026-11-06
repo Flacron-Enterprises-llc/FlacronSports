@@ -1,5 +1,6 @@
-// Deterministic and grounded: no model is called, so every answer comes from the
-// sports feed or the curated reference. Anything else is admitted as unknown.
+// Deterministic and grounded: no model is called here, so every answer comes from the
+// sports feed or the curated reference. Anything else is admitted as unknown. This is
+// also what answers when the model layer in model.ts is off or fails.
 
 import { getDictionary, type Dictionary, type Locale } from "@/lib/i18n"
 import { eventTitle, hasResult, resultLine } from "@/lib/sports/presentation"
@@ -31,11 +32,15 @@ export interface AnswerTable {
 export interface AssistantAnswer {
   kind: AnswerKind
   text: string
+  /** Kept apart from the facts in `text`, and always shown as a forecast. */
+  forecast?: string
   items: AnswerItem[]
   table?: AnswerTable
   notes: string[]
   sources: { label: string; url: string | null }[]
   asOfUTC: string | null
+  /** The text itself states a result, so spoiler mode hides it until revealed. */
+  revealsResult?: boolean
   /** False when nothing useful could be answered, so the request is given back. */
   charged: boolean
 }
@@ -72,6 +77,11 @@ const STOP_WORDS = new Set(
     .filter(Boolean),
 )
 
+const DIRECT_RESULT = /\b(did \w+(?: \w+){0,3} (?:win|lose|draw)|who (?:won|lost)|final score|qui a (?:gagne|perdu)|a-t-(?:il|elle) (?:gagne|perdu))\b/
+
+/** Whether a normalized question asks for a result outright, which spoiler mode then allows. */
+export const asksForResult = (question: string) => RESULT.test(question) || LIVE.test(question) || STANDINGS.test(question) || DIRECT_RESULT.test(question)
+
 export function normalize(text: string): string {
   return text
     .normalize("NFD")
@@ -83,14 +93,14 @@ export function normalize(text: string): string {
     .trim()
 }
 
-function topicOf(question: string): string {
+export function topicOf(question: string): string {
   return question
     .split(/[\s']+/)
     .filter((word) => !STOP_WORDS.has(word))
     .join(" ")
 }
 
-function nameMatches(name: string, topic: string, question: string): boolean {
+export function nameMatches(name: string, topic: string, question: string): boolean {
   const candidate = normalize(name)
   if (candidate.length < 3) return false
   return (topic.length >= 3 && candidate.includes(topic)) || ` ${question} `.includes(` ${candidate} `)
@@ -109,7 +119,7 @@ function findReference(question: string): ReferenceEntry | null {
   return REFERENCE.find((entry) => entry.terms.some((term) => padded.includes(` ${term} `))) ?? null
 }
 
-function toItem(event: SportEvent, withScore: boolean, t: Dictionary): AnswerItem {
+export function toItem(event: SportEvent, withScore: boolean, t: Dictionary): AnswerItem {
   return {
     matchId: event.id,
     title: eventTitle(event),
@@ -124,7 +134,7 @@ const fill = (template: string, values: Record<string, string | number>) =>
   template.replace(/\{(\w+)\}/g, (_, key: string) => String(values[key] ?? ""))
 
 /** The top of the table, plus the row asked about when it sits lower down. */
-function tableView(leagueId: string, standings: Standings, asked: (team: string) => boolean): AnswerTable {
+export function tableView(leagueId: string, standings: Standings, asked: (team: string) => boolean): AnswerTable {
   const top = standings.rows.slice(0, TABLE_ROWS)
   const extra = standings.rows.slice(TABLE_ROWS).filter((row) => asked(row.team))
   return {

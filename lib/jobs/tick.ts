@@ -15,11 +15,11 @@ import { flushMetrics } from "@/lib/ops/metrics"
 import { failedJobs, recordRun, type JobRun } from "@/lib/ops/runs"
 import { seenPath, summarizeSeen } from "@/lib/sports/coverage"
 import { isFollowed, type Following } from "@/lib/sports/following"
-import { isMajorCompetition } from "@/lib/sports/priority"
+import { selectForReports } from "@/lib/sports/priority"
 import type { EventFeed, SportId } from "@/lib/sports/types"
 import { videoFor } from "@/lib/video/catalog"
 import { refreshClips, storedClips } from "@/lib/video/scorebat"
-import { enabledSports, feedIsLimited, getEvent, getEvents, getMatchDetail, providerStatus, refreshBroadcasts, sportFeedStates, storedEvents, utcDate } from "@/lib/sports/service"
+import { collectLeagueEvents, enabledSports, feedIsLimited, getEvent, getEvents, getMatchDetail, providerStatus, refreshBroadcasts, sportFeedStates, storedEvents, utcDate } from "@/lib/sports/service"
 import type { SportEvent } from "@/lib/sports/types"
 
 const PAGE_SIZE = 300
@@ -93,7 +93,7 @@ export function listingTargets(now: Date): { date: string; sportId: SportId }[] 
 }
 
 export function reportableEvents(events: SportEvent[], followed: Following): SportEvent[] {
-  return events.filter((event) => isMajorCompetition(event.competition.name) || isFollowed(followed, event))
+  return selectForReports(events, (event) => isFollowed(followed, event))
 }
 
 /** Everything anyone follows, as one list, so a game costs one check however many members there are. */
@@ -130,8 +130,8 @@ async function loadContext(db: Firestore, now: Date): Promise<JobContext> {
     db, now, yesterday, today, events, members,
     siteUrl: process.env.APP_BASE_URL || "https://flacronsport.com",
     // The full feed has hundreds of finished games a day. A written report for every
-    // regional fixture would bury the news page, so it covers the major competitions
-    // and any game a member follows, which is what personalized reports are made from.
+    // regional fixture would bury the news page, so each sport gets its major competitions
+    // up to a daily quota, plus any game a member follows, which personalized reports need.
     targets: async (list) => (feedIsLimited() ? list : reportableEvents(list, await (followed ??= members().then(followedByAnyone)))),
   }
 }
@@ -181,6 +181,8 @@ const JOBS = {
     return days
   },
   clips: async () => ({ state: await refreshClips() }),
+  // Last, because a full share is about 200 seconds in the provider queue.
+  leagues: async ({ now }: JobContext) => collectLeagueEvents(TICK_MS, now),
 } as const
 
 export type JobName = keyof typeof JOBS

@@ -5,15 +5,15 @@ import type { DocDb } from "@/lib/doc-db"
 import { getAdminDb } from "@/lib/firebase-admin"
 import { memberFetch, MemberAccessRequired } from "@/lib/member-fetch"
 import { getDictionary, LOCALES, type Locale } from "@/lib/i18n"
-import { eventTitle, resultLine } from "@/lib/sports/presentation"
-import type { EventScore, SportEvent } from "@/lib/sports/types"
-import { visibleReports } from "./news"
+import { eventTitle, isDuel, resultLine } from "@/lib/sports/presentation"
+import type { EventConclusion, EventScore, SportEvent, SportId } from "@/lib/sports/types"
+import { balanceBySport, isSportRoundup, visibleReports } from "./news"
 
 export const REPORTS_COLLECTION = "reports"
 export const REPORT_VERSIONS = "report_versions"
 export const MAX_VERSIONS = 10
 /** Bump whenever the wording in TEMPLATES changes. */
-export const TEMPLATE_VERSION = "result-template-v1"
+export const TEMPLATE_VERSION = "result-template-v2"
 
 export type ReportStatus = "draft" | "validated" | "published" | "corrected" | "rejected"
 export type ReportType = "result" | "recap" | "preview" | "roundup"
@@ -51,6 +51,8 @@ export interface Report {
   publishedAt: string | null
   /** locale#publishedAt, set only while public. See listPublishedReports. */
   feedKey: string | null
+  /** locale#sportId#publishedAt, set only while public. See listNewsReports. */
+  sportFeedKey?: string | null
   /** The match facts behind a recap, so the job can skip games that have not changed. */
   factsVersion?: string
   /** How many earlier versions an editor can roll back to. */
@@ -75,9 +77,24 @@ export type SaveOutcome = "created" | "replaced" | "duplicate" | "locked" | "kep
 
 // Deliberately neutral: no "beat" or "won", because a level score can still be
 // settled on penalties and the feed does not give the shootout result.
-const TEMPLATES: Record<Locale, { title: string; body: string; eventTitle: string; eventBody: string; dateLocale: string }> = {
-  en: { title: "Result: {home} v {away}", body: "Final score: {home} {homeScore}, {away} {awayScore}. {competition}, {date} (UTC).", eventTitle: "Result: {event}", eventBody: "{result}. {competition}, {date} (UTC).", dateLocale: "en-US" },
-  fr: { title: "Résultat : {home} - {away}", body: "Score final : {home} {homeScore}, {away} {awayScore}. {competition}, {date} (UTC).", eventTitle: "Résultat : {event}", eventBody: "{result}. {competition}, {date} (UTC).", dateLocale: "fr-FR" },
+const TEMPLATES: Record<Locale, {
+  title: string; eventTitle: string; body: string; finalScore: string; finalSets: string; setScores: string
+  classification: string; bout: string; endings: Record<EventConclusion, string>; dateLocale: string
+}> = {
+  en: {
+    title: "Result: {home} v {away}", eventTitle: "Result: {event}", body: "{result}. {competition}, {date} (UTC).",
+    finalScore: "Final score: {home} {homeScore}, {away} {awayScore}", finalSets: "Final score in sets: {home} {homeScore}, {away} {awayScore}", setScores: "Set scores: {sets}",
+    classification: "Classification: {result}", bout: "{home} v {away}: {result}",
+    endings: { "extra-time": "after extra time", overtime: "after overtime", penalties: "after a penalty shootout", shootout: "after a shootout", awarded: "result awarded", walkover: "walkover" },
+    dateLocale: "en-US",
+  },
+  fr: {
+    title: "Résultat : {home} - {away}", eventTitle: "Résultat : {event}", body: "{result}. {competition}, {date} (UTC).",
+    finalScore: "Score final : {home} {homeScore}, {away} {awayScore}", finalSets: "Score final en sets : {home} {homeScore}, {away} {awayScore}", setScores: "Détail des sets : {sets}",
+    classification: "Classement : {result}", bout: "{home} - {away} : {result}",
+    endings: { "extra-time": "après prolongation", overtime: "après prolongation", penalties: "aux tirs au but", shootout: "aux tirs de barrage", awarded: "résultat sur décision", walkover: "forfait" },
+    dateLocale: "fr-FR",
+  },
 }
 
 const PUBLIC: ReportStatus[] = ["published", "corrected"]
@@ -114,6 +131,32 @@ export function sourceVersion(event: SportEvent): string {
   return createHash("sha256").update(JSON.stringify(facts)).digest("hex").slice(0, 16)
 }
 
+const setDetail = (event: SportEvent) => (event.breakdown?.segments ?? []).filter((segment) => segment.kind === "set" && segment.home !== null && segment.away !== null)
+
+/** The result in the sport's own terms. Everything but a team score comes from resultLine, so cards and reports agree. */
+export function resultSentence(event: SportEvent, locale: Locale): string {
+  const { score } = event
+  const copy = TEMPLATES[locale]
+  const [home = "", away = ""] = event.participants.map((participant) => participant.name)
+  if (score.kind === "team") {
+    const volleyball = event.sportId === "volleyball"
+    const line = fill(volleyball ? copy.finalSets : copy.finalScore, { home, away, homeScore: String(score.home), awayScore: String(score.away) })
+    const ending = event.conclusion ? ` (${copy.endings[event.conclusion]})` : ""
+    const sets = volleyball ? setDetail(event).map((segment) => `${segment.home}-${segment.away}`).join(", ") : ""
+    return `${line}${ending}${sets ? `. ${fill(copy.setScores, { sets })}` : ""}`
+  }
+  const result = resultLine(event, getDictionary(locale)) ?? ""
+  if (score.kind === "classification") return fill(copy.classification, { result })
+  return score.kind === "combat" && isDuel(event) ? fill(copy.bout, { home, away, result }) : result
+}
+
+/** The competition, plus the tournament or card when the feed names one. */
+export function eventPlace(event: SportEvent): string {
+  const { name } = event.competition
+  if (!event.eventName || !isDuel(event) || event.eventName === name) return name
+  return event.eventName.startsWith(name) ? event.eventName : `${name}, ${event.eventName}`
+}
+
 /** Longest first, so a name inside a longer one cannot leave digits behind. */
 export function numbersGrounded(body: string, names: string[], allowed: Iterable<string>): boolean {
   const known = new Set(allowed)
@@ -125,7 +168,8 @@ export const eventNames = (event: SportEvent) => [...event.participants.map((ite
 
 export function eventNumbers(event: SportEvent, locale: Locale): string[] {
   const date = event.scheduledStartUTC ? eventDate(event.scheduledStartUTC, locale).match(/\d+/g) ?? [] : []
-  return [...(JSON.stringify(event.score).match(/\d+/g) ?? []), ...date]
+  const sets = setDetail(event).flatMap((segment) => [String(segment.home), String(segment.away)])
+  return [...(JSON.stringify(event.score).match(/\d+/g) ?? []), ...sets, ...date]
 }
 
 /** Every number in the text must come from the event, whatever its teams are called. */
@@ -155,18 +199,13 @@ export function buildReport(event: SportEvent, locale: Locale, fetchedAt: string
   if (withheld) return { ...base, status: withheld.status, title: "", body: "", withheldReason: withheld.reason, publishedAt: null, feedKey: null }
 
   const [home = "", away = ""] = base.participants
-  const { score } = event
   const template = TEMPLATES[locale]
-  const shared = { competition: event.competition.name, date: eventDate(event.scheduledStartUTC as string, locale) }
-  const team = score.kind === "team"
-    ? { ...shared, home, away, homeScore: String(score.home), awayScore: String(score.away) }
-    : null
-  const values = team ?? { ...shared, event: eventTitle(event), result: resultLine(event, getDictionary(locale)) ?? "" }
-  const body = fill(team ? template.body : template.eventBody, values)
+  const body = fill(template.body, { result: resultSentence(event, locale), competition: eventPlace(event), date: eventDate(event.scheduledStartUTC as string, locale) })
   if (!isGrounded(body, event, locale)) {
     return { ...base, status: "rejected", title: "", body: "", withheldReason: "failed_validation", publishedAt: null, feedKey: null }
   }
-  return { ...base, status: "validated", title: fill(team ? template.title : template.eventTitle, values), body, withheldReason: null, publishedAt: null, feedKey: null }
+  const title = isDuel(event) ? fill(template.title, { home, away }) : fill(template.eventTitle, { event: eventTitle(event) })
+  return { ...base, status: "validated", title, body, withheldReason: null, publishedAt: null, feedKey: null }
 }
 
 export function versionOf(report: Report, action: string, by: string, at: string): ReportVersion {
@@ -176,11 +215,14 @@ export function versionOf(report: Report, action: string, by: string, at: string
 
 export const nextVersions = (stored: { versions?: ReportVersion[] } | null | undefined, version: ReportVersion) => [...(stored?.versions ?? []), version].slice(-MAX_VERSIONS)
 
+export const sportFeedKey = (report: Pick<Report, "locale" | "sportId">, publishedAt: string) => `${report.locale}#${report.sportId}#${publishedAt}`
+
 const publishNow = (report: Report): Report => ({
   ...report,
   status: "published",
   publishedAt: report.generatedAt,
   feedKey: `${report.locale}#${report.generatedAt}`,
+  sportFeedKey: sportFeedKey(report, report.generatedAt),
 })
 
 const editorOwned = (report: Report) => report.status === "corrected" || Boolean(report.correctionNote) || Boolean(report.editedAt)
@@ -217,7 +259,7 @@ export function saveReport(db: Firestore, report: Report): Promise<SaveOutcome> 
       // A preview states no result, so a new kickoff simply updates it, and a game
       // that will not take place comes down rather than wait for a person.
       const live = report.title && ready.status === "published" && existing.publishedAt
-      tx.set(ref, live ? { ...ready, publishedAt: existing.publishedAt, feedKey: existing.feedKey } : ready)
+      tx.set(ref, live ? { ...ready, publishedAt: existing.publishedAt, feedKey: existing.feedKey, sportFeedKey: sportFeedKey(ready, existing.publishedAt as string) } : ready)
       return "replaced"
     }
 
@@ -278,7 +320,7 @@ export async function applyCorrection(db: DocDb, id: string, correction: { body:
     tx.set(historyPath, { versions })
     tx.set(path, {
       ...report, status: "corrected", title, body: correction.body, correctionNote: correction.note,
-      withheldReason: null, editedAt: stamp, updatedAt: stamp, publishedAt, feedKey: `${report.locale}#${publishedAt}`, previousVersions: versions.length,
+      withheldReason: null, editedAt: stamp, updatedAt: stamp, publishedAt, feedKey: `${report.locale}#${publishedAt}`, sportFeedKey: sportFeedKey(report, publishedAt), previousVersions: versions.length,
     })
   })
 }
@@ -313,9 +355,64 @@ export async function listPublishedReports(locale: Locale, limit = 200): Promise
       .orderBy("feedKey", "desc")
       .limit(limit)
       .get()
-    return { state: "ok", reports: visibleReports(snapshot.docs.map((doc) => doc.data() as Report).filter((report) => PUBLIC.includes(report.status))) }
+    return { state: "ok", reports: wideFeed(snapshot.docs.map((doc) => doc.data() as Report)) }
   } catch (error) {
     console.error("Report listing failed", error instanceof Error ? error.message : "unknown")
+    return { state: "unavailable", reports: [] }
+  }
+}
+
+const wideFeed = (reports: Report[]) => visibleReports(reports.filter((report) => PUBLIC.includes(report.status) && !isSportRoundup(report)))
+
+// Sports with few reports are read on their own, so a busy one cannot push them out of a shared limit.
+const SPORT_FEED_LIMIT = 200
+const NEWS_SHARED_LIMIT = 300
+const NEWS_PER_SPORT = 12
+
+async function latestForSport(db: Firestore, locale: Locale, sportId: string, limit: number): Promise<Report[]> {
+  const prefix = `${locale}#${sportId}`
+  // One field, like feedKey, so this also needs no composite index.
+  const snapshot = await db
+    .collection(REPORTS_COLLECTION)
+    .where("sportFeedKey", ">=", `${prefix}#`)
+    .where("sportFeedKey", "<", `${prefix}$`)
+    .orderBy("sportFeedKey", "desc")
+    .limit(limit)
+    .get()
+  return snapshot.docs.map((doc) => doc.data() as Report)
+}
+
+/** Reports published before sportFeedKey existed. Equality on these fields uses the single-field indexes. */
+async function olderForSport(db: Firestore, locale: Locale, sportId: string, limit: number): Promise<Report[]> {
+  const snapshot = await db.collection(REPORTS_COLLECTION).where("sportId", "==", sportId).where("locale", "==", locale).where("status", "in", PUBLIC).limit(limit).get()
+  return snapshot.docs.map((doc) => doc.data() as Report)
+}
+
+const newestFirst = (reports: Report[]) => {
+  const unique = new Map(reports.map((report) => [report.id, report]))
+  return [...unique.values()].sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""))
+}
+
+/** The news page's list: one sport's own reports, or every sport with each kept in view. */
+export async function listNewsReports(locale: Locale, sportId: SportId | null, sports: SportId[]): Promise<ReportList> {
+  const query = new URLSearchParams({ locale, feed: "news", ...(sportId ? { sport: sportId } : {}) })
+  const remote = await fromBackend<ReportList>(`/api/reports?${query}`).catch((error) => ({ state: error instanceof MemberAccessRequired ? "withheld" : "unavailable", reports: [] }) as ReportList)
+  if (remote) return remote
+  const db = getAdminDb()
+  if (!db) return { state: "unavailable", reports: [] }
+  try {
+    if (sportId) {
+      const latest = await latestForSport(db, locale, sportId, SPORT_FEED_LIMIT)
+      // Old reports are a bonus: failing to read them must not hide the current ones.
+      const older = latest.length < SPORT_FEED_LIMIT ? await olderForSport(db, locale, sportId, SPORT_FEED_LIMIT).catch(() => []) : []
+      return { state: "ok", reports: visibleReports(newestFirst([...latest, ...older]).filter((report) => PUBLIC.includes(report.status))) }
+    }
+    const shared = await listPublishedReports(locale, NEWS_SHARED_LIMIT)
+    if (shared.state !== "ok") return shared
+    const each = await Promise.all(sports.map((sport) => latestForSport(db, locale, sport, NEWS_PER_SPORT)))
+    return { state: "ok", reports: balanceBySport(wideFeed(newestFirst([...shared.reports, ...each.flat()]))) }
+  } catch (error) {
+    console.error("News listing failed", error instanceof Error ? error.message : "unknown")
     return { state: "unavailable", reports: [] }
   }
 }

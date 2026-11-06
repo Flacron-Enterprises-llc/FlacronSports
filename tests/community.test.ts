@@ -331,9 +331,9 @@ describe("private rooms", () => {
     const { id, inviteToken } = await create(db, "plus")
     await join(db, "u1", inviteToken)
     const view = await getRoomAsMember(db, id, "u1")
-    expect(JSON.stringify(view)).not.toMatch(/inviteHash|"host"/)
-    expect(view.members).toEqual([])
-    expect((await getRoomAsMember(db, id, "host")).members).toHaveLength(2)
+    expect(JSON.stringify(view)).not.toMatch(/inviteHash|hostUid|"uid"/)
+    expect(view.members).toHaveLength(2)
+    expect(view.members.every((member) => member.ref.length === 32)).toBe(true)
   })
 })
 

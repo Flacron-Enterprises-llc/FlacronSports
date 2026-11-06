@@ -28,7 +28,25 @@ No NAT gateway or load balancer is used, by design.
 | API-Football | Key reported Free, 100 requests a day, ending 2026-11-19. Not used | None while unused |
 | YouTube | Embedded player and oEmbed check, no paid plan | None known |
 | Stripe | Test mode so far | Fees **Unknown** until live terms are confirmed |
-| AI model | None used. All reports and the assistant are deterministic | None |
+| Anthropic API | Sports Assistant only, when `ANTHROPIC_API_KEY` is set. Reports stay deterministic. See "Sports Assistant model" below | **Unknown** |
+
+## Sports Assistant model
+
+Known:
+
+- The key is stored in Secrets Manager as `flacron-sport/production/anthropic` and reaches the ECS task as `ANTHROPIC_API_KEY` through the `AnthropicSecretArn` stack parameter.
+- The key is shared with another app's Anthropic account, so usage from both apps is billed together. The bill alone does not show this app's share.
+- The default model is `claude-opus-5-5` at low effort, changed with `ASSISTANT_MODEL`. Published rates on 2026-10-06, per million tokens: $4 input and $20 output for `claude-opus-5-5`, with cache reads at $0.20; $2 and $10 for `claude-sonnet-5-5`; $0.10 and $0.50 for `claude-haiku-5-5`.
+- Limits per question, from the code: 3,000 output tokens per model call, 4 model calls, 8 data lookups, 18 seconds. One question can use at most 12,000 output tokens, which is $0.24 at the default rate, plus input tokens. Input has no fixed cap, though each lookup result is limited in length.
+- The system prompt is cached, which only helps while questions arrive within the cache lifetime of a few minutes.
+- Plans allow up to 300 questions a month on Premium, and the $4.99 add-on gives 100 more. Betting questions are refused before any model call. A failed call gives the member's credit back, but tokens it used are still billed to us.
+
+Unknown:
+
+- **The real cost per question.** No live call has been made, so there is no token measurement. Each answered question logs `Assistant model` with its token counts to CloudWatch, with no question text. Measure from those logs before relying on any figure.
+- **How many questions members will ask**, and how much of their allowance they use.
+- **Whether the margin holds at the default model.** Compare the measured cost per question with plan prices before launch. A cheaper model is one `AssistantModel` parameter change, but its answer quality has not been tested.
+- **Any spending limit on the shared account**, and whether this app can have its own workspace or key to separate the bill.
 
 ## Provider calls the app makes
 

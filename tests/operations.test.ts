@@ -222,8 +222,8 @@ describe("daily roundup", () => {
     const { db, store } = memoryDb()
     expect(await runRoundup(db, day, "t", new Date("2026-11-05T05:59:00Z"))).toEqual({ skipped: "before_schedule" })
     expect(store.size).toBe(0)
-    expect(await runRoundup(db, day, "t", new Date("2026-11-05T06:00:00Z"))).toMatchObject({ created: 2 })
-    expect(await runRoundup(db, day, "t", new Date("2026-11-05T06:15:00Z"))).toMatchObject({ created: 0, duplicate: 2 })
+    expect(await runRoundup(db, day, "t", new Date("2026-11-05T06:00:00Z"))).toMatchObject({ created: 6 })
+    expect(await runRoundup(db, day, "t", new Date("2026-11-05T06:15:00Z"))).toMatchObject({ created: 0, duplicate: 6 })
   })
   it("reads the hour from configuration and ignores nonsense", () => {
     expect(roundupHourUTC({ ROUNDUP_HOUR_UTC: "9" })).toBe(9)

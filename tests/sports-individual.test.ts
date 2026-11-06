@@ -27,7 +27,8 @@ import { buildReport, isGrounded, withholdReason } from "@/lib/content/reports"
 import { getDictionary } from "@/lib/i18n"
 import { DEFAULT_PREFERENCES } from "@/lib/me/preferences-defaults"
 import { eventTitle, resultLine } from "@/lib/sports/presentation"
-import { parseClassification, parseCombatResult } from "@/lib/sports/results"
+import { parseCombatResult } from "@/lib/sports/adapters/combat"
+import { parseClassification } from "@/lib/sports/adapters/motorsport"
 import { clearFeedCache, getEvent, getEvents } from "@/lib/sports/service"
 import { isCovered, normalizeEvent, type RawEvent } from "@/lib/sports/thesportsdb"
 import type { SportEvent } from "@/lib/sports/types"
@@ -138,7 +139,7 @@ describe("scores come only from the source", () => {
     expect(normalize({ ...tennis, strResult: "Vale : 6 6\r\nRook : 3" }, sports.tennis).score).toEqual({ kind: "none" })
   })
   it("reads runs, wickets, overs and margin only as stated", () => {
-    expect(normalize(cricket, sports.cricket).score).toEqual({
+    expect(normalize(cricket, sports.cricket).score).toMatchObject({
       kind: "innings", winner: "North Cricket", margin: { value: 2, unit: "wickets" },
       home: { runs: 269, wickets: 8, overs: "47.3" }, away: { runs: 268, wickets: 9, overs: "50" },
     })
@@ -151,8 +152,8 @@ describe("scores come only from the source", () => {
     const score = normalize({ ...cricket, strStatus: "ABD", intAwayScore: null, intAwayScoreExtra: null, strResult: "Abandoned due to rain." }, sports.cricket).score
     expect(score).toMatchObject({ kind: "innings", away: null, winner: null })
   })
-  it("never flattens a test match into one number", () => {
-    expect(normalize({ ...cricket, strLeague: "ICC World Test Championship" }, sports.cricket).score).toEqual({ kind: "none" })
+  it("marks a two-innings match with no innings listed as totals, never as one innings", () => {
+    expect(normalize({ ...cricket, strLeague: "ICC World Test Championship", strResult: null }, sports.cricket).score).toMatchObject({ kind: "innings", totalsOnly: true, home: { runs: 269, wickets: null, overs: null } })
   })
   it("does not show a score for a match that has not started", () => {
     expect(normalize({ ...cricket, strStatus: "NS", strTimestamp: "2026-12-01T10:00:00", strResult: null }, sports.cricket).score).toEqual({ kind: "none" })
@@ -172,13 +173,14 @@ describe("scores come only from the source", () => {
     expect(parseCombatResult("Light \tLuana Santos \tdef. \tYana Santos \tDecision (unanimous) \t3 \t5:00", ["Yana Santos", "Ana Santos"])).toBeNull()
   })
   it("reads only classified finishers from both table layouts", () => {
-    expect(normalize(race, sports.motorsport).score).toEqual({
+    expect(normalize(race, sports.motorsport).score).toMatchObject({
       kind: "classification",
       entries: [
-        { position: 1, name: "Ari Stone", team: "Alpha Racing", time: "2:20:28.772", laps: 71, grid: 5 },
+        { position: 1, name: "Ari Stone", team: "Alpha Racing", time: "2:20:28.772", laps: 71, grid: 5, number: 3, points: 25 },
         { position: 2, name: "Ben Ash", team: "Beta Team", time: "+0.799", laps: 71, grid: 5 },
         { position: 3, name: "Cal Reed", team: "Gamma Team", time: "+4.006", laps: 71, grid: 5 },
       ],
+      out: [{ name: "Dan Moss", team: "Delta Team", status: "RET", note: "Collision" }],
     })
     const entries = parseClassification(riders.strResult)
     expect(entries?.map((entry) => entry.name)).toEqual(["Ari Stone", "Ben Ash", "Cal Reed"])
@@ -294,7 +296,7 @@ describe("reports and alerts stay grounded", () => {
     expect(buildReport(contradictory, "en", stamp, NOW).withheldReason).toBe("missing_score")
   })
   it("withholds a cricket result with one side missing", () => {
-    const partial = normalize({ ...cricket, intAwayScore: null, intAwayScoreExtra: null }, sports.cricket)
+    const partial = normalize({ ...cricket, intAwayScore: null, intAwayScoreExtra: null, strResult: "North won by 2 wickets" }, sports.cricket)
     expect(buildReport(partial, "en", stamp, NOW).withheldReason).toBe("missing_score")
   })
   it("writes a grounded report from a structured result, in both languages", () => {

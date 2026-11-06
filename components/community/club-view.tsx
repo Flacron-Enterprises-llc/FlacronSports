@@ -76,10 +76,10 @@ export function ClubView({ id }: { id: string }) {
         title={clubName(club, locale)}
         lead={t.community.clubMembers.replace("{count}", String(club.members))}
         icon={<Flag aria-hidden />}
-        actions={club.joined ? <button type="button" className={btn("outline", "sm")} onClick={leave}>{t.community.leaveClub}</button> : <button type="button" className={btn("primary")} onClick={join}>{t.community.joinClub}</button>}
+        actions={club.joined ? <button type="button" className={btn("outline", "sm")} onClick={leave}>{t.community.leaveClub}</button> : !gate.locked && <button type="button" className={btn("primary")} onClick={join}>{t.community.joinClub}</button>}
       />
       {notice && <div className="mb-4"><Notice tone="danger" role="alert">{notice}</Notice></div>}
-      {gate.prompt}
+      {!club.joined && gate.prompt && <div className="mb-4">{gate.prompt}</div>}
       {club.locked && <div className="mb-4"><Notice tone="warning" role="status">{t.community.locked}</Notice></div>}
       <Panel title={t.community.clubChat}>
         {club.joined ? <MessageList scope="room" scopeId={id} path={`/api/rooms/${id}/messages`} /> : <p className="text-sm text-ink-2">{t.community.clubJoinToChat}</p>}

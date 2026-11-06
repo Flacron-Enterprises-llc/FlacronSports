@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { Activity, ExternalLink, LayoutList, ListChecks, MessagesSquare, PlayCircle, Radio, Users } from "lucide-react"
 import { usePreferences } from "@/components/account/prefs-provider"
 import { ErrorNotice, Tabs } from "@/components/dashboard/controls"
@@ -8,13 +9,15 @@ import { btn, Panel, Skeleton } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import { useLocale } from "@/lib/use-locale"
 import type { MatchViewing } from "@/lib/video/catalog"
+import { BroadcastGroups } from "@/components/video/broadcast-groups"
 import { HighlightPlayer } from "@/components/video/highlight-player"
 
 type TabId = "overview" | "updates" | "statistics" | "participants" | "chat"
 
 export function MatchTabs({ overview, updates, statistics, participants, chat }: { overview: React.ReactNode; updates: React.ReactNode; statistics: React.ReactNode; participants: React.ReactNode; chat?: React.ReactNode }) {
   const { t } = useLocale()
-  const [tab, setTab] = useState<TabId>("overview")
+  // A link to a game from the predictions page opens where the pick is made.
+  const [tab, setTab] = useState<TabId>(useSearchParams()?.get("tab") === "chat" && chat ? "chat" : "overview")
   const icon = "size-4"
   const tabs = [
     { value: "overview" as const, label: t.match.overview, icon: <LayoutList aria-hidden className={icon} /> },
@@ -109,14 +112,7 @@ export function ViewingPanel() {
       {state === "idle" && result && (
         <div className="space-y-3">
           {result.video && <p className="text-sm leading-6 text-ink-2">{t.match.videoAtTop}</p>}
-          {result.broadcasts.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold text-ink">{t.ui.officialBroadcaster}</h3>
-              <ul className="mt-1 space-y-1 text-sm text-ink-2">
-                {result.broadcasts.map((item) => <li key={item.id}>{item.channel}{item.country ? ` · ${item.country}` : ""}</li>)}
-              </ul>
-            </div>
-          )}
+          {result.broadcasts.length > 0 && <BroadcastGroups broadcasts={result.broadcasts} viewerCountryCode={result.viewerCountry} />}
           {!official && !result.video && result.broadcasts.length === 0 && <p className="text-sm leading-6 text-ink-2">{t.match.noVideo}</p>}
           {official?.url && <a href={official.url} rel="noreferrer" target="_blank" className={btn("navy")}><ExternalLink aria-hidden className="size-4" /> {t.ui.officialBroadcaster}<span className="sr-only"> {t.footer.newTab}</span></a>}
           {following && <p className="flex items-center gap-2 text-sm font-semibold text-ink"><Radio aria-hidden className="size-4 text-live" /> {t.match.followLive}</p>}

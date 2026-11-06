@@ -6,6 +6,7 @@ import { ErrorNotice } from "@/components/dashboard/controls"
 import { MemberDataPending } from "@/components/dashboard/member-data-pending"
 import { AppPage, Notice } from "@/components/site/states"
 import { FullReportSection } from "@/components/reports/paid-report"
+import { ReportSportIcon, sportOf } from "@/components/reports/news-card"
 import { ReportAudio } from "@/components/reports/report-audio"
 import { SaveReportButton } from "@/components/reports/saved-reports"
 import { LocalTime, SpoilerGuard } from "@/components/sports/parts"
@@ -61,12 +62,22 @@ export default async function ReportPage({ params }: Props) {
   return (
     <AppPage width="sm">
       {back}
+      <header className="fs-band fs-rise relative mt-4 overflow-hidden rounded-2xl p-5 sm:p-8">
+        <div aria-hidden className="fs-grid pointer-events-none absolute inset-0" />
+        <div className="relative">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-white/85">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1"><ReportSportIcon report={report} className="size-3.5" />{sportOf(report, locale)?.name ?? t.news.allSports}</span>
+            <span className="rounded-full bg-white/10 px-2.5 py-1">{t.reports.types[report.type]}</span>
+            <span>{t.reports.label}</span>
+          </div>
+          <h1 className="mt-3 text-2xl font-semibold leading-tight text-white sm:text-[2rem]">{report.title}</h1>
+          {report.competition && <p className="mt-2 text-sm text-white/80">{report.competition}</p>}
+          {report.publishedAt && <p className="mt-1 text-xs text-white/70"><LocalTime iso={report.publishedAt} mode="datetime" /></p>}
+        </div>
+      </header>
       <article className="fs-rise mt-4 rounded-xl border border-line bg-surface p-5 shadow-[var(--shadow-sm)] sm:p-8">
-        <p className="text-xs font-semibold text-hot-text">{t.reports.label} · {t.reports.types[report.type]}</p>
-        <h1 className="mt-2 text-2xl font-semibold leading-tight text-ink sm:text-[1.75rem]">{report.title}</h1>
-        {report.competition && <p className="mt-1.5 text-sm text-ink-2">{report.competition}</p>}
-        <div className="mt-3"><SaveReportButton slug={report.slug} /></div>
-        <div className="mt-6 text-[15.5px] leading-7 text-ink">
+        <SaveReportButton slug={report.slug} />
+        <div className="mt-5 text-[15.5px] leading-7 text-ink">
           <SpoilerGuard label={t.reports.reveal}>
             <ReportAudio text={`${report.title}. ${report.body}`} />
             <p className="whitespace-pre-line">{report.body}</p>

@@ -12,6 +12,20 @@ export const RACE_SERIES = [
   { id: "4371", name: "Formula E" },
   { id: "4373", name: "IndyCar Series" },
   { id: "4393", name: "NASCAR Cup Series" },
+  { id: "4573", name: "NASCAR O'Reilly Auto Parts Series" },
+  { id: "4486", name: "Formula 2" },
+  { id: "4487", name: "Formula 3" },
+  { id: "4436", name: "Moto2" },
+  { id: "4437", name: "Moto3" },
+  { id: "4454", name: "SBK" },
+  { id: "4409", name: "WRC" },
+  { id: "4372", name: "BTCC" },
+  { id: "4438", name: "DTM" },
+  { id: "4489", name: "V8 Supercars" },
+  { id: "4488", name: "IMSA SportsCar Championship" },
+  { id: "4412", name: "Super GT series" },
+  { id: "4410", name: "British GT Championship" },
+  { id: "4447", name: "Dakar Rally" },
 ]
 
 /** Football cups whose knockout rounds the feed held whole in the check on 2026-11-07. */

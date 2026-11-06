@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Medal, MessagesSquare, Users } from "lucide-react"
 import { btn, Notice, Panel } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
+import { pickWords, type PickFields } from "@/lib/community/pick-words"
 import type { PredictionKind } from "@/lib/community/predictions"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { useLocale } from "@/lib/use-locale"
@@ -12,18 +13,6 @@ import { useCommunityGate } from "./community-gate"
 import { Leaderboard } from "./leaderboard"
 import { MessageList } from "./message-list"
 import { RuleList } from "./rule-list"
-
-interface OwnPrediction {
-  home: number | null
-  away: number | null
-  winner: string | null
-  podium: string[] | null
-}
-
-function pickText(pick: OwnPrediction): string {
-  if (pick.podium) return pick.podium.join(", ")
-  return pick.winner ?? `${pick.home} – ${pick.away}`
-}
 
 /** The field is a name-sorted list, since a past finishing order is a result. */
 function PodiumFields({ matchId, value, onChange, onUnavailable }: { matchId: string; value: string[]; onChange(next: string[]): void; onUnavailable(): void }) {
@@ -65,7 +54,7 @@ function Predictions({ matchId, kind, predictable, home, away, combat }: { match
   const [awayScore, setAwayScore] = useState("")
   const [podium, setPodium] = useState(["", "", ""])
   const [noField, setNoField] = useState(false)
-  const [mine, setMine] = useState<OwnPrediction | null>(null)
+  const [mine, setMine] = useState<PickFields | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const markNoField = useCallback(() => setNoField(true), [])
@@ -96,15 +85,16 @@ function Predictions({ matchId, kind, predictable, home, away, combat }: { match
 
   return (
     <div>
-      {mine && <Notice tone="success" role="status">{t.community.yourPrediction} <span className="tabular font-semibold text-ink">{pickText(mine)}</span></Notice>}
-      {!mine && user && predictable && kind === "score" && (
+      {mine && <Notice tone="success" role="status">{t.community.yourPrediction} <span data-testid="own-prediction" className="tabular font-semibold text-ink">{pickWords(mine, { home, away }, t.community)}</span></Notice>}
+      {!mine && user && predictable && gate.prompt}
+      {!mine && user && predictable && !gate.locked && kind === "score" && (
         <form onSubmit={submitted({ home: Number(homeScore), away: Number(awayScore) })} className="grid grid-cols-2 gap-3">
           <label className="min-w-0 text-sm font-medium text-ink"><span className="block truncate">{home}</span><input className={field} type="number" min={0} max={300} required value={homeScore} onChange={(event) => setHomeScore(event.target.value)} /></label>
           <label className="min-w-0 text-sm font-medium text-ink"><span className="block truncate">{away}</span><input className={field} type="number" min={0} max={300} required value={awayScore} onChange={(event) => setAwayScore(event.target.value)} /></label>
           <button type="submit" disabled={busy} className={btn("primary", "md", "col-span-2")}>{t.community.predict}</button>
         </form>
       )}
-      {!mine && user && predictable && kind === "winner" && (
+      {!mine && user && predictable && !gate.locked && kind === "winner" && (
         <div role="group" aria-label={combat ? t.community.pickBout : t.community.pickWinner}>
           <p className="text-sm font-medium text-ink">{combat ? t.community.pickBout : t.community.pickWinner}</p>
           <div className="mt-2 grid grid-cols-2 gap-3">
@@ -112,7 +102,7 @@ function Predictions({ matchId, kind, predictable, home, away, combat }: { match
           </div>
         </div>
       )}
-      {!mine && user && predictable && kind === "podium" && !noField && (
+      {!mine && user && predictable && !gate.locked && kind === "podium" && !noField && (
         <form onSubmit={submitted({ podium })} className="space-y-3">
           <PodiumFields matchId={matchId} value={podium} onChange={setPodium} onUnavailable={markNoField} />
           <button type="submit" disabled={busy} className={btn("primary", "md", "w-full")}>{t.community.predict}</button>
@@ -120,7 +110,6 @@ function Predictions({ matchId, kind, predictable, home, away, combat }: { match
       )}
       {!mine && predictable && kind === "podium" && noField && <p className="text-sm text-ink-2">{t.community.podiumNoField}</p>}
       {!mine && !predictable && <p className="text-sm text-ink-2">{t.community.predictionLocked}</p>}
-      {gate.prompt}
       {notice && <p role="status" className="mt-2 text-sm text-ink">{notice}</p>}
       <details className="mt-3 text-[13px] leading-5 text-ink-2">
         <summary className="cursor-pointer font-semibold hover:text-ink">{t.community.pointRules}</summary>

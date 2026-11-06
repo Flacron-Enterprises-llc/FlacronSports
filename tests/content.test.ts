@@ -143,7 +143,7 @@ describe("report storage", () => {
   it("publishes once and treats a rerun of the same source as a duplicate", async () => {
     const { db, store } = memoryDb()
     expect(await saveReport(db, buildReport(event(), "en", "t", NOW))).toBe("created")
-    expect(saved(store)).toMatchObject({ status: "published", promptVersion: "result-template-v1" })
+    expect(saved(store)).toMatchObject({ status: "published", promptVersion: "result-template-v2" })
     expect(saved(store).feedKey).toBe(`en#${NOW.toISOString()}`)
     const later = new Date(NOW.getTime() + 60_000)
     expect(await saveReport(db, buildReport(event(), "en", "t", later))).toBe("duplicate")

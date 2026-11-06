@@ -176,6 +176,21 @@ export default async function ScoresPage({ params, searchParams }: Props) {
           {page < pages ? <Link href={link({ page: String(page + 1) })} rel="next" className={btn("outline", "md")}>{t.scores.next} <ChevronRight aria-hidden className="size-4" /></Link> : <span />}
         </nav>
       )}
+      {sport && feed.nextDates && feed.nextDates.length > 0 && (
+        <nav aria-label={t.scores.nextDates} data-testid="next-dates" className="mt-5 rounded-xl border border-line bg-surface p-4">
+          <h2 className="text-sm font-semibold text-ink">{t.scores.nextDates}</h2>
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {feed.nextDates.map((item) => (
+              <li key={item.date}>
+                <Link href={dated(item.date)} className={chip(false)}>
+                  <span className="capitalize">{day.format(new Date(`${item.date}T12:00:00Z`))} {dayNumber.format(new Date(`${item.date}T12:00:00Z`))}</span>
+                  <span className="tabular text-xs opacity-80">{(item.games === 1 ? t.scores.oneGame : t.scores.games).replace("{count}", String(item.games))}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
       {events.length === 0 && feed.state !== "unavailable" && (
         <EmptyState className="mt-5" icon={<Trophy aria-hidden />} title={following ? t.scores.noFavorites : t.scores.empty} body={following ? t.scores.noFavoritesBody : t.ui.scoresEmptyBody} action={q || sport || search.status || competition || africa ? { href: dated(date).split("?")[0] + (date !== today ? `?date=${date}` : ""), label: t.ui.clearFilters } : undefined} />
       )}

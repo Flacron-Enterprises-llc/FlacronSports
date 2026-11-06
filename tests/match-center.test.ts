@@ -2,7 +2,8 @@
 import { describe, expect, it } from "vitest"
 import { getDictionary } from "@/lib/i18n"
 import { formByGame, isStaleUpdate, labelStats, labelTimeline, normalizeStats, normalizeTimeline, teamForm } from "@/lib/sports/detail"
-import { parseBreakdown, parseClassification } from "@/lib/sports/results"
+import { parseBreakdown } from "@/lib/sports/results"
+import { parseClassification } from "@/lib/sports/adapters/motorsport"
 import { competitionOptions, filterScores, followFilter, parseFollowFilter } from "@/lib/sports/score-filters"
 import { currentPeriod, normalizeEvent, normalizeStatus } from "@/lib/sports/thesportsdb"
 import type { SportEvent } from "@/lib/sports/types"
@@ -32,7 +33,7 @@ describe("how a game ended", () => {
     for (const locale of ["en", "fr"] as const) {
       const t = getDictionary(locale)
       expect(Object.keys(t.status.conclusions)).toHaveLength(6)
-      expect(Object.keys(t.match.periods)).toHaveLength(10)
+      expect(Object.keys(t.match.periods)).toHaveLength(12)
     }
   })
 })
@@ -44,8 +45,11 @@ describe("period scores", () => {
     expect(parsed?.segments.at(-1)).toEqual({ kind: "overtime", number: 1, home: 16, away: 9 })
     expect(parsed?.segments).toHaveLength(5)
   })
-  it("refuses a college row that hides halves in empty quarters", () => {
-    expect(parseBreakdown(" Butler Quarters:<br>0 52 0 47 <br><br>Fairleigh Dickinson Quarters:<br>0 29 0 36 ", "basketball", sides("Butler", "Fairleigh Dickinson", 99, 65))).toBeNull()
+  it("reads a college row that writes halves in the quarter slots as two halves", () => {
+    expect(parseBreakdown(" Butler Quarters:<br>0 52 0 47 <br><br>Fairleigh Dickinson Quarters:<br>0 29 0 36 ", "basketball", sides("Butler", "Fairleigh Dickinson", 99, 65))?.segments).toEqual([
+      { kind: "half", number: 1, home: 52, away: 29 },
+      { kind: "half", number: 2, home: 47, away: 36 },
+    ])
   })
   it("refuses a row that does not add up to the score", () => {
     expect(parseBreakdown("A Quarters:<br>1 1 1 1<br><br>B Quarters:<br>1 1 1 1", "basketball", sides("A", "B", 90, 4))).toBeNull()
@@ -158,9 +162,9 @@ describe("one form calculation", () => {
 describe("provider wording on French pages", () => {
   const { stats, timelineKinds } = getDictionary("fr").match
   it("hides a stat with no term and keeps one that has a term", () => {
-    const rows = normalizeStats([{ strStat: "Rebounds", intHome: 40, intAway: 38 }, { strStat: "Fouls", intHome: 3, intAway: 4 }], "basketball")
+    const rows = normalizeStats([{ strStat: "Corsi", intHome: 40, intAway: 38 }, { strStat: "Fouls", intHome: 3, intAway: 4 }], "basketball")
     expect(labelStats(rows, stats, "fr")).toEqual([expect.objectContaining({ key: "fouls", label: stats.fouls })])
-    expect(labelStats(rows, getDictionary("en").match.stats, "en").map((row) => row.label)).toEqual(["Rebounds", "Fouls"])
+    expect(labelStats(rows, getDictionary("en").match.stats, "en").map((row) => row.label)).toEqual(["Corsi", "Fouls"])
   })
   it("hides an other row, and leaves rows with a term alone", () => {
     const items = normalizeTimeline([{ idTimeline: "1", strTimeline: "Goal", strTimelineDetail: "Normal Goal", intTime: "3" }, { idTimeline: "2", strTimeline: "Injury", intTime: "4" }])

@@ -49,10 +49,14 @@ export function cleanMessage(raw: unknown): string {
   return text
 }
 
-/** Never falls back to the account email: it would be shown to other users. */
+/**
+ * Never falls back to the account email: it would be shown to other users. An email
+ * sign-up has no name, so the fallback carries a short hash to tell two such fans apart.
+ */
 export function displayNameOf(token: Record<string, unknown>): string {
   const name = typeof token.name === "string" ? token.name.trim().slice(0, 40) : ""
-  return name && !name.includes("@") ? name : "Fan"
+  if (name && !name.includes("@")) return name
+  return typeof token.uid === "string" ? `Fan ${opaqueRef("display-name", token.uid).slice(0, 4)}` : "Fan"
 }
 
 /** Stands in for a uid in API responses. It differs per context, so refs cannot be linked. */

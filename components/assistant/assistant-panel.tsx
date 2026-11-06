@@ -1,14 +1,16 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { Bot, Gauge, LoaderCircle, RefreshCw, Send, Sparkles } from "lucide-react"
+import { Bot, Gauge, RefreshCw, Send, Sparkles } from "lucide-react"
+import { usePreferences } from "@/components/account/prefs-provider"
 import { AddonOffers } from "@/components/billing/addon-offers"
 import { useAccount } from "@/components/dashboard/account-context"
 import { btn, Meter, Notice, Panel, Skeleton } from "@/components/site/states"
 import { LocalTime, SpoilerGuard } from "@/components/sports/parts"
 import type { AssistantAnswer } from "@/lib/assistant/engine"
+import { suggestionsFor } from "@/lib/assistant/suggestions"
 import { authFetch } from "@/lib/auth-fetch"
 import { useLocale } from "@/lib/use-locale"
 
@@ -20,12 +22,55 @@ interface Turn {
   exhausted?: boolean
 }
 
+// Held in memory for the tab's session, so going to another page and back keeps the
+// conversation while no question or answer is written to the browser's storage.
+const MAX_KEPT_TURNS = 50
+const sessionTurns = new Map<string, Turn[]>()
+
+function Chips({ tips, onPick }: { tips: string[]; onPick(tip: string): void }) {
+  return (
+    <ul className="flex flex-wrap gap-2 [.fs-chips-center_&]:justify-center">
+      {tips.map((tip) => (
+        <li key={tip}><button type="button" onClick={() => onPick(tip)} className="rounded-full border border-line px-3 py-1.5 text-[13px] font-medium text-ink-2 transition-colors hover:border-line-strong hover:bg-surface-muted hover:text-ink">{tip}</button></li>
+      ))}
+    </ul>
+  )
+}
+
+function Typing({ label }: { label: string }) {
+  return (
+    <p role="status" className="inline-flex items-center gap-2 text-ink-2">
+      <span aria-hidden className="inline-flex items-center gap-1">
+        {[0, 150, 300].map((delay) => <span key={delay} style={{ animationDelay: `${delay}ms` }} className="size-1.5 rounded-full bg-ink-3 motion-safe:animate-bounce" />)}
+      </span>
+      {label}
+    </p>
+  )
+}
+
+/** The model's words stay plain text: React escapes them and nothing renders as markup. */
+function AnswerWords({ answer }: { answer: AssistantAnswer }) {
+  const { t } = useLocale()
+  return (
+    <>
+      <p className="whitespace-pre-line break-words leading-7 text-ink">{answer.text}</p>
+      {answer.forecast && (
+        <div className="mt-3 rounded-lg border border-line bg-surface p-3">
+          <p className="text-xs font-semibold text-ink-2">{t.assistant.forecastLabel}</p>
+          <p className="mt-1 whitespace-pre-line break-words leading-6 text-ink">{answer.forecast}</p>
+          <p className="mt-1 text-xs text-ink-2">{t.assistant.forecastNote}</p>
+        </div>
+      )}
+    </>
+  )
+}
+
 function AnswerBody({ answer }: { answer: AssistantAnswer }) {
   const { locale, t, href } = useLocale()
   const date = (iso: string) => new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso))
   return (
     <>
-      <p className="leading-7 text-ink">{answer.text}</p>
+      {answer.revealsResult ? <SpoilerGuard label={t.spoiler.reveal}><AnswerWords answer={answer} /></SpoilerGuard> : <AnswerWords answer={answer} />}
       {answer.items.length > 0 && (
         <ul className="mt-3 space-y-2">
           {answer.items.map((item) => (
@@ -103,12 +148,18 @@ function Allowance() {
 export function AssistantPanel() {
   const { locale, t } = useLocale()
   const params = useSearchParams()
-  const { setBalance, reload } = useAccount()
+  const { user, setBalance, reload } = useAccount()
+  const { prefs } = usePreferences()
   const [question, setQuestion] = useState("")
-  const [turns, setTurns] = useState<Turn[]>([])
+  const [turns, setTurns] = useState<Turn[]>(() => sessionTurns.get(user?.uid ?? "") ?? [])
   const [busy, setBusy] = useState(false)
   const log = useRef<HTMLDivElement>(null)
   const addon = params?.get("addon")
+  const tips = useMemo(() => suggestionsFor(prefs, locale, t), [prefs, locale, t])
+
+  useEffect(() => {
+    if (user) sessionTurns.set(user.uid, turns.filter((turn) => turn.answer).slice(-MAX_KEPT_TURNS))
+  }, [user, turns])
 
   useEffect(() => {
     if (addon !== "success") return
@@ -148,11 +199,7 @@ export function AssistantPanel() {
               <div className="flex h-full flex-col items-center justify-center text-center">
                 <span className="inline-flex size-12 items-center justify-center rounded-2xl border border-line bg-surface text-brand shadow-[var(--shadow-sm)]"><Sparkles aria-hidden className="size-5" /></span>
                 <h2 className="mt-4 text-base font-semibold text-ink">{t.ui.assistantHello}</h2>
-                <ul className="mt-4 flex max-w-lg flex-wrap justify-center gap-2">
-                  {t.ui.assistantTips.map((tip) => (
-                    <li key={tip}><button type="button" onClick={() => ask(tip)} className="rounded-full border border-line px-3 py-1.5 text-[13px] font-medium text-ink-2 transition-colors hover:border-line-strong hover:bg-surface-muted hover:text-ink">{tip}</button></li>
-                  ))}
-                </ul>
+                <div className="fs-chips-center mt-4 max-w-lg"><Chips tips={tips} onPick={(tip) => void ask(tip)} /></div>
               </div>
             )}
             {turns.map((turn) => (
@@ -174,11 +221,12 @@ export function AssistantPanel() {
                         )}
                       </div>
                     )}
-                    {!turn.answer && !turn.error && <p className="inline-flex items-center gap-2 text-ink-2"><LoaderCircle aria-hidden className="size-4 animate-spin" />{t.assistant.asking}</p>}
+                    {!turn.answer && !turn.error && <Typing label={t.assistant.asking} />}
                   </div>
                 </div>
               </div>
             ))}
+            {turns.length > 0 && !busy && <div className="pl-[2.625rem]"><Chips tips={tips} onPick={(tip) => void ask(tip)} /></div>}
           </div>
           <form onSubmit={(event) => { event.preventDefault(); void ask(question) }} className="flex items-end gap-2 border-t border-line p-3">
             <label className="min-w-0 flex-1">

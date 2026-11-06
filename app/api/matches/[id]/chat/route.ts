@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { apiErrorResponse, requireFeature, requireUser, requireVerifiedUser } from "@/lib/api-auth"
+import { ApiError, apiErrorResponse, requireFeature, requireUser, requireVerifiedUser } from "@/lib/api-auth"
 import { listMessages, postMatchMessage } from "@/lib/community/chat"
 import { assertId, cleanMessage, displayNameOf, MATCH_ID } from "@/lib/community/content"
 import { getMatchChatState } from "@/lib/community/engagement"
@@ -39,7 +39,10 @@ export async function POST(request: Request, { params }: Context) {
     const matchId = assertId((await params).id, MATCH_ID)
     const { text } = await request.json().catch(() => ({}))
     const clean = cleanMessage(text)
-    await requireEvent(matchId)
+    // A message depends on no kickoff or result, so a feed outage must not silence the chat.
+    await requireEvent(matchId).catch((error) => {
+      if (!(error instanceof ApiError && error.code === "feed_unavailable")) throw error
+    })
     const result = await postMatchMessage(firestoreDocDb(), { matchId, uid: user.uid, displayName: displayNameOf(user.token), text: clean }, new Date())
     return NextResponse.json(result, { status: 201 })
   } catch (error) {

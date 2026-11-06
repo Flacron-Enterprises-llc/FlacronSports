@@ -1,20 +1,20 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { ArrowRight, Clapperboard, ListOrdered, Newspaper, Shield } from "lucide-react"
+import { ArrowRight, ListOrdered, Newspaper, Shield } from "lucide-react"
 import { MemberDataPending } from "@/components/dashboard/member-data-pending"
 import { AppPage, EmptyState, PageHeader, Panel } from "@/components/site/states"
 import { EventCard, FeedNotice } from "@/components/sports/event-card"
 import { FavoriteStar, LocalTime, SpoilerGuard, SpoilerReveal, SpoilerScope } from "@/components/sports/parts"
-import { HighlightPlayer } from "@/components/video/highlight-player"
+import { TeamWatchPanel } from "@/components/video/team-watch-panel"
 import { listPublishedReports } from "@/lib/content/reports"
 import { pageContext } from "@/lib/page-context"
 import { formByGame, tableAround, type FormResult } from "@/lib/sports/detail"
-import { eventTitle } from "@/lib/sports/presentation"
 import { enabledSports, getStandings, getTeamFixtures, type StandingRow } from "@/lib/sports/service"
 import type { SportEvent } from "@/lib/sports/types"
 import { cn } from "@/lib/utils"
 import { videoFor } from "@/lib/video/catalog"
+import { loadWatchFeed } from "@/lib/video/load-feed"
 
 export const dynamic = "force-dynamic"
 
@@ -59,10 +59,11 @@ export default async function TeamPage({ params, searchParams }: Props) {
   const displayName = team?.name ?? name
 
   const leagueId = team?.league?.id
-  const [standings, { reports }, videos] = await Promise.all([
+  const [standings, { reports }, videos, watch] = await Promise.all([
     leagueId ? getStandings(leagueId) : null,
     team ? listPublishedReports(locale) : { reports: [] },
     team ? checkedVideos(recent) : [],
+    team ? loadWatchFeed(team.sportId, { team: team.name }) : null,
   ])
   const related = reports.filter((report) => report.participants.some((item) => item.toLowerCase() === displayName.toLowerCase())).slice(0, REPORT_LIMIT)
   const rows: StandingRow[] = standings?.state === "ok" ? tableAround(standings.rows, displayName) : []
@@ -135,19 +136,7 @@ export default async function TeamPage({ params, searchParams }: Props) {
         </SpoilerScope>
       )}
 
-      {videos.length > 0 && (
-        <section aria-label={copy.availableVideo} className="mb-7">
-          <h2 className="flex items-center gap-2 text-[17px] font-semibold text-ink"><Clapperboard aria-hidden className="size-[18px] text-brand" /> {copy.availableVideo}</h2>
-          <ul className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {videos.map(({ event, channel }) => (
-              <li key={event.id} className="min-w-0 rounded-xl border border-line bg-surface p-3 shadow-[var(--shadow-sm)]">
-                <HighlightPlayer matchId={event.id} title={eventTitle(event)} thumbnailUrl={event.thumbnailUrl} channel={channel} />
-                <Link href={href(`/app/match/${event.id}`)} className="mt-2 block truncate font-semibold text-ink hover:underline">{eventTitle(event)}</Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {team && <TeamWatchPanel sport={team.sportId} team={team.name} recent={videos} feed={watch?.feed ?? null} t={t} href={href} />}
 
       {related.length > 0 && (
         <Panel className="mb-7" title={copy.relatedReports} icon={<Newspaper aria-hidden />}>

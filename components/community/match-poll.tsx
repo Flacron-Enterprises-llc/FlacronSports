@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { Meter } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import { useLocale } from "@/lib/use-locale"
@@ -13,11 +13,14 @@ export interface PollView {
 }
 
 export function MatchPoll({
-  matchId, poll, signedIn, intercept, onChange,
+  matchId, poll, signedIn, locked, prompt, intercept, onChange,
 }: {
   matchId: string
   poll: PollView
   signedIn: boolean
+  /** Until the community confirmation is done, it stands where the options would be. */
+  locked: boolean
+  prompt: ReactNode
   intercept(code: string | undefined, action: () => void): boolean
   onChange(poll: PollView): void
 }) {
@@ -39,7 +42,7 @@ export function MatchPoll({
     <section aria-label={t.community.pollTitle} className="mb-3 rounded-xl border border-line p-3 text-sm">
       <p className="text-xs font-semibold text-ink-2">{t.community.pollTitle}</p>
       <p className="mt-1 font-semibold text-ink">{poll.question}</p>
-      <ul className="mt-2 space-y-1.5">
+      {!showResults && locked ? <div className="mt-2">{prompt}</div> : <ul className="mt-2 space-y-1.5">
         {poll.options.map((option, index) => (
           <li key={option.text} className="fs-panel-in">
             {showResults ? (
@@ -52,7 +55,7 @@ export function MatchPoll({
             )}
           </li>
         ))}
-      </ul>
+      </ul>}
       {!poll.open && <p className="mt-2 text-xs text-ink-3">{t.community.pollClosed}</p>}
       {notice && <p role="status" className="mt-2 text-ink">{notice}</p>}
     </section>

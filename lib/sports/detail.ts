@@ -2,9 +2,11 @@
 // a section the provider does not cover comes back empty and is not shown.
 
 import type { Locale } from "@/lib/i18n"
-import type { EventStatus, SportEvent, SportId } from "./types"
+import { BASKETBALL_PERCENT_STATS, basketballRole, type BasketballRole } from "./adapters/basketball"
+import { goalSituation, infractionKey, periodRank, type GoalSituation } from "./adapters/ice-hockey"
+import type { EventStatus, ScoreBreakdown, SportEvent, SportId } from "./types"
 
-export type TimelineKind = "goal" | "penalty" | "missed-penalty" | "own-goal" | "yellow" | "red" | "substitution" | "var" | "other"
+export type TimelineKind = "goal" | "penalty" | "missed-penalty" | "own-goal" | "yellow" | "red" | "substitution" | "var" | "infraction" | "other"
 
 export interface TimelineItem {
   id: string
@@ -14,8 +16,14 @@ export interface TimelineItem {
   player: string | null
   /** The assist, or the other player in a substitution. */
   secondary: string | null
-  /** The source's own wording, for a row of kind "other". */
+  /** The source's own wording, for a row of kind "other" or "infraction". */
   label?: string
+  /** Hockey's period code. Its minutes restart each period, so the two read together. */
+  period?: string
+  /** Hockey: a goal scored with a player more or fewer. */
+  situation?: GoalSituation
+  /** Hockey: the infraction's dictionary key, when it has one. */
+  infraction?: string
 }
 
 export interface StatRow {
@@ -36,6 +44,8 @@ export interface LineupPlayer {
   name: string
   number: number | null
   group: PositionGroup
+  /** Basketball's five positions, which the football groups do not fit. */
+  role?: BasketballRole | null
   substitute: boolean
 }
 
@@ -44,6 +54,8 @@ export interface MatchDetail {
   timeline: TimelineItem[]
   stats: StatRow[]
   lineups: { home: LineupPlayer[]; away: LineupPlayer[] }
+  /** Period scores this game's timeline proves, for a sport whose event record has none. */
+  breakdown?: ScoreBreakdown
   fetchedAt: string
 }
 
@@ -55,6 +67,7 @@ export interface RawTimeline {
   strPlayer?: string | null
   strAssist?: string | null
   intTime?: string | number | null
+  strPeriod?: string | null
 }
 
 export interface RawStat {
@@ -81,7 +94,7 @@ function timelineKind(type: string, detail: string): TimelineKind | null {
   return type === "var" ? "var" : "other"
 }
 
-const sideOf = (home: string | null | undefined) => (home === "Yes" ? "home" : home === "No" ? "away" : null)
+const sideOf = (home: string | null | undefined): TimelineItem["side"] => (home === "Yes" ? "home" : home === "No" ? "away" : null)
 const whole = (value: string | number | null | undefined) => {
   const parsed = Number(value)
   return value === null || value === undefined || value === "" || !Number.isFinite(parsed) ? null : parsed
@@ -89,8 +102,24 @@ const whole = (value: string | number | null | undefined) => {
 
 const byStableId = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true })
 
+function hockeyTimeline(rows: RawTimeline[]): TimelineItem[] {
+  const items = rows.flatMap((row, index): TimelineItem[] => {
+    const type = (row.strTimeline ?? "").trim().toLowerCase()
+    const base = { id: row.idTimeline ?? String(index), minute: whole(row.intTime), side: sideOf(row.strHome), player: row.strPlayer || null, secondary: row.strAssist || null, period: (row.strPeriod ?? "").trim().toUpperCase() || undefined }
+    if (type === "goal") {
+      const situation = goalSituation(row.strTimelineDetail)
+      return [{ ...base, kind: "goal", ...(situation ? { situation } : {}) }]
+    }
+    if (type !== "penalty") return []
+    const infraction = infractionKey(row.strTimelineDetail)
+    return [{ ...base, kind: "infraction", label: row.strTimelineDetail?.trim() || undefined, ...(infraction ? { infraction } : {}) }]
+  })
+  return items.sort((a, b) => periodRank(a.period) - periodRank(b.period) || (a.minute ?? Number.MAX_SAFE_INTEGER) - (b.minute ?? Number.MAX_SAFE_INTEGER) || byStableId(a.id, b.id))
+}
+
 /** Clock first, then the provider's id, so two rows in one minute keep one order on every load. */
-export function normalizeTimeline(rows: RawTimeline[] | null | undefined): TimelineItem[] {
+export function normalizeTimeline(rows: RawTimeline[] | null | undefined, sport: SportId = "football"): TimelineItem[] {
+  if (sport === "ice-hockey") return hockeyTimeline(rows ?? [])
   return (rows ?? [])
     .flatMap((row, index) => {
       const kind = timelineKind((row.strTimeline ?? "").trim().toLowerCase(), (row.strTimelineDetail ?? "").toLowerCase())
@@ -106,7 +135,7 @@ export function normalizeTimeline(rows: RawTimeline[] | null | undefined): Timel
 const STATS = ["ball possession", "expected_goals", "total shots", "shots on goal", "shots off goal", "blocked shots", "corner kicks", "offsides", "fouls", "yellow cards", "red cards", "goalkeeper saves", "total passes", "passes accurate", "passes %"]
 
 // The source sends these both with and without the sign.
-const PERCENT_STATS = new Set(["ball possession", "passes %"])
+const PERCENT_STATS = new Set(["ball possession", "passes %", ...BASKETBALL_PERCENT_STATS])
 
 const statKey = (name: string) => name.trim().toLowerCase()
 
@@ -148,9 +177,23 @@ export function labelStats(rows: StatRow[], names: Record<string, string>, local
   })
 }
 
-export function labelTimeline(items: TimelineItem[], kinds: Record<Exclude<TimelineKind, "other">, string>, locale: Locale): (TimelineItem & { label: string })[] {
+interface HockeyWords {
+  infractions: Record<string, string>
+  situations: Record<GoalSituation, string>
+}
+
+function kindLabel(item: TimelineItem, kinds: Record<Exclude<TimelineKind, "other">, string>, locale: Locale, hockey?: HockeyWords): string | null | undefined {
+  if (item.kind === "other") return locale === "en" ? item.label : null
+  if (item.kind === "infraction") {
+    const named = (item.infraction && hockey?.infractions[item.infraction]) || (locale === "en" ? item.label : null)
+    return named ? `${kinds.infraction}: ${named}` : kinds.infraction
+  }
+  return item.situation && hockey ? `${kinds[item.kind]} · ${hockey.situations[item.situation]}` : kinds[item.kind]
+}
+
+export function labelTimeline(items: TimelineItem[], kinds: Record<Exclude<TimelineKind, "other">, string>, locale: Locale, hockey?: HockeyWords): (TimelineItem & { label: string })[] {
   return items.flatMap((item) => {
-    const label = item.kind === "other" ? (locale === "en" ? item.label : null) : kinds[item.kind]
+    const label = kindLabel(item, kinds, locale, hockey)
     return label ? [{ ...item, label }] : []
   })
 }
@@ -166,10 +209,11 @@ function positionGroup(position: string | null | undefined): PositionGroup {
 
 const GROUP_ORDER = ["goalkeeper", "defender", "midfielder", "forward", null]
 
-export function normalizeLineups(rows: RawLineup[] | null | undefined): MatchDetail["lineups"] {
+export function normalizeLineups(rows: RawLineup[] | null | undefined, sport: SportId = "football"): MatchDetail["lineups"] {
+  const basketball = sport === "basketball"
   const side = (home: string) => (rows ?? [])
     .filter((row) => row.strHome === home && row.strPlayer)
-    .map((row, index) => ({ id: row.idLineup ?? row.idPlayer ?? String(index), playerId: row.idPlayer ?? null, name: row.strPlayer as string, number: whole(row.intSquadNumber), group: positionGroup(row.strPosition), substitute: row.strSubstitute === "Yes" }))
+    .map((row, index) => ({ id: row.idLineup ?? row.idPlayer ?? String(index), playerId: row.idPlayer ?? null, name: row.strPlayer as string, number: whole(row.intSquadNumber), group: basketball ? null : positionGroup(row.strPosition), ...(basketball ? { role: basketballRole(row.strPosition) } : {}), substitute: row.strSubstitute === "Yes" }))
     .sort((a, b) => Number(a.substitute) - Number(b.substitute) || GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group))
   return { home: side("Yes"), away: side("No") }
 }

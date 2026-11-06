@@ -4,12 +4,14 @@ import { ApiError } from "@/lib/api-auth"
 import { getAdminDb } from "@/lib/firebase-admin"
 import { memberFetch, MemberAccessRequired } from "@/lib/member-fetch"
 import { countMetric } from "@/lib/ops/metrics"
+import { hockeyPeriods } from "./adapters/ice-hockey"
 import { Breaker, CircuitOpenError, type BreakerStatus } from "./breaker"
+import { activeLeagues, chooseLeagues, dayPath, fileRows, indexPath, LEAGUE_COLLECTED, leaguePaths, mergeRows, nextDates, RESULT_CALLS, RESULT_SPORTS, resultsWanted, type CollectIndex, type CollectLeague, type GameDate } from "./collect"
 import { coverageRules, eventAllowed, sportAllowed } from "./coverage"
 import { normalizeLineups, normalizeStats, normalizeTimeline, type MatchDetail, type RawLineup, type RawStat, type RawTimeline } from "./detail"
 import { advancedPlayer, isPlayerId, normalizeMoves, normalizePlayer, type PlayerAdvanced, type PlayerMove, type PlayerProfile, type RawFormerTeam, type RawPlayer } from "./player"
 import { CUP_COMPETITIONS, knockoutRounds, previousSeason, RACE_SERIES, raceWeekends, type KnockoutRound, type RaceWeekend, type SeasonView } from "./seasons"
-import { isCovered, normalizeEvent, PROVIDER_NAME, toUtc, type RawEvent } from "./thesportsdb"
+import { isCovered, normalizeEvent, PROVIDER_NAME, toUtc, type RawEvent, type RawResult } from "./thesportsdb"
 import { SPORTS, type EventFeed, type SportDefinition, type SportEvent, type SportId } from "./types"
 
 const BASE = "https://www.thesportsdb.com/api/v1/json"
@@ -121,7 +123,9 @@ async function request<T>(path: string, background = false): Promise<T> {
     if (response.status === 429) nextCallAt = Math.max(nextCallAt, Date.now() + RATE_LIMIT_COOLDOWN_MS)
     noteResult(feedBreaker, "feed", response.status)
     if (!response.ok) throw new Error(`Provider responded ${response.status}`)
-    return response.json() as Promise<T>
+    // The table call answers with an empty body for every sport but football: nothing to show, not a failure.
+    const body = await response.text()
+    return (body ? JSON.parse(body) : {}) as T
   })().finally(() => inFlight.delete(path))
 
   inFlight.set(path, task)
@@ -214,12 +218,35 @@ async function fetchJson<T>(path: string): Promise<T> {
   return (await load<T>(path)).data
 }
 
+/** A game filed by the league job. These stay good past the snapshot limits: a fixture list does not go off. */
+async function collectedDay(sport: SportDefinition, date: string): Promise<RawEvent[]> {
+  if (!LEAGUE_COLLECTED.has(sport.id)) return []
+  const path = dayPath(sport, date)
+  const cached = memory.get(path)
+  if (cached && Date.now() - cached.at < FRESH_MS) return (cached.data as { events: RawEvent[] }).events
+  const stored = await readSnapshot(path)
+  const events = (stored?.data as { events?: RawEvent[] } | undefined)?.events ?? []
+  remember(path, { events }, Date.now())
+  return events
+}
+
+const DAY_FEED_DAYS = 31
+
 async function eventsForSport(sport: SportDefinition, date: string, refresh = false, storedOnly = false): Promise<{ events: SportEvent[]; stale: boolean }> {
   const query = new URLSearchParams({ d: date, s: sport.providerKey as string })
   const nearToday = Math.abs(Date.parse(date) - Date.parse(utcDate())) <= 86_400_000
-  const { data, stale } = await load<{ events: RawEvent[] | null }>(`eventsday.php?${query}`, refresh, nearToday ? SNAPSHOT_FRESH_MS : CALENDAR_FRESH_MS, storedOnly)
-  // The sport is rechecked per record, so a stray row can never be filed under the wrong sport.
-  return { events: rowsToEvents(data.events, sport, nearToday ? await liveRows() : NO_LIVE), stale }
+  const live = nearToday ? await liveRows() : NO_LIVE
+  const collected = await collectedDay(sport, date)
+  // Far ahead the league lists are all there is, and asking the day feed would spend a call per visit.
+  if (LEAGUE_COLLECTED.has(sport.id) && Math.abs(Date.parse(date) - Date.parse(utcDate())) > DAY_FEED_DAYS * 86_400_000) return { events: rowsToEvents(collected, sport, live), stale: false }
+  try {
+    const { data, stale } = await load<{ events: RawEvent[] | null }>(`eventsday.php?${query}`, refresh, nearToday ? SNAPSHOT_FRESH_MS : CALENDAR_FRESH_MS, storedOnly)
+    // The sport is rechecked per record, so a stray row can never be filed under the wrong sport.
+    return { events: rowsToEvents(mergeRows(collected, data.events), sport, live), stale }
+  } catch (error) {
+    if (collected.length === 0) throw error
+    return { events: rowsToEvents(collected, sport, live), stale: true }
+  }
 }
 
 function rowsToEvents(rows: RawEvent[] | null | undefined, sport: SportDefinition, live: LiveRows = NO_LIVE): SportEvent[] {
@@ -295,7 +322,7 @@ export async function storedEvents(date: string, sport?: SportId): Promise<Sport
   const live = await liveRows()
   const days = await Promise.all(sports.map(async (item) => {
     const query = new URLSearchParams({ d: date, s: item.providerKey as string })
-    return rowsToEvents((await peek<{ events: RawEvent[] | null }>(`eventsday.php?${query}`))?.events, item, live)
+    return rowsToEvents(mergeRows(await collectedDay(item, date), (await peek<{ events: RawEvent[] | null }>(`eventsday.php?${query}`))?.events), item, live)
   }))
   return days.flat().filter((event) => eventAllowed(rules, event))
 }
@@ -347,6 +374,112 @@ function toBroadcasts(rows: RawBroadcast[] | null | undefined, sport: SportDefin
       startUTC: toUtc(raw.strTimeStamp),
     }]
   })
+}
+
+async function storedIndex(sport: SportDefinition): Promise<CollectIndex> {
+  return ((await readSnapshot(indexPath(sport)))?.data as CollectIndex | undefined) ?? (memory.get(indexPath(sport))?.data as CollectIndex | undefined) ?? {}
+}
+
+async function collectLeagues(): Promise<CollectLeague[]> {
+  const competitions = await allCompetitions()
+  return enabledSports()
+    .filter((sport) => LEAGUE_COLLECTED.has(sport.id))
+    .flatMap((sport) => competitions.filter((item) => item.sportId === sport.id && !item.name.startsWith("_") && isCovered({ idEvent: "", strLeague: item.name }, sport.id)).map((item) => ({ id: item.id, name: item.name, sportId: sport.id, providerKey: sport.providerKey as string })))
+}
+
+const collectStore = {
+  readDay: async (path: string) => ((await readSnapshot(path))?.data as { events?: RawEvent[] } | undefined)?.events ?? (memory.get(path)?.data as { events?: RawEvent[] } | undefined)?.events ?? [],
+  writeDay: async (path: string, rows: RawEvent[]) => {
+    const now = Date.now()
+    remember(path, { events: rows }, now)
+    await writeSnapshot(path, { events: rows }, now)
+  },
+}
+
+/** Called by the scheduled job only. Walks a share of the leagues and files their games by day. */
+export async function collectLeagueEvents(tickMs: number, now: Date = new Date()): Promise<{ leagues: number; calls: number; events: number; stopped: boolean } | { skipped: string }> {
+  // The public test key lists a handful of events per query, and this would only spend it.
+  if (apiKey().limited) return { skipped: "feed_limited" }
+  const sports = enabledSports().filter((sport) => LEAGUE_COLLECTED.has(sport.id))
+  const indexes = new Map(await Promise.all(sports.map(async (sport) => [sport.id, await storedIndex(sport)] as const)))
+  const chosen = chooseLeagues(await collectLeagues(), activeLeagues([...indexes.values()], now), now, tickMs)
+
+  const rows = new Map<SportId, RawEvent[]>()
+  let calls = 0
+  let stopped = false
+  for (const league of chosen) {
+    for (const path of leaguePaths(league, now)) {
+      // Nothing gets through while the breaker is open, and each try would only hold the job up.
+      if (feedBreaker.status().state === "open") stopped = true
+      if (stopped) break
+      calls += 1
+      const found = await load<{ events?: RawEvent[] | null }>(path, true).catch(() => null)
+      if (found && !found.stale) rows.set(league.sportId, [...(rows.get(league.sportId) ?? []), ...(found.data.events ?? [])])
+    }
+  }
+
+  let events = 0
+  for (const sport of sports) {
+    const fresh = rows.get(sport.id)
+    if (!fresh?.length) continue
+    events += fresh.length
+    const index = await fileRows(sport, fresh, indexes.get(sport.id) ?? {}, collectStore, now)
+    remember(indexPath(sport), index, Date.now())
+    await writeSnapshot(indexPath(sport), index, Date.now())
+  }
+  const results = stopped ? 0 : await collectResults(sports, now)
+  return { leagues: chosen.length, calls: calls + results, events, stopped }
+}
+
+/** Many sessions and matches have no result text, so what just ended is asked for by event. */
+async function collectResults(sports: SportDefinition[], now: Date): Promise<number> {
+  let calls = 0
+  for (const sport of sports.filter((item) => RESULT_SPORTS.has(item.id))) {
+    for (const offset of [0, 1, 2]) {
+      const path = dayPath(sport, utcDate(new Date(now.getTime() - offset * 86_400_000)))
+      const rows = await collectStore.readDay(path)
+      const wanted = new Map(resultsWanted(rows, now).slice(0, Math.max(0, RESULT_CALLS - calls)).map((raw) => [raw.idEvent, raw]))
+      if (wanted.size === 0) continue
+      for (const raw of wanted.values()) {
+        if (feedBreaker.status().state === "open") break
+        calls += 1
+        const found = await load<{ results?: RawResult[] | null }>(`eventresults.php?id=${raw.idEvent}`, true).catch(() => null)
+        raw.resultsCheckedAt = now.getTime()
+        if (found && Array.isArray(found.data.results)) raw.resultRows = found.data.results.map(({ idPlayer, strPlayer, intPosition, strDetail }) => ({ idPlayer, strPlayer, intPosition, strDetail }))
+      }
+      await collectStore.writeDay(path, rows.map((raw) => wanted.get(raw.idEvent) ?? raw))
+    }
+  }
+  return calls
+}
+
+const RESULT_FRESH_MS = 15 * 60_000
+
+/** Spent only on a page that needs it. A game still to come has nothing to ask for. */
+async function eventResults(raw: RawEvent, sport: SportDefinition): Promise<RawEvent> {
+  const start = Date.parse(`${raw.strTimestamp ?? ""}Z`)
+  if (!RESULT_SPORTS.has(sport.id) || raw.resultRows?.length || !(start < Date.now())) return raw
+  const found = await loadDetail<{ results?: RawResult[] | null }>(`eventresults.php?id=${raw.idEvent}`, RESULT_FRESH_MS).catch(() => null)
+  return Array.isArray(found?.results) ? { ...raw, resultRows: found.results } : raw
+}
+
+const NEXT_DATES = 5
+const STORED_DAYS_AHEAD = 7
+
+/** Where a sport plays next, from what is already stored. Spends no provider calls. */
+async function nextGameDates(sport: SportDefinition, date: string): Promise<GameDate[]> {
+  const today = utcDate()
+  const after = date >= today ? date : utcDate(new Date(Date.now() - 86_400_000))
+  if (LEAGUE_COLLECTED.has(sport.id)) return nextDates(await storedIndex(sport), after, NEXT_DATES).filter((item) => item.date >= today)
+  const days = Array.from({ length: STORED_DAYS_AHEAD }, (_, offset) => utcDate(new Date(Date.parse(`${after}T12:00:00Z`) + (offset + 1) * 86_400_000)))
+  const found = await Promise.all(days.map(async (day) => ({ date: day, games: rowsToEvents((await peek<{ events: RawEvent[] | null }>(`eventsday.php?${new URLSearchParams({ d: day, s: sport.providerKey as string })}`))?.events, sport).length })))
+  return found.filter((item) => item.games > 0).slice(0, NEXT_DATES)
+}
+
+/** The next dates a sport has games, for pages that name what comes next. */
+export async function storedGameDates(sportId: SportId, date: string): Promise<GameDate[]> {
+  const sport = enabledSports().find((item) => item.id === sportId)
+  return sport ? nextGameDates(sport, date) : []
 }
 
 /** Called by the scheduled job only. */
@@ -436,7 +569,8 @@ async function buildEvents(options: { date?: string; sport?: SportId; refresh?: 
     .sort((a, b) => (a.scheduledStartUTC ?? "").localeCompare(b.scheduledStartUTC ?? ""))
 
   const complete = succeeded.length === sports.length && succeeded.every((result) => !result.stale)
-  return { ...base, state: complete ? "ok" : "stale", events }
+  const chosen = options.sport && !options.refresh && !events.some((event) => event.status === "scheduled") ? sports.find((sport) => sport.id === options.sport) : undefined
+  return { ...base, state: complete ? "ok" : "stale", events, ...(chosen ? { nextDates: await nextGameDates(chosen, date).catch(() => []) } : {}) }
 }
 
 /** A rate-limited lookup can still be answered from a daily feed already in memory. */
@@ -479,7 +613,7 @@ export async function getEvent(id: string, options: { anyCoverage?: boolean } = 
   if (!sport || !isCovered(raw, sport.id)) return null
   const live = await liveRows()
   const updated = live.has(raw.idEvent) ? Math.max(at ?? 0, liveScores.at) : at
-  const event = { ...normalizeEvent(withLive(raw, live), sport.id), sourceUpdatedAt: updated ? new Date(updated).toISOString() : null }
+  const event = { ...normalizeEvent(withLive(await eventResults(raw, sport), live), sport.id), sourceUpdatedAt: updated ? new Date(updated).toISOString() : null }
   return options.anyCoverage || eventAllowed(await coverageRules(), event) ? event : null
 }
 
@@ -519,10 +653,12 @@ export async function getMatchDetail(event: SportEvent, onFetch?: () => void): P
     loadDetail<{ lineup?: RawLineup[] | null }>(`lookuplineup.php?id=${id}`, freshMs, onFetch),
   ])
   const value = <T,>(result: PromiseSettledResult<T>): T | null => (result.status === "fulfilled" ? result.value : null)
+  const periods = event.sportId === "ice-hockey" ? hockeyPeriods(value(timeline)?.timeline, event.score, event.conclusion) : null
   const detail = {
-    timeline: normalizeTimeline(value(timeline)?.timeline),
+    timeline: normalizeTimeline(value(timeline)?.timeline, event.sportId),
     stats: normalizeStats(value(stats)?.eventstats, event.sportId),
-    lineups: normalizeLineups(value(lineups)?.lineup),
+    lineups: normalizeLineups(value(lineups)?.lineup, event.sportId),
+    ...(periods ? { breakdown: periods } : {}),
     fetchedAt: new Date().toISOString(),
   }
   const hasData = detail.timeline.length > 0 || detail.stats.length > 0 || detail.lineups.home.length > 0 || detail.lineups.away.length > 0
@@ -772,7 +908,49 @@ async function seasonRows(leagueId: string, season: string): Promise<{ rows: Raw
 
 const seasonView = <T,>(state: SeasonView<T>["state"]): SeasonView<T> => ({ state, competition: null, season: null, items: [], fetchedAt: new Date().toISOString() })
 
+export interface LeagueView {
+  state: "ok" | "stale" | "empty" | "unavailable" | "withheld"
+  competition: string | null
+  sportId: SportId | null
+  upcoming: SportEvent[]
+  recent: SportEvent[]
+  fetchedAt: string
+}
+
+const leagueView = (state: LeagueView["state"]): LeagueView => ({ state, competition: null, sportId: null, upcoming: [], recent: [], fetchedAt: new Date().toISOString() })
+
+/** One competition's next and latest games, for sports whose day feed cannot be trusted to hold them. */
+export async function getLeagueEvents(leagueId: string): Promise<LeagueView> {
+  if (process.env.API_ORIGIN) {
+    return (await fromBackend<LeagueView>(`/api/leagues/${encodeURIComponent(leagueId)}`).catch(whenWithheld(leagueView("withheld")))) ?? leagueView("unavailable")
+  }
+  try {
+    const league = await leagueInfo(leagueId)
+    const sport = enabledSports().find((item) => item.providerKey === league?.strSport)
+    const competition = league?.strLeague
+    if (!sport || !competition || !LEAGUE_COLLECTED.has(sport.id) || !isCovered({ idEvent: "", strLeague: competition }, sport.id)) return leagueView("empty")
+    const rules = await coverageRules()
+    if (!eventAllowed(rules, { sportId: sport.id, competition: { id: leagueId, name: competition, country: null } })) return leagueView("empty")
+    const [next, past] = await Promise.allSettled([load<{ events: RawEvent[] | null }>(`eventsnextleague.php?id=${leagueId}`), load<{ events: RawEvent[] | null }>(`eventspastleague.php?id=${leagueId}`)])
+    const read = (result: typeof next) => (result.status === "fulfilled" ? rowsToEvents(result.value.data.events, sport) : [])
+    const failed = [next, past].some((result) => result.status === "rejected" || result.value.stale)
+    const upcoming = read(next).sort((a, b) => (a.scheduledStartUTC ?? "").localeCompare(b.scheduledStartUTC ?? ""))
+    const recent = read(past).sort((a, b) => (b.scheduledStartUTC ?? "").localeCompare(a.scheduledStartUTC ?? ""))
+    const state = upcoming.length + recent.length === 0 ? (next.status === "rejected" && past.status === "rejected" ? "unavailable" : "empty") : failed ? "stale" : "ok"
+    return { ...leagueView(state), competition, sportId: sport.id, upcoming, recent }
+  } catch {
+    return leagueView("unavailable")
+  }
+}
+
 export type RaceSchedule = SeasonView<RaceWeekend>
+
+/** Many series keep an old current season on file while the newest one is already listed. */
+async function latestSeason(leagueId: string, current: string): Promise<string[]> {
+  const found = await loadDetail<{ seasons?: { strSeason?: string | null }[] | null }>(`search_all_seasons.php?id=${leagueId}`, PLAYER_FRESH_MS).catch(() => null)
+  const newest = found?.seasons?.at(-1)?.strSeason
+  return newest && newest > current ? [newest, current] : [current]
+}
 
 /** A series' sessions by race weekend. Results are not part of this view. */
 export async function getRaceSchedule(leagueId: string): Promise<RaceSchedule> {
@@ -786,9 +964,12 @@ export async function getRaceSchedule(leagueId: string): Promise<RaceSchedule> {
     const competition = league?.strLeague
     const rules = await coverageRules()
     if (league?.strSport !== "Motorsport" || !season || !competition || !eventAllowed(rules, { sportId: "motorsport", competition: { id: leagueId, name: competition, country: null } })) return seasonView("empty")
-    const { rows, stale } = await seasonRows(leagueId, season)
-    const items = raceWeekends(rows)
-    return { ...seasonView<RaceWeekend>(items.length === 0 ? "empty" : stale ? "stale" : "ok"), competition, season, items }
+    for (const name of await latestSeason(leagueId, season)) {
+      const { rows, stale } = await seasonRows(leagueId, name)
+      const items = raceWeekends(rows)
+      if (items.length > 0) return { ...seasonView<RaceWeekend>(stale ? "stale" : "ok"), competition, season: name, items }
+    }
+    return seasonView("empty")
   } catch {
     return seasonView("unavailable")
   }

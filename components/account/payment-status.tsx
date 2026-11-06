@@ -62,7 +62,7 @@ export function PaymentStatus() {
   return (
     <div role="status" aria-live="polite" className="flex w-full justify-center">
       <StatusCard key={state} visual={visual} title={title} body={body}>
-        {state !== "confirming" && <Link href={href("/app/billing")} className={authButton.primary}>{t.paid.go}</Link>}
+        {state !== "confirming" && <Link href={href(state === "done" ? "/app" : "/app/billing")} className={authButton.primary}>{state === "done" ? t.paid.enter : t.paid.go}</Link>}
       </StatusCard>
     </div>
   )

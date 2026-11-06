@@ -13,6 +13,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return apiErrorResponse(error)
   }
   const { id } = await params
-  const result = await viewingFor(id, request.headers.get("cloudfront-viewer-country"))
-  return NextResponse.json({ ...result, checkedAt: new Date().toISOString() })
+  const country = request.headers.get("cloudfront-viewer-country")
+  const result = await viewingFor(id, country)
+  return NextResponse.json({ ...result, viewerCountry: country, checkedAt: new Date().toISOString() })
 }

@@ -1,7 +1,20 @@
-import { parseBreakdown, parseCard, parseClassification, parseCombatResult, parseCricketOutcome, parseCricketOvers, parseTennisDraw, parseTennisResult } from "./results"
-import type { EventConclusion, EventScore, EventStatus, Innings, Participant, SportEvent, SportId } from "./types"
+import { combatFields } from "./adapters/combat"
+import { cricketFields } from "./adapters/cricket"
+import { motorsportFields } from "./adapters/motorsport"
+import { tennisFields } from "./adapters/tennis"
+import { americanFootballConclusion } from "./adapters/american-football"
+import { teamBreakdown, teamPhase } from "./adapters/team"
+import type { EventConclusion, EventScore, EventStatus, Participant, SportEvent, SportId } from "./types"
 
 export const PROVIDER_NAME = "TheSportsDB"
+
+/** One entrant's line from the results endpoint. Its points are 0 even for a race winner, so they are not read. */
+export interface RawResult {
+  idPlayer?: string | null
+  strPlayer?: string | null
+  intPosition?: string | number | null
+  strDetail?: string | null
+}
 
 export interface RawEvent {
   idEvent: string
@@ -9,6 +22,13 @@ export interface RawEvent {
   strLeague?: string | null
   strSport?: string | null
   strEvent?: string | null
+  dateEvent?: string | null
+  strSeason?: string | null
+  strGroup?: string | null
+  intSpectators?: string | number | null
+  /** Added by this site from the results endpoint, which many sessions and matches need. */
+  resultRows?: RawResult[] | null
+  resultsCheckedAt?: number
   strResult?: string | null
   strDescriptionEN?: string | null
   strTime?: string | null
@@ -36,12 +56,12 @@ export interface RawEvent {
   intRound?: string | number | null
 }
 
-const FINISHED = new Set(["FT", "AET", "PEN", "AOT", "AP", "AWD", "WO", "MATCH FINISHED", "FINISHED"])
-const LIVE = new Set(["1H", "2H", "HT", "ET", "BT", "P", "Q1", "Q2", "Q3", "Q4", "OT", "LIVE", "IN PLAY"])
+const FINISHED = new Set(["FT", "AET", "PEN", "AOT", "AP", "AWD", "AW", "WO", "MATCH FINISHED", "FINISHED"])
+const LIVE = new Set(["1H", "2H", "HT", "ET", "BT", "P", "PT", "Q1", "Q2", "Q3", "Q4", "OT", "LIVE", "IN PLAY"])
 const SCHEDULED = new Set(["NS", "NOT STARTED", "TBD", ""])
 
-// Hockey periods and baseball innings, as the live feed writes them.
-const LIVE_PERIOD = /^(?:P[1-5]|IN\d{1,2}|ET\d)$/
+// Hockey periods, baseball innings and volleyball sets, as the live feed writes them.
+const LIVE_PERIOD = /^(?:P[1-5]|IN\d{1,2}|ET\d|S[1-5])$/
 
 export function normalizeStatus(raw: RawEvent): EventStatus {
   if (raw.strPostponed?.toLowerCase() === "yes") return "postponed"
@@ -51,7 +71,7 @@ export function normalizeStatus(raw: RawEvent): EventStatus {
   if (SCHEDULED.has(status)) return "scheduled"
   if (status === "PST" || status === "POST" || status === "POSTPONED") return "postponed"
   if (status === "CANC" || status === "CANCELLED" || status === "CANCELED") return "canceled"
-  if (status === "SUSP" || status === "INT" || status === "INTERRUPTED") return "interrupted"
+  if (status === "SUSP" || status === "INT" || status === "INTR" || status === "INTERRUPTED") return "interrupted"
   if (status === "ABD" || status === "ABANDONED") return "abandoned"
   return "unknown"
 }
@@ -65,11 +85,13 @@ function conclusionOf(raw: RawEvent, sportId: SportId): EventConclusion | null {
   return CONCLUSIONS[status] ?? null
 }
 
-export type PeriodKey = "first-half" | "second-half" | "half-time" | "extra-time" | "extra-break" | "shootout" | "overtime" | "quarter" | "period" | "inning"
+export type PeriodKey = "first-half" | "second-half" | "half-time" | "extra-time" | "extra-break" | "shootout" | "overtime" | "quarter" | "period" | "inning" | "set" | "break"
 
 /** The running period of a live game, in a form the page can translate. Raw codes never reach a visitor. */
-export function currentPeriod(status: string | null | undefined): { key: PeriodKey; number?: number } | null {
+export function currentPeriod(status: string | null | undefined, sportId?: SportId, league?: string | null): { key: PeriodKey; number?: number } | null {
   const code = (status ?? "").trim().toUpperCase()
+  const own = sportId ? teamPhase(sportId, code, league) : null
+  if (own) return own
   const fixed: Record<string, PeriodKey> = { "1H": "first-half", "2H": "second-half", HT: "half-time", ET: "extra-time", BT: "extra-break", P: "shootout", OT: "overtime" }
   if (fixed[code]) return { key: fixed[code] }
   const numbered = code.match(/^(Q|P|IN|ET)(\d{1,2})$/)
@@ -102,7 +124,7 @@ export function toUtc(timestamp: string | null | undefined): string | null {
 
 // The fighting feed mixes real contests with scripted pro wrestling, and an unknown
 // promotion must stay out rather than be shown as a combat result.
-const COMBAT_LEAGUES = /\b(?:ufc|boxing|mma|bkfc|pfl|bellator|rizin|ksw|cage warriors|kickboxing|muay thai|glory|jungle fight)\b/i
+const COMBAT_LEAGUES = /\b(?:ufc|boxing|mma|mixed martial arts|bkfc|pfl|professional fighters league|bellator|rizin|ksw|cage warriors|caged steel|cage fury|legacy fighting alliance|uae warriors|kotc|deep|invicta|aca|pancrase|shooto|pride fc|dream|strikeforce|world extreme cagefighting|top rank|kickboxing|muay thai|glory|k-1|kok|rise|jungle fight)\b/i
 
 /** False for a record the sport's feed returns but this product does not cover. */
 export function isCovered(raw: RawEvent, sportId: SportId): boolean {
@@ -147,85 +169,8 @@ function settledStatus(raw: RawEvent, now: Date): EventStatus {
 
 const hidesResult = (status: EventStatus) => status === "scheduled" || status === "postponed" || status === "canceled"
 
-function parseWickets(value: string | number | null | undefined): number | null {
-  const wickets = parseScore(value)
-  return wickets !== null && wickets <= 10 ? wickets : null
-}
-
-function inningsOf(raw: RawEvent, runs: string | number | null | undefined, wickets: string | number | null | undefined, side: string): Innings | null {
-  const total = parseScore(runs)
-  return total === null ? null : { runs: total, wickets: parseWickets(wickets), overs: parseCricketOvers(raw.strResult, side, total) }
-}
-
-function cricketEvent(raw: RawEvent, base: Pick<SportEvent, "participants">, now: Date) {
-  const sides = base.participants.map((participant) => participant.name)
-  const outcome = parseCricketOutcome(raw.strResult, sides)
-  const noResult = /^no result\b/i.test((raw.strResult ?? "").trim())
-  const stated = inferStatus(raw, Boolean(outcome), now)
-  const status: EventStatus = noResult && stated === "finished" ? "abandoned" : stated
-
-  // A test side bats twice and the feed has one number per side, which would flatten two innings.
-  const flattened = /\btest\b/i.test(raw.strLeague ?? "")
-  const home = inningsOf(raw, raw.intHomeScore, raw.intHomeScoreExtra, sides[0])
-  const away = inningsOf(raw, raw.intAwayScore, raw.intAwayScoreExtra, sides[1])
-  const score: EventScore =
-    hidesResult(status) || flattened || (!home && !away)
-      ? { kind: "none" }
-      : { kind: "innings", home, away, winner: outcome?.winner ?? null, margin: outcome?.margin ?? null }
-  return { status, score }
-}
-
-function tennisFields(raw: RawEvent, now: Date) {
-  const title = raw.strEvent?.trim() || null
-  const result = parseTennisResult(raw.strResult)
-  const draw = parseTennisDraw(raw.strDescriptionEN)
-  const at = (name: string) => title?.indexOf(name) ?? -1
-  // Draw order, not result order: the source lists the winner first.
-  const names = result ? result.lines.map((line) => line.name).sort((a, b) => at(a) - at(b)) : draw?.names ?? []
-  const status = inferStatus(raw, Boolean(result && (result.winner || result.retired)), now)
-  const tail = names.length === 2 ? ` ${names[0]} vs ${names[1]}` : null
-  const eventName = draw?.tournament ?? (tail && title?.endsWith(tail) ? title.slice(0, -tail.length) : title)
-  return {
-    eventType: "match" as const,
-    participantType: names.some((name) => name.includes("/")) ? ("pair" as const) : ("individual" as const),
-    participants: names.map(competitor),
-    eventName,
-    status,
-    score: result && !hidesResult(status) ? ({ kind: "sets", ...result } as const) : ({ kind: "none" } as const),
-  }
-}
-
-function combatFields(raw: RawEvent, now: Date) {
-  const title = raw.strEvent?.trim() || null
-  const parsed = title ? parseCard(title, raw.strLeague === "Boxing") : null
-  const result = parsed ? parseCombatResult(raw.strResult, parsed.names) : null
-  const status = inferStatus(raw, Boolean(result), now)
-  return {
-    eventType: parsed && !parsed.card ? ("bout" as const) : ("fight-card" as const),
-    participantType: "individual" as const,
-    participants: parsed ? parsed.names.map(competitor) : [],
-    eventName: parsed ? parsed.card : title,
-    status,
-    score: result && !hidesResult(status) ? ({ kind: "combat", ...result } as const) : ({ kind: "none" } as const),
-  }
-}
-
-function motorsportFields(raw: RawEvent, now: Date) {
-  const entries = parseClassification(raw.strResult)
-  const status = inferStatus(raw, Boolean(entries), now)
-  const shown = entries && !hidesResult(status) ? entries : null
-  return {
-    eventType: "session" as const,
-    participantType: "entrant" as const,
-    participants: shown ? shown.map((entry) => competitor(entry.name)) : [],
-    eventName: raw.strEvent?.trim() || null,
-    status,
-    score: shown ? ({ kind: "classification", entries: shown } as const) : ({ kind: "none" } as const),
-  }
-}
-
 function finish(raw: RawEvent, sportId: SportId): Pick<SportEvent, "conclusion" | "shootout"> {
-  const conclusion = conclusionOf(raw, sportId)
+  const conclusion = conclusionOf(raw, sportId) ?? (sportId === "american-football" ? americanFootballConclusion(raw.strResult) : null)
   if (!conclusion) return {}
   const [home, away] = [parseScore(raw.intHomeScoreExtra), parseScore(raw.intAwayScoreExtra)]
   const decided = conclusion === "penalties" || conclusion === "shootout"
@@ -255,18 +200,19 @@ export function normalizeEvent(raw: RawEvent, sportId: SportId, now: Date = new 
     ],
   }
 
-  if (sportId === "cricket") return { ...shared, ...teams, ...cricketEvent(raw, teams, now), dateOnly: isDateOnly(raw) }
+  const infer = (settled: boolean) => inferStatus(raw, settled, now)
+  if (sportId === "cricket") return { ...shared, ...teams, ...cricketFields(raw, teams.participants.map((side) => side.name), infer), dateOnly: isDateOnly(raw) }
   const individual = { dateOnly: isDateOnly(raw), venue: raw.strVenue || raw.strCity || null }
-  if (sportId === "tennis") return { ...shared, ...individual, ...tennisFields(raw, now) }
-  if (sportId === "combat-sports") return { ...shared, ...individual, ...combatFields(raw, now) }
-  if (sportId === "motorsport") return { ...shared, ...individual, ...motorsportFields(raw, now) }
+  if (sportId === "tennis") return { ...shared, ...individual, ...tennisFields(raw, infer) }
+  if (sportId === "combat-sports") return { ...shared, ...individual, ...combatFields(raw, infer) }
+  if (sportId === "motorsport") return { ...shared, ...individual, ...motorsportFields(raw, infer) }
 
   const status = settledStatus(raw, now)
   const clock = status === "live" && raw.strProgress ? raw.strProgress : null
   // The score follows what the source stated: a game it never started has no score, however old.
   const score = normalizeScore(raw, normalizeStatus(raw))
   const breakdown = status === "finished" && score.kind === "team"
-    ? parseBreakdown(raw.strResult, sportId, { home: teams.participants[0].name, away: teams.participants[1].name, homeScore: score.home, awayScore: score.away })
+    ? teamBreakdown(raw.strResult, sportId, { home: teams.participants[0].name, away: teams.participants[1].name, homeScore: score.home, awayScore: score.away }, { home: parseScore(raw.intHomeScoreExtra), away: parseScore(raw.intAwayScoreExtra) })
     : null
   return { ...shared, ...teams, status, score, ...(clock ? { clock } : {}), ...finish(raw, sportId), ...(breakdown ? { breakdown } : {}) }
 }

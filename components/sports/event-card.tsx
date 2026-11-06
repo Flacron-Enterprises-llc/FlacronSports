@@ -4,12 +4,15 @@ import { ErrorNotice } from "@/components/dashboard/controls"
 import { SportIcon } from "@/components/site/sport-icon"
 import { Notice } from "@/components/site/states"
 import type { Dictionary } from "@/lib/i18n"
-import { eventTitle, hasResult, isDuel, rowValues } from "@/lib/sports/presentation"
+import { LEAGUE_COLLECTED } from "@/lib/sports/collect"
+import { clockText, eventTitle, hasResult, isDuel, livePhase, rowValues } from "@/lib/sports/presentation"
+import { sportChip } from "@/lib/sports/sport-terms"
 import type { EventConclusion, EventFeed, EventStatus, SportEvent } from "@/lib/sports/types"
 import { cn } from "@/lib/utils"
 import { EventActions } from "./event-actions"
 import { Classification, ResultNote } from "./event-result"
 import { Crest, FavoriteStar, LocalTime, ScoreValue, SpoilerReveal, SpoilerScope, SpoilerText } from "./parts"
+import { PeriodScore } from "./period-score"
 
 const TONE: Record<EventStatus, string> = {
   live: "fs-chip-live border",
@@ -46,8 +49,10 @@ export function EventCard({ event, t, href, timeMode = "time" }: { event: SportE
   const teams = event.participantType === "team"
   const values = rowValues(event)
   const caption = score.kind === "sets" ? t.event.sets : score.kind === "innings" ? t.event.innings : null
-  const standings = event.competition.id && teams && /^\d{1,8}$/.test(event.competition.id)
+  const leaguePage = event.competition.id && /^\d{1,8}$/.test(event.competition.id) ? (LEAGUE_COLLECTED.has(event.sportId) ? `/app/league/${event.competition.id}` : teams && event.sportId === "football" ? `/app/standings/${event.competition.id}` : null) : null
+  const chip = sportChip(event, t)
   const entrants = !isDuel(event) && score.kind !== "classification" ? event.participants : []
+  const phase = livePhase(event, t)
 
   return (
     <article className={cn("fs-lift flex min-w-0 flex-col rounded-xl border border-line bg-surface p-4 shadow-[var(--shadow-sm)]", event.status === "live" && "fs-card-live")}>
@@ -55,18 +60,19 @@ export function EventCard({ event, t, href, timeMode = "time" }: { event: SportE
         <div className="flex items-center justify-between gap-3">
           <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-ink-2">
             <SportIcon id={event.sportId} className="size-3.5 shrink-0" />
-            {standings ? (
-              <Link href={href(`/app/standings/${event.competition.id}`)} className="min-w-0 truncate underline-offset-2 hover:text-ink hover:underline">{event.competition.name}</Link>
+            {leaguePage ? (
+              <Link href={href(leaguePage)} className="min-w-0 truncate underline-offset-2 hover:text-ink hover:underline">{event.competition.name}</Link>
             ) : (
               <span className="min-w-0 truncate">{event.competition.name}</span>
             )}
           </span>
           <span className="flex shrink-0 items-center gap-1.5">
-            {event.clock && <span className="tabular text-xs font-semibold text-ink-2">{event.clock}&prime;</span>}
+            {phase && <span className="tabular text-xs font-semibold text-ink-2">{phase}</span>}
+            {event.clock && <span className="tabular text-xs font-semibold text-ink-2">{clockText(event.clock)}</span>}
             <StatusLabel status={event.status} conclusion={event.conclusion} t={t} />
           </span>
         </div>
-        {!teams && <p className="mt-2 text-xs text-ink-3">{t.event.types[event.eventType]}</p>}
+        {(chip || !teams) && <p className="mt-2 text-xs text-ink-3">{chip ?? t.event.types[event.eventType]}</p>}
         {event.eventName && <p className={cn(teams ? "mt-2" : "mt-0.5", "truncate font-semibold text-ink")}>{event.eventName}</p>}
         {isDuel(event) && (
           <ul aria-label={caption ?? undefined} className="mt-3 space-y-1.5">
@@ -98,6 +104,7 @@ export function EventCard({ event, t, href, timeMode = "time" }: { event: SportE
         )}
         {score.kind === "classification" && <div className="mt-3"><Classification entries={score.entries} t={t} limit={3} quiet /></div>}
         {score.kind !== "team" && score.kind !== "none" && score.kind !== "classification" && <div className="mt-2"><ResultNote event={event} t={t} quiet /></div>}
+        {event.breakdown && <div className="mt-2"><PeriodScore event={event} t={t} compact /></div>}
         {hasResult(event) && <div className="mt-3"><SpoilerReveal label={t.spoiler.revealResult} /></div>}
         <div className="mt-auto pt-3">
           <div className="flex items-center justify-between gap-2 border-t border-line pt-3 text-xs text-ink-2">

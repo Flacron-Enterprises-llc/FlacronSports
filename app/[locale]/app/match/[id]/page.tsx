@@ -16,14 +16,19 @@ import { ShareCardButton } from "@/components/sports/share-card-button"
 import { EntrantsTab, LineupsTab, LiveUpdatesTab, MatchDetailProvider, StatisticsTab } from "@/components/sports/match-detail"
 import { MatchPlayer, MatchTabs, ViewingPanel, ViewingProvider } from "@/components/sports/match-center"
 import { MatchForm, MatchFormSkeleton } from "@/components/sports/match-form"
+import { PeriodScore } from "@/components/sports/period-score"
+import { CardParticipants, hasSportStatistics, RankedPlayers, SportFacts, SportStatistics, SportUpdates, WeekendSessions } from "@/components/sports/sport-sections"
 import { Crest, FavoriteStar, LiveRefresh, LocalTime, MatchScore, SpoilerGuard, SpoilerScope } from "@/components/sports/parts"
 import { predictionKind, predictionOpen } from "@/lib/community/predictions"
 import { getDictionary, isLocale, type Dictionary } from "@/lib/i18n"
 import { MemberAccessRequired } from "@/lib/member-fetch"
 import { pageContext } from "@/lib/page-context"
+import { lineScore } from "@/lib/sports/adapters/line-score"
 import { isStaleUpdate } from "@/lib/sports/detail"
-import { eventTitle, hasResult, isDuel } from "@/lib/sports/presentation"
-import { getEvent } from "@/lib/sports/service"
+import { clockText, eventTitle, hasResult, isDuel } from "@/lib/sports/presentation"
+import { getEvent, getRaceSchedule } from "@/lib/sports/service"
+import { RACE_SERIES } from "@/lib/sports/seasons"
+import { sportSteps } from "@/lib/sports/sport-terms"
 import { currentPeriod } from "@/lib/sports/thesportsdb"
 import type { SportEvent } from "@/lib/sports/types"
 
@@ -38,11 +43,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 function periodText(event: SportEvent, t: Dictionary): string | null {
   if (event.status !== "live") return null
-  const period = currentPeriod(event.providerStatus)
+  const period = currentPeriod(event.providerStatus, event.sportId, event.competition.name)
   return period ? t.match.periods[period.key].replace("{n}", String(period.number ?? "")) : null
 }
-
-const clockText = (clock: string) => (/^\d+$/.test(clock) ? `${clock}′` : clock)
 
 export default async function MatchPage({ params }: Props) {
   const { id } = await params
@@ -81,11 +84,19 @@ export default async function MatchPage({ params }: Props) {
   const community = process.env.COMMUNITY_ENABLED === "true"
   const pickKind = predictionKind(event)
   const hasResultPanel = event.score.kind !== "none" && event.score.kind !== "team"
+  const lineTable = lineScore(event, t)
   const teamDuel = duel && event.participantType === "team"
   const period = periodText(event, t)
   const clock = event.status === "live" && event.clock ? clockText(event.clock) : null
   const stale = isStaleUpdate(event.status, event.sourceUpdatedAt, Date.now())
   const sideNames = { home: home?.name ?? "", away: away?.name ?? "" }
+  const { details } = event
+  const weekend = details?.kind === "motorsport" && details.round && RACE_SERIES.some((series) => series.id === event?.competition.id)
+    ? (await getRaceSchedule(event.competition.id as string).catch(() => null))?.items.find((item) => item.round === details.round)
+    : undefined
+  const roster = details?.kind === "combat" && details.bouts.length > 1
+    ? <CardParticipants details={details} t={t} />
+    : details?.kind === "tennis" && details.ranks.some((rank) => rank !== null) ? <RankedPlayers event={event} t={t} /> : null
 
   const overview = (
     <div className="space-y-4">
@@ -117,7 +128,10 @@ export default async function MatchPage({ params }: Props) {
           )}
         </dl>
       </Panel>
+      <SportFacts event={event} t={t} />
       {hasResultPanel && <Panel><EventResult event={event} t={t} /></Panel>}
+      {lineTable && <Panel title={lineTable.caption}><PeriodScore event={event} t={t} /></Panel>}
+      {weekend && <WeekendSessions sessions={weekend.sessions} currentId={event.id} t={t} href={href} />}
       {event.shootout && (
         <SpoilerGuard label={t.spoiler.revealResult} quiet>
           <p className="tabular text-sm font-semibold text-ink">{t.match.shootoutScore.replace("{home}", String(event.shootout.home)).replace("{away}", String(event.shootout.away))}</p>
@@ -186,9 +200,9 @@ export default async function MatchPage({ params }: Props) {
         <MatchDetailProvider matchId={event.id} live={event.status === "live"}>
           <MatchTabs
             overview={overview}
-            updates={<LiveUpdatesTab />}
-            statistics={<StatisticsTab {...sideNames} breakdown={event.breakdown} />}
-            participants={teamDuel ? <LineupsTab {...sideNames} /> : <EntrantsTab event={{ participants: event.participants, score: event.score }} />}
+            updates={<LiveUpdatesTab sportId={event.sportId} extra={sportSteps(event, t).length > 0 ? <SportUpdates event={event} t={t} /> : undefined} />}
+            statistics={<StatisticsTab {...sideNames} event={event} extra={hasSportStatistics(event) ? <SportStatistics event={event} t={t} /> : undefined} />}
+            participants={teamDuel ? <LineupsTab {...sideNames} sportId={event.sportId} /> : roster ?? <EntrantsTab event={{ participants: event.participants, score: event.score }} />}
             chat={community ? (
               <MatchCommunity
                 matchId={event.id}

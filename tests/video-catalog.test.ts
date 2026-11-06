@@ -77,3 +77,14 @@ describe("public embeds in the viewing decision", () => {
     expect(evaluateViewing([{ ...source, providerEnforcesTerritory: false }], context).reasons).toContain("territory_blocked")
   })
 })
+
+describe("channels each sport's feed lists", () => {
+  it.each([
+    "EuroLeague", "bkteurocup", "NFL", "CFL", "MLB", "KBO1982", "NHL", "KHL", "TennisTV", "WTA", "RolandGarros", "ICC", "BigBash", "windiescricket",
+    "prem-rugby", "SixNationsRugby", "UnitedRugbyChampionship", "CEVolleyball", "UFC", "TNTFightSports", "DAZNBoxing", "Formula1", "MotoGP", "TNTSports", "bundesliga-at", "l1max_",
+  ])("approves @%s", (handle) => expect(isApprovedChannel(`https://www.youtube.com/@${handle}`)).toBe(true))
+
+  it.each(["thegametimehighlights", "motionstation4342", "mmaweekly", "mmacrazy", "persianmmabrothers", "themmaconnect", "chelseafc", "dodgers", "wwe"])("leaves out @%s", (handle) => {
+    expect(isApprovedChannel(`https://www.youtube.com/@${handle}`)).toBe(false)
+  })
+})

@@ -187,8 +187,8 @@ export function GroupsPanel({ inviteToken = null }: { inviteToken?: string | nul
     <section aria-label={t.community.groupsTitle} className="space-y-4">
       <h2 className="text-base font-semibold text-ink">{t.community.groupsTitle}</h2>
       {notice && <Notice tone="danger" role="alert">{notice}</Notice>}
-      {gate.prompt}
-      {invited && <Notice tone="info" title={t.community.groupInvited} action={<button type="button" onClick={join} className={btn("primary")}>{t.community.joinGroup}</button>}>{t.community.groupRules}</Notice>}
+      {invited && <Notice tone="info" title={t.community.groupInvited} action={gate.locked ? undefined : <button type="button" onClick={join} className={btn("primary")}>{t.community.joinGroup}</button>}>{t.community.groupRules}</Notice>}
+      {invited && gate.prompt}
       <div className="grid items-start gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
         <div className="min-w-0 space-y-4">
           {failed && <ErrorNotice onRetry={load}>{t.community.groupFailed}</ErrorNotice>}
@@ -206,10 +206,14 @@ export function GroupsPanel({ inviteToken = null }: { inviteToken?: string | nul
               ))}
             </ul>
           )}
-          <form onSubmit={(event) => { event.preventDefault(); void create() }} className="space-y-3 rounded-xl border border-line bg-surface p-4">
-            <label className="block text-sm font-medium text-ink">{t.community.groupName}<input className="fs-input mt-1 h-10 px-3 text-sm" required maxLength={60} value={name} onChange={(event) => setName(event.target.value)} /></label>
-            <button type="submit" className={btn("primary", "md", "w-full")}>{t.community.createGroup}</button>
-          </form>
+          {gate.locked ? (
+            !invited && gate.prompt
+          ) : (
+            <form onSubmit={(event) => { event.preventDefault(); void create() }} className="space-y-3 rounded-xl border border-line bg-surface p-4">
+              <label className="block text-sm font-medium text-ink">{t.community.groupName}<input className="fs-input mt-1 h-10 px-3 text-sm" required maxLength={60} value={name} onChange={(event) => setName(event.target.value)} /></label>
+              <button type="submit" className={btn("primary", "md", "w-full")}>{t.community.createGroup}</button>
+            </form>
+          )}
         </div>
         <div className="min-w-0">
           {selected ? (

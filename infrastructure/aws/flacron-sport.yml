@@ -30,6 +30,13 @@ Parameters:
     Type: String
   TheSportsDbSecretArn:
     Type: String
+  AnthropicSecretArn:
+    Type: String
+    Default: ""
+    Description: Full ARN of flacron-sport/production/anthropic. Empty leaves the assistant on its deterministic answers.
+  AssistantModel:
+    Type: String
+    Default: claude-opus-5-5
   PriceBasicMonthly:
     Type: String
   PriceBasicAnnual:
@@ -80,6 +87,9 @@ Parameters:
   RoundupHourUtc:
     Type: String
     Default: "6"
+
+Conditions:
+  HasAnthropicKey: !Not [!Equals [!Ref AnthropicSecretArn, ""]]
 
 Resources:
   Repository:
@@ -222,6 +232,7 @@ Resources:
             - { Name: FEATURE_GENERATED_PUBLISHING, Value: !Ref FeatureGeneratedPublishing }
             - { Name: FEATURE_PAYMENTS, Value: !Ref FeaturePayments }
             - { Name: ROUNDUP_HOUR_UTC, Value: !Ref RoundupHourUtc }
+            - { Name: ASSISTANT_MODEL, Value: !Ref AssistantModel }
             - { Name: EMAIL_FROM, Value: !Sub "FlacronSport <noreply@${EmailIdentity}>" }
             - { Name: STRIPE_PRICE_BASIC_MONTHLY, Value: !Ref PriceBasicMonthly }
             - { Name: STRIPE_PRICE_BASIC_ANNUAL, Value: !Ref PriceBasicAnnual }
@@ -240,6 +251,7 @@ Resources:
             - { Name: CRON_SECRET, ValueFrom: !Ref CronSecretArn }
             - { Name: SCOREBAT_TOKEN, ValueFrom: !Ref ScorebatSecretArn }
             - { Name: THESPORTSDB_API_KEY, ValueFrom: !Ref TheSportsDbSecretArn }
+            - !If [HasAnthropicKey, { Name: ANTHROPIC_API_KEY, ValueFrom: !Ref AnthropicSecretArn }, !Ref AWS::NoValue]
             - { Name: FIREBASE_ADMIN_PROJECT_ID, ValueFrom: !Sub "${FirebaseSecretArn}:project_id::" }
             - { Name: FIREBASE_ADMIN_CLIENT_EMAIL, ValueFrom: !Sub "${FirebaseSecretArn}:client_email::" }
             - { Name: FIREBASE_ADMIN_PRIVATE_KEY, ValueFrom: !Sub "${FirebaseSecretArn}:private_key::" }

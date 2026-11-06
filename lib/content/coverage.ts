@@ -6,13 +6,13 @@ import { createHash } from "node:crypto"
 import type { Firestore } from "firebase-admin/firestore"
 import { getDictionary, LOCALES, type Locale } from "@/lib/i18n"
 import type { MatchDetail, TimelineItem } from "@/lib/sports/detail"
-import { byImportance } from "@/lib/sports/priority"
+import { byImportance, interleave } from "@/lib/sports/priority"
 import { eventTitle, isDuel, resultLine } from "@/lib/sports/presentation"
-import type { SportEvent } from "@/lib/sports/types"
-import { eventDate, eventNames, eventNumbers, fill, numbersGrounded, REPORTS_COLLECTION, saveReport, sourceVersion, withholdReason, type Report, type ReportCounts, type ReportType } from "./reports"
+import { SPORTS, type SportEvent, type SportId } from "@/lib/sports/types"
+import { eventDate, eventNames, eventNumbers, eventPlace, fill, numbersGrounded, REPORTS_COLLECTION, saveReport, sourceVersion, withholdReason, type Report, type ReportCounts, type ReportType } from "./reports"
 
 /** Bump whenever the wording in COPY changes. */
-export const COVERAGE_TEMPLATE_VERSION = "coverage-template-v1"
+export const COVERAGE_TEMPLATE_VERSION = "coverage-template-v2"
 
 const PREVIEW_WINDOW_MS = 36 * 3_600_000
 const RECAP_DETAILS_PER_TICK = 40
@@ -25,27 +25,27 @@ const ROUNDUP_LINES = 30
 const DEFAULT_ROUNDUP_HOUR_UTC = 6
 
 const COPY: Record<Locale, {
-  recapTitle: string; previewTitle: string; previewEventTitle: string; preview: string; previewEvent: string
+  recapTitle: string; previewTitle: string; previewBoutTitle: string; previewEventTitle: string; preview: string; previewMatch: string; previewBout: string; previewEvent: string
   kickoff: string; dateOnly: string; venue: string; goal: string; ownGoal: string; penalty: string; red: string; scorer: string
-  roundupTitle: string; roundupIntro: string; roundupLine: string; roundupEventLine: string; dateLocale: string
+  roundupTitle: string; roundupSportTitle: string; roundupIntro: string; roundupLine: string; roundupSetsLine: string; roundupEventLine: string; dateLocale: string
 }> = {
   en: {
     recapTitle: "Recap: {home} v {away}",
-    previewTitle: "Preview: {home} v {away}", previewEventTitle: "Preview: {event}",
-    preview: "{home} and {away} meet in {competition}.", previewEvent: "{event} is next in {competition}.",
+    previewTitle: "Preview: {home} v {away}", previewBoutTitle: "Preview: {home} v {away}", previewEventTitle: "Preview: {event}",
+    preview: "{home} and {away} meet in {competition}.", previewMatch: "{home} and {away} meet at {place}.", previewBout: "Bout: {home} v {away}, {place}.", previewEvent: "{event} is next in {competition}.",
     kickoff: "Scheduled start: {date} at {time} (UTC).", dateOnly: "Scheduled date: {date} (UTC).", venue: "Venue: {venue}.",
     goal: "Goal", ownGoal: "Own goal", penalty: "Penalty goal", red: "Red card", scorer: "{minute}{label}: {player}{team}.",
-    roundupTitle: "Daily roundup: {date}", roundupIntro: "Results from {date} (UTC).",
-    roundupLine: "{competition}: {home} {homeScore}, {away} {awayScore}.", roundupEventLine: "{competition}: {event}. {result}.", dateLocale: "en-US",
+    roundupTitle: "Daily roundup: {date}", roundupSportTitle: "{sport} roundup: {date}", roundupIntro: "Results from {date} (UTC).",
+    roundupLine: "{competition}: {home} {homeScore}, {away} {awayScore}.", roundupSetsLine: "{competition}: {home} {homeScore}, {away} {awayScore} in sets.", roundupEventLine: "{competition}: {event}. {result}.", dateLocale: "en-US",
   },
   fr: {
     recapTitle: "Compte rendu : {home} - {away}",
-    previewTitle: "Avant-match : {home} - {away}", previewEventTitle: "Avant-événement : {event}",
-    preview: "{home} et {away} se rencontrent en {competition}.", previewEvent: "{event} est au programme de {competition}.",
+    previewTitle: "Avant-match : {home} - {away}", previewBoutTitle: "Avant-combat : {home} - {away}", previewEventTitle: "Avant-événement : {event}",
+    preview: "{home} et {away} se rencontrent en {competition}.", previewMatch: "{home} et {away} s'affrontent : {place}.", previewBout: "Combat : {home} - {away}, {place}.", previewEvent: "{event} est au programme de {competition}.",
     kickoff: "Début prévu : {date} à {time} (UTC).", dateOnly: "Date prévue : {date} (UTC).", venue: "Lieu : {venue}.",
     goal: "But", ownGoal: "But contre son camp", penalty: "But sur penalty", red: "Carton rouge", scorer: "{minute}{label} : {player}{team}.",
-    roundupTitle: "Le point du jour : {date}", roundupIntro: "Résultats du {date} (UTC).",
-    roundupLine: "{competition} : {home} {homeScore}, {away} {awayScore}.", roundupEventLine: "{competition} : {event}. {result}.", dateLocale: "fr-FR",
+    roundupTitle: "Le point du jour : {date}", roundupSportTitle: "Le point du jour, {sport} : {date}", roundupIntro: "Résultats du {date} (UTC).",
+    roundupLine: "{competition} : {home} {homeScore}, {away} {awayScore}.", roundupSetsLine: "{competition} : {home} {homeScore}, {away} {awayScore} en sets.", roundupEventLine: "{competition} : {event}. {result}.", dateLocale: "fr-FR",
   },
 }
 
@@ -138,9 +138,11 @@ export function buildPreview(event: SportEvent, locale: Locale, fetchedAt: strin
   const [home = "", away = ""] = base.participants
   const name = eventTitle(event)
   const duel = isDuel(event)
-  const values = { home, away, event: name, competition: event.competition.name }
+  const values = { home, away, event: name, competition: event.competition.name, place: eventPlace(event) }
+  const bout = duel && event.sportId === "combat-sports"
+  const opening = bout ? copy.previewBout : !duel ? copy.previewEvent : event.sportId === "tennis" ? copy.previewMatch : copy.preview
   const body = [
-    fill(duel ? copy.preview : copy.previewEvent, values),
+    fill(opening, values),
     event.dateOnly ? fill(copy.dateOnly, { date }) : fill(copy.kickoff, { date, time }),
     ...(event.venue ? [fill(copy.venue, { venue: event.venue })] : []),
   ].join(" ")
@@ -148,11 +150,14 @@ export function buildPreview(event: SportEvent, locale: Locale, fetchedAt: strin
   if (!numbersGrounded(body, [...eventNames(event), ...(event.venue ? [event.venue] : [])], allowed)) {
     return { ...base, status: "rejected", title: "", body: "", withheldReason: "failed_validation" }
   }
-  return { ...base, status: "validated", title: fill(duel ? copy.previewTitle : copy.previewEventTitle, values), body, withheldReason: null }
+  const title = bout ? copy.previewBoutTitle : duel ? copy.previewTitle : copy.previewEventTitle
+  return { ...base, status: "validated", title: fill(title, values), body, withheldReason: null }
 }
 
-export function buildRoundup(date: string, events: SportEvent[], locale: Locale, fetchedAt: string, now: Date = new Date()): Report | null {
-  const included = events.filter((event) => event.status === "finished" && !withholdReason(event)).sort(byImportance).slice(0, ROUNDUP_LINES)
+/** With `sportId` it covers that sport alone. Without one, sports take turns for the lines, so each gets a share. */
+export function buildRoundup(date: string, events: SportEvent[], locale: Locale, fetchedAt: string, now: Date = new Date(), sportId?: SportId): Report | null {
+  const verified = events.filter((event) => event.status === "finished" && !withholdReason(event) && (!sportId || event.sportId === sportId)).sort(byImportance)
+  const included = interleave(verified, (event) => event.sportId).slice(0, ROUNDUP_LINES).sort(byImportance)
   if (included.length === 0) return null
 
   const copy = COPY[locale]
@@ -161,18 +166,19 @@ export function buildRoundup(date: string, events: SportEvent[], locale: Locale,
     const competition = event.competition.name
     if (event.score.kind !== "team") return fill(copy.roundupEventLine, { competition, event: eventTitle(event), result: resultLine(event, dictionary) ?? "" })
     const [home, away] = event.participants.map((participant) => participant.name)
-    return fill(copy.roundupLine, { competition, home, away, homeScore: String(event.score.home), awayScore: String(event.score.away) })
+    return fill(event.sportId === "volleyball" ? copy.roundupSetsLine : copy.roundupLine, { competition, home, away, homeScore: String(event.score.home), awayScore: String(event.score.away) })
   })
   const day = eventDate(`${date}T12:00:00.000Z`, locale)
   const body = [fill(copy.roundupIntro, { date: day }), ...lines].join("\n")
   const names = included.flatMap(eventNames)
   const numbers = [...included.flatMap((event) => eventNumbers(event, locale)), ...(day.match(/\d+/g) ?? [])]
 
-  const slug = `roundup-${date}`
+  const slug = sportId ? `roundup-${date}-${sportId}` : `roundup-${date}`
+  const sport = SPORTS.find((item) => item.id === sportId)?.name[locale]
   const facts = version(included.map(sourceVersion))
   const generatedAt = now.toISOString()
   const base = {
-    id: `${slug}-${locale}`, slug, matchId: slug, sportId: "all", locale, type: "roundup" as const,
+    id: `${slug}-${locale}`, slug, matchId: slug, sportId: sportId ?? "all", locale, type: "roundup" as const,
     participants: [...new Set(included.flatMap((event) => event.participants.map((item) => item.name)))],
     competition: "",
     eventDateUTC: `${date}T00:00:00.000Z`,
@@ -183,7 +189,7 @@ export function buildRoundup(date: string, events: SportEvent[], locale: Locale,
     correctionNote: null, editedAt: null, generatedAt, updatedAt: generatedAt, publishedAt: null, feedKey: null,
   }
   if (!numbersGrounded(body, names, numbers)) return { ...base, status: "rejected", title: "", body: "", withheldReason: "failed_validation" }
-  return { ...base, status: "validated", title: fill(copy.roundupTitle, { date: day }), body, withheldReason: null }
+  return { ...base, status: "validated", title: sport ? fill(copy.roundupSportTitle, { sport, date: day }) : fill(copy.roundupTitle, { date: day }), body, withheldReason: null }
 }
 
 export function roundupHourUTC(env: Record<string, string | undefined> = process.env): number {
@@ -223,7 +229,8 @@ export async function runRecaps(
   const finished = events.filter((event) => event.status === "finished" && event.score.kind === "team" && !withholdReason(event))
   const newestFirst = [...finished].sort((a, b) => (b.scheduledStartUTC ?? "").localeCompare(a.scheduledStartUTC ?? ""))
   let fetched = 0
-  for (const event of newestFirst) {
+  // The tick's detail calls are limited, so sports take turns for them.
+  for (const event of interleave(newestFirst, (item) => item.sportId)) {
     // Match detail spends provider calls, so a game whose facts have not moved is left alone.
     const factsVersion = sourceVersion(event)
     const existing = await db.collection(REPORTS_COLLECTION).doc(`${event.id}-recap-en`).get()
@@ -259,6 +266,7 @@ export async function runRoundup(db: Firestore, events: SportEvent[], fetchedAt:
   const date = new Date(now.getTime() - 86_400_000).toISOString().slice(0, 10)
   const counts = emptyCounts()
   const day = events.filter((event) => event.scheduledStartUTC?.startsWith(date))
-  await saveAll(db, LOCALES.flatMap((locale) => buildRoundup(date, day, locale, fetchedAt, now) ?? []), counts)
+  const sports = [...new Set(day.map((event) => event.sportId))]
+  await saveAll(db, LOCALES.flatMap((locale) => [buildRoundup(date, day, locale, fetchedAt, now), ...sports.map((sport) => buildRoundup(date, day, locale, fetchedAt, now, sport))].flatMap((report) => report ?? [])), counts)
   return counts
 }

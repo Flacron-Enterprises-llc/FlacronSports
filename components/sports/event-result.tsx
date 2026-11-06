@@ -1,5 +1,5 @@
 import type { Dictionary } from "@/lib/i18n"
-import { inningsText, resultNote } from "@/lib/sports/presentation"
+import { inningsLine, resultNote } from "@/lib/sports/presentation"
 import type { ClassificationEntry, SportEvent } from "@/lib/sports/types"
 import { FavoriteStar, SpoilerGuard } from "./parts"
 
@@ -38,8 +38,10 @@ export function Classification({ entries, t, limit, quiet }: { entries: Classifi
 
 function SetsTable({ event, t }: { event: SportEvent; t: Dictionary }) {
   if (event.score.kind !== "sets") return null
-  const { lines } = event.score
+  const { lines, tiebreaks } = event.score
   const rows = event.participants.flatMap((participant) => lines.filter((line) => line.name === participant.name))
+  // A walkover has no sets to show, only the note below.
+  if (rows.every((row) => row.games.length === 0)) return null
   return (
     <SpoilerGuard label={t.spoiler.revealResult}>
       <div className="overflow-x-auto rounded-lg border border-line">
@@ -55,7 +57,11 @@ function SetsTable({ event, t }: { event: SportEvent; t: Dictionary }) {
             {rows.map((row) => (
               <tr key={row.name} className="border-t border-line">
                 <th scope="row" className="px-3 py-2 text-left font-semibold text-ink">{row.name}</th>
-                {row.games.map((games, index) => <td key={index} className="tabular px-2 py-2 text-center font-semibold text-ink">{games}</td>)}
+                {row.games.map((games, index) => {
+                  const other = rows.find((line) => line !== row)?.games[index]
+                  const lost = other !== undefined && games < other
+                  return <td key={index} className="tabular px-2 py-2 text-center font-semibold text-ink">{games}{lost && tiebreaks?.[index] != null && <sup className="ml-0.5 font-medium text-ink-2">{tiebreaks[index]}</sup>}</td>
+                })}
               </tr>
             ))}
           </tbody>
@@ -67,16 +73,16 @@ function SetsTable({ event, t }: { event: SportEvent; t: Dictionary }) {
 
 function InningsTable({ event, t }: { event: SportEvent; t: Dictionary }) {
   if (event.score.kind !== "innings") return null
-  const { home, away } = event.score
-  const rows = [{ innings: home, name: event.participants[0]?.name }, { innings: away, name: event.participants[1]?.name }]
+  const { home, away, homeInnings, awayInnings } = event.score
+  const rows = [{ innings: home, list: homeInnings, name: event.participants[0]?.name }, { innings: away, list: awayInnings, name: event.participants[1]?.name }]
   return (
     <SpoilerGuard label={t.spoiler.revealResult}>
       <dl aria-label={t.event.innings} className="divide-y divide-line rounded-lg border border-line text-sm">
-        {rows.map(({ innings, name }) => innings && (
+        {rows.map(({ innings, list, name }) => innings && (
           <div key={name} className="flex items-baseline justify-between gap-3 px-3 py-2.5">
             <dt className="min-w-0 truncate font-semibold text-ink">{name}</dt>
             <dd className="tabular shrink-0 text-ink">
-              <span className="font-display font-semibold">{inningsText(innings)}</span>
+              <span className="font-display font-semibold">{inningsLine(list, innings)}</span>
               {innings.overs && <span className="ml-2 text-ink-2">{t.event.overs.replace("{overs}", innings.overs)}</span>}
             </dd>
           </div>

@@ -3,6 +3,7 @@
 
 import { ApiError } from "@/lib/api-auth"
 import type { DocDb } from "@/lib/doc-db"
+import { eventTitle, isDuel } from "@/lib/sports/presentation"
 import type { SportEvent, SportId } from "@/lib/sports/types"
 import { badgesFor } from "./badges"
 import { assertNotSanctioned, readSanction } from "./chat"
@@ -26,11 +27,21 @@ const NOT_A_RACE = /\b(practice|qualifying|sprint|shootout|warm.?up)\b/i
 const TEST_CRICKET = /\btest\b/i
 
 export type PredictionKind = "score" | "winner" | "podium"
+export type PredictionStatus = "open" | "locked" | "settled" | "void"
+
+/** The game as it read when the pick was made, so listing picks costs no provider calls. */
+export interface PredictionGame {
+  title: string
+  home: string | null
+  away: string | null
+}
 
 export interface Prediction {
   uid: string
   displayName: string
   matchId: string
+  /** Absent on entries made before games were stored with the pick. */
+  game?: PredictionGame
   /** Absent on entries made when only scores could be predicted. */
   kind?: PredictionKind
   home?: number
@@ -81,6 +92,11 @@ export function predictionEntrants(event: SportEvent, recent: (leagueId: string,
 export function predictionOpen(event: SportEvent, now: Date): boolean {
   const kickoff = event.scheduledStartUTC ? Date.parse(event.scheduledStartUTC) : Number.NaN
   return event.status === "scheduled" && !event.dateOnly && !Number.isNaN(kickoff) && now.getTime() < kickoff
+}
+
+export function gameOf(event: SportEvent): PredictionGame {
+  const [home, away] = isDuel(event) ? event.participants.map((participant) => participant.name) : [null, null]
+  return { title: eventTitle(event), home, away }
 }
 
 function validScore(value: unknown): value is number {
@@ -137,7 +153,7 @@ export async function submitPrediction(
     if (existing) throw new ApiError(409, "duplicate_prediction", "You already predicted this match")
 
     const prediction: Prediction = {
-      uid, displayName, matchId: event.id, kind, ...pick,
+      uid, displayName, matchId: event.id, game: gameOf(event), kind, ...pick,
       createdAtUTC: now.toISOString(),
       lockedAtUTC: new Date(kickoff).toISOString(),
       scoringVersion: SCORING_VERSION,
@@ -328,6 +344,50 @@ export async function settlePredictions(db: DocDb, input: { events: SportEvent[]
     }
   }
   return { checked: ids.size, settled, failed }
+}
+
+export function predictionStatus(prediction: Pick<Prediction, "settled" | "voided" | "lockedAtUTC">, now: Date): PredictionStatus {
+  if (prediction.voided) return "void"
+  if (prediction.settled) return "settled"
+  return now.getTime() < Date.parse(prediction.lockedAtUTC) ? "open" : "locked"
+}
+
+const MY_PREDICTIONS = 100
+const GAME_LOOKUPS = 10
+
+/**
+ * Sorted here rather than in the query, which would need a composite index. Picks still
+ * open lead, soonest first, then the rest newest first. Only entries older than the
+ * stored game cost a lookup, and a game that cannot be found leaves the pick listed.
+ */
+export async function listMyPredictions(db: Pick<DocDb, "query">, uid: string, now: Date, lookup: (matchId: string) => Promise<SportEvent | null>) {
+  const rows = await db.query<Prediction>("predictions", { where: [["uid", uid]] })
+  const shown = rows
+    .map((row) => ({ row, status: predictionStatus(row, now) }))
+    .sort((a, b) => {
+      const open = Number(b.status === "open") - Number(a.status === "open")
+      if (open) return open
+      const byKickoff = a.row.lockedAtUTC.localeCompare(b.row.lockedAtUTC)
+      return a.status === "open" ? byKickoff : -byKickoff
+    })
+    .slice(0, MY_PREDICTIONS)
+
+  const missing = [...new Set(shown.filter(({ row }) => !row.game).map(({ row }) => row.matchId))].slice(0, GAME_LOOKUPS)
+  const found = await Promise.all(missing.map((id) => lookup(id).catch(() => null)))
+  const games = new Map(found.flatMap((event) => (event ? [[event.id, gameOf(event)] as const] : [])))
+
+  return shown.map(({ row, status }) => ({
+    matchId: row.matchId,
+    kind: row.kind ?? ("score" as PredictionKind),
+    home: row.home ?? null,
+    away: row.away ?? null,
+    winner: row.winner ?? null,
+    podium: row.podium ?? null,
+    game: row.game ?? games.get(row.matchId) ?? null,
+    kickoffUTC: row.lockedAtUTC,
+    status,
+    points: status === "settled" ? row.points : null,
+  }))
 }
 
 export const toOwnPrediction = ({ kind = "score", home, away, winner, podium, settled, voided, points }: Prediction) => ({

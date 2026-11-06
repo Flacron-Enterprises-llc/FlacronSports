@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { apiErrorResponse, requireFeature, requireUser, requireVerifiedUser } from "@/lib/api-auth"
 import { listMessages } from "@/lib/community/chat"
-import { assertId, cleanMessage, ROOM_ID } from "@/lib/community/content"
+import { assertId, cleanMessage, displayNameOf, ROOM_ID } from "@/lib/community/content"
 import { assertRoomMember, postRoomMessage } from "@/lib/community/rooms"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { rateLimit } from "@/lib/rate-limit"
@@ -35,7 +35,7 @@ export async function POST(request: Request, { params }: Context) {
     rateLimit(`room-chat:${user.uid}`, 20, 60_000)
     const roomId = assertId((await params).id, ROOM_ID)
     const { text } = await request.json().catch(() => ({}))
-    const result = await postRoomMessage(firestoreDocDb(), { roomId, uid: user.uid, text: cleanMessage(text) }, new Date())
+    const result = await postRoomMessage(firestoreDocDb(), { roomId, uid: user.uid, displayName: displayNameOf(user.token), text: cleanMessage(text) }, new Date())
     return NextResponse.json(result, { status: 201 })
   } catch (error) {
     return apiErrorResponse(error)

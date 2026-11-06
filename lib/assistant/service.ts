@@ -2,7 +2,9 @@ import { ApiError } from "@/lib/api-auth"
 import { consumeAssistantRequest, readAssistantBalance, restoreCredit } from "@/lib/billing/allowance"
 import type { DocDb } from "@/lib/doc-db"
 import type { Locale } from "@/lib/i18n"
+import { ModelFailure, type ModelClient } from "./anthropic-client"
 import { answerQuestion, type AssistantAnswer, type AssistantSources } from "./engine"
+import { answerWithModel, assistantModel, type ModelSources } from "./model"
 
 /** The credit leaves before any work starts, so concurrent requests cannot overspend. */
 export async function askAssistant(input: {
@@ -13,8 +15,10 @@ export async function askAssistant(input: {
   locale: Locale
   sources: AssistantSources
   now: Date
+  /** Absent or with a null client, the deterministic engine answers as usual. */
+  model?: { client: ModelClient | null; sources: ModelSources; spoiler: boolean }
 }) {
-  const { db, uid, includedLimit, question, locale, sources, now } = input
+  const { db, uid, includedLimit, question, locale, sources, now, model } = input
   const consumed = await consumeAssistantRequest(db, uid, includedLimit, now)
 
   const giveBack = () =>
@@ -22,9 +26,20 @@ export async function askAssistant(input: {
       console.error("Credit restore failed", failure instanceof Error ? failure.message : "unknown")
     })
 
+  const answerFor = async (): Promise<AssistantAnswer> => {
+    if (!model?.client) return answerQuestion(question, locale, sources, now)
+    try {
+      return await answerWithModel({ client: model.client, question, locale, sources: model.sources, now, spoiler: model.spoiler, model: assistantModel() })
+    } catch (error) {
+      console.error("Assistant model failed", error instanceof ModelFailure ? error.code : "unexpected")
+      // The member still gets the engine's answer, but a failed model call is never charged.
+      return { ...(await answerQuestion(question, locale, sources, now)), charged: false }
+    }
+  }
+
   let answer: AssistantAnswer
   try {
-    answer = await answerQuestion(question, locale, sources, now)
+    answer = await answerFor()
   } catch (error) {
     await giveBack()
     console.error("Assistant failed", error instanceof Error ? error.message : "unknown")

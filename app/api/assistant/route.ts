@@ -5,10 +5,12 @@ import { readAssistantBalance } from "@/lib/billing/allowance"
 import { activeDayPass } from "@/lib/billing/addons"
 import { getSubscriptionAccess, getUserPurchases } from "@/lib/billing/firestore-store"
 import { PLANS } from "@/lib/billing/plans"
+import { modelClientFromEnv } from "@/lib/assistant/anthropic-client"
 import { askAssistant } from "@/lib/assistant/service"
 import { firestoreDocDb } from "@/lib/doc-db"
+import { getPreferences } from "@/lib/me/preferences"
 import { rateLimit } from "@/lib/rate-limit"
-import { getEvents, getStandings, getTeamFixtures } from "@/lib/sports/service"
+import { getEvents, getMatchDetail, getStandings, getTeamFixtures, searchTeams } from "@/lib/sports/service"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -45,6 +47,9 @@ export async function POST(request: Request) {
     // The subscription sets the plan allowance: a day pass adds its own 10 credits
     // rather than lifting the account to Premium's monthly 300.
     const access = await getSubscriptionAccess(user.uid)
+    const client = modelClientFromEnv()
+    // Unreadable preferences count as spoiler mode on: hiding a result is the safe mistake.
+    const spoiler = client ? await getPreferences(user.uid).then((prefs) => prefs.spoilerMode, () => true) : true
     const result = await askAssistant({
       db: firestoreDocDb(),
       uid: user.uid,
@@ -53,6 +58,7 @@ export async function POST(request: Request) {
       locale: parsed.data.locale,
       sources: { getEvents, getTeamFixtures, getStandings },
       now: new Date(),
+      model: { client, sources: { getEvents, getTeamFixtures, getStandings, getMatchDetail, searchTeams }, spoiler },
     })
     return NextResponse.json(result)
   } catch (error) {

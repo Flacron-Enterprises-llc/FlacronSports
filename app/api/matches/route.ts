@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { apiErrorResponse } from "@/lib/api-auth"
 import { requireMember } from "@/lib/billing/require-plan"
+import { LEAGUE_COLLECTED, WINDOW_FUTURE_DAYS } from "@/lib/sports/collect"
 import { getEvents } from "@/lib/sports/service"
 import { SPORTS, type EventStatus, type SportId } from "@/lib/sports/types"
 
@@ -10,13 +11,16 @@ import { SPORTS, type EventStatus, type SportId } from "@/lib/sports/types"
 const DATE_WINDOW_DAYS = 30
 const DAY_MS = 86_400_000
 
-function inDateWindow(date: string): boolean {
+/** Further ahead, a sport filed by league reads only what is stored, so it costs no call. */
+function inDateWindow(date: string, sport?: SportId): boolean {
   const day = Date.parse(`${date}T00:00:00Z`)
-  return Number.isFinite(day) && Math.abs(day - Date.now()) <= (DATE_WINDOW_DAYS + 1) * DAY_MS
+  if (!Number.isFinite(day)) return false
+  if (sport && LEAGUE_COLLECTED.has(sport) && day > Date.now() && day - Date.now() <= WINDOW_FUTURE_DAYS * DAY_MS) return true
+  return Math.abs(day - Date.now()) <= (DATE_WINDOW_DAYS + 1) * DAY_MS
 }
 
 const query = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(inDateWindow).optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   sport: z.enum(SPORTS.map((sport) => sport.id) as [SportId, ...SportId[]]).optional(),
   status: z.enum(["live", "scheduled", "finished"]).optional(),
   competition: z.string().max(120).optional(),
@@ -35,6 +39,7 @@ export async function GET(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid filters" }, { status: 400 })
 
   const { date, sport, status, competition, team, page, pageSize } = parsed.data
+  if (date && !inDateWindow(date, sport)) return NextResponse.json({ error: "Invalid filters" }, { status: 400 })
   const feed = await getEvents({ date, sport })
 
   const filtered = feed.events.filter((event) => {

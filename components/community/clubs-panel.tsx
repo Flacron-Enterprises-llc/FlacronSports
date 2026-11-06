@@ -82,7 +82,7 @@ export function ClubsPanel() {
             {list.followed.map((team) => (
               <li key={team} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
                 <span className="min-w-0 truncate font-medium text-ink">{team}</span>
-                <button type="button" className={btn("outline", "sm")} onClick={() => join({ kind: "team", team })}>{t.community.joinClub}<span className="sr-only">: {team}</span></button>
+                {!gate.locked && <button type="button" className={btn("outline", "sm")} onClick={() => join({ kind: "team", team })}>{t.community.joinClub}<span className="sr-only">: {team}</span></button>}
               </li>
             ))}
           </ul>
@@ -95,7 +95,7 @@ export function ClubsPanel() {
               <span className="min-w-0"><span className="block truncate font-medium text-ink">{clubName({ ...club, kind: "sport" }, locale)}</span><span className="tabular text-xs text-ink-2">{members(club.members)}</span></span>
               {club.joined ? (
                 <Link href={href(`/app/clubs/${club.id}`)} className={btn("ghost", "sm")}>{t.community.openClub}<span className="sr-only">: {club.name}</span></Link>
-              ) : (
+              ) : !gate.locked && (
                 <button type="button" className={btn("outline", "sm")} onClick={() => join({ kind: "sport", sportId: club.sportId })}>{t.community.joinClub}<span className="sr-only">: {club.name}</span></button>
               )}
             </li>

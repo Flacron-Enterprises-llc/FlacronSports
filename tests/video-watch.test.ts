@@ -80,7 +80,7 @@ describe("watch feed", () => {
     expect(league.clips.map((item) => item.title)).toEqual(["Lyon - Metz"])
     expect(league.competitions).toHaveLength(2)
 
-    const team = await getWatchFeed("football", now, { team: "chels" })
+    const team = await getWatchFeed("football", now, { q: "chels" })
     expect(team.clips.map((item) => item.title)).toEqual(["Arsenal - Chelsea"])
     expect(team.live.map((item) => item.id)).toEqual(["tsdb-1"])
   })

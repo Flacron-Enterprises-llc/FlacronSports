@@ -1,0 +1,42 @@
+import { notFound } from "next/navigation"
+import { Trophy } from "lucide-react"
+import { ErrorNotice } from "@/components/dashboard/controls"
+import { MemberDataPending } from "@/components/dashboard/member-data-pending"
+import { AppPage, EmptyState, Notice, PageHeader } from "@/components/site/states"
+import { EventCard } from "@/components/sports/event-card"
+import { pageContext, titled } from "@/lib/page-context"
+import { getLeagueEvents } from "@/lib/sports/service"
+import type { SportEvent } from "@/lib/sports/types"
+
+export const generateMetadata = titled((t) => t.scores.competition, { robots: { index: false } })
+export const dynamic = "force-dynamic"
+
+type Props = { params: Promise<{ locale: string; id: string }> }
+
+export default async function LeaguePage({ params }: Props) {
+  const { id } = await params
+  if (!/^\d{1,8}$/.test(id)) notFound()
+  const { t, href } = await pageContext(params)
+  const league = await getLeagueEvents(id)
+  if (league.state === "withheld") return <MemberDataPending />
+
+  const section = (title: string, events: SportEvent[]) => events.length > 0 && (
+    <section className="mt-5">
+      <h2 className="text-sm font-semibold text-ink-2">{title}</h2>
+      <div className="mt-2 grid gap-3 sm:grid-cols-2">
+        {events.map((event) => <EventCard key={event.id} event={event} t={t} href={href} timeMode="datetime" />)}
+      </div>
+    </section>
+  )
+
+  return (
+    <AppPage width="md">
+      <PageHeader title={league.competition ?? t.scores.competition} icon={<Trophy aria-hidden />} />
+      {league.state === "unavailable" && <ErrorNotice>{t.feed.unavailable}</ErrorNotice>}
+      {league.state === "stale" && <Notice tone="warning" role="status">{t.feed.stale}</Notice>}
+      {league.state === "empty" && <EmptyState icon={<Trophy aria-hidden />} title={t.scores.empty} body={t.ui.scoresEmptyBody} />}
+      {section(t.scores.upcoming, league.upcoming)}
+      {section(t.scores.finished, league.recent)}
+    </AppPage>
+  )
+}

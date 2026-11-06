@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { ApiError, apiErrorResponse, requireFeature, requireVerifiedUser } from "@/lib/api-auth"
-import { acceptGuidelines } from "@/lib/community/gate"
+import { acceptancePath, acceptGuidelines, type Acceptance } from "@/lib/community/gate"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { rateLimit } from "@/lib/rate-limit"
 import { requireSubscriberOrPurchase } from "@/lib/billing/require-plan"
@@ -10,6 +10,18 @@ export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 const schema = z.object({ ageConfirmed: z.literal(true), guidelinesAccepted: z.literal(true) })
+
+export async function GET(request: Request) {
+  try {
+    requireFeature("COMMUNITY_ENABLED")
+    const user = await requireVerifiedUser(request)
+    await requireSubscriberOrPurchase(user.uid, "room")
+    const acceptance = await firestoreDocDb().get<Acceptance>(acceptancePath(user.uid))
+    return NextResponse.json({ accepted: acceptance?.ageConfirmed === true })
+  } catch (error) {
+    return apiErrorResponse(error)
+  }
+}
 
 export async function POST(request: Request) {
   try {

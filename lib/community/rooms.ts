@@ -173,13 +173,15 @@ export async function getRoomAsMember(db: Pick<DocDb, "get" | "query">, roomId: 
   if (!room) throw notFound()
 
   const isHost = room.hostUid === uid
-  const members = isHost ? await db.query<Member>("room_members", { where: [["roomId", roomId], ["status", "active"]] }) : []
+  const members = await db.query<Member>("room_members", { where: [["roomId", roomId], ["status", "active"]] })
   const { name, participantCap, memberCount, status, locked, expiresAtUTC, inviteHash } = room
   return {
     id: roomId,
     room: { name, participantCap, memberCount, status, locked, expiresAtUTC, inviteActive: Boolean(inviteHash) },
     isHost,
-    members: members.map(({ uid: memberUid, displayName, role }) => ({ ref: memberRef(roomId, memberUid), displayName, role })),
+    members: members
+      .sort((a, b) => Number(b.role === "host") - Number(a.role === "host") || a.joinedAtUTC.localeCompare(b.joinedAtUTC))
+      .map(({ uid: memberUid, displayName, role }) => ({ ref: memberRef(roomId, memberUid), displayName, role, mine: memberUid === uid })),
   }
 }
 
@@ -256,7 +258,8 @@ export function closeRoom(db: DocDb, input: { roomId: string; uid: string }) {
   })
 }
 
-export function postRoomMessage(db: DocDb, input: { roomId: string; uid: string; text: string }, now: Date): Promise<{ id: string }> {
+/** The name comes from the current token, so one chosen after joining reaches the room. */
+export function postRoomMessage(db: DocDb, input: { roomId: string; uid: string; text: string; displayName?: string }, now: Date): Promise<{ id: string }> {
   const { roomId, uid, text } = input
   return db.transaction(async (tx) => {
     const member = await tx.get<Member>(memberPath(roomId, uid))
@@ -270,9 +273,11 @@ export function postRoomMessage(db: DocDb, input: { roomId: string; uid: string;
       throw new ApiError(429, "slow_mode", "Slow mode is on. Wait a moment before posting again.")
     }
 
+    const displayName = input.displayName ?? member.displayName
     const id = newMessageId(now)
-    const message: StoredMessage = { sortKey: id, uid, displayName: member.displayName, text, createdAtUTC: now.toISOString(), removed: false }
+    const message: StoredMessage = { sortKey: id, uid, displayName, text, createdAtUTC: now.toISOString(), removed: false }
     tx.set(`${messagesPath("room", roomId)}/${id}`, message)
+    if (displayName !== member.displayName) tx.set(memberPath(roomId, uid), { displayName }, { merge: true })
     if (room.slowModeSeconds) tx.set(memberPath(roomId, uid), { lastPostMs: now.getTime() }, { merge: true })
     return { id }
   })

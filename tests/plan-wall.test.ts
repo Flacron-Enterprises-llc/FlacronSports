@@ -1,4 +1,5 @@
 // Synthetic tokens, cookies and backend replies for isolated tests only.
+import { groupBroadcasts } from "@/components/video/broadcast-groups"
 import { shellState } from "@/components/dashboard/paywall"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -238,6 +239,11 @@ describe("the dashboard frame", () => {
     for (const path of ["/app/billing", "/app/billing/invite/x", "/app/payment-success", "/app/settings", "/app/settings/security"]) expect(shellState({ ...base, path })).toBe("account")
   })
 
+  it("confirms a payment outside the dashboard, even once the plan is active", () => {
+    for (const plan of ["none", "basic", "premium"] as const) expect(shellState({ ...base, plan, path: "/app/payment-success" })).toBe("account")
+    expect(shellState({ ...base, plan: "plus", path: "/app/payment-success", loaded: false })).toBe("account")
+  })
+
   it("shows nothing of the dashboard until the plan is known", () => {
     expect(shellState({ ...base, loaded: false })).toBe("checking")
     expect(shellState({ ...base, plan: "premium", loaded: false })).toBe("checking")
@@ -250,5 +256,19 @@ describe("the dashboard frame", () => {
   it("opens the dashboard for every plan and for staff", () => {
     for (const plan of ["basic", "plus", "premium"] as const) expect(shellState({ ...base, plan })).toBe("member")
     expect(shellState({ ...base, role: "admin" })).toBe("member")
+  })
+})
+
+describe("TV listings", () => {
+  const row = (channel: string, country: string | null) => ({ id: `${channel}${country}`, matchId: "m", eventName: "A v B", sportId: "football" as const, channel, country, logoUrl: null, startUTC: null })
+
+  it("leads with the viewer's country and sorts channels within each", () => {
+    const groups = groupBroadcasts([row("Z", "Spain"), row("B", "Pakistan"), row("A", "Pakistan"), row("C", null), row("D", "Iceland")], "Pakistan")
+    expect(groups.map((group) => group.country)).toEqual(["Pakistan", "Iceland", "Spain", null])
+    expect(groups[0].channels.map((item) => item.channel)).toEqual(["A", "B"])
+  })
+
+  it("lists a channel once, however many rows the feed repeats", () => {
+    expect(groupBroadcasts([row("A", "Spain"), { ...row("A", "Spain"), id: "again" }], null)[0].channels).toHaveLength(1)
   })
 })

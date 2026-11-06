@@ -451,7 +451,7 @@ describe("assistant standings and live events", () => {
     participants: [{ id: null, name: "Arsenal", role: "home", badgeUrl: null }, { id: null, name: "Chelsea", role: "away", badgeUrl: null }],
     ...overrides,
   })
-  const row = (rank: number, team: string, points: number | null) => ({ rank, team, played: 10, won: null, drawn: null, lost: null, scoredFor: null, scoredAgainst: null, difference: null, points, form: null })
+  const row = (rank: number, team: string, points: number | null) => ({ rank, team, played: 10, won: null, drawn: null, lost: null, scoredFor: null, scoredAgainst: null, difference: null, points, form: null, zone: null })
   const table = (rows = [row(1, "Arsenal", 25), row(2, "Chelsea", null)]) => ({
     state: "ok" as const, league: "English Premier League", season: "2026-2027", rows, source: "x", fetchedAt: now.toISOString(), sourceUpdatedAt: "2026-11-05T10:00:00.000Z", limited: false,
   })

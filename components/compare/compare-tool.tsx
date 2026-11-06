@@ -5,12 +5,14 @@ import Link from "next/link"
 import { Bookmark, GitCompareArrows, Lock, Trash2 } from "lucide-react"
 import { usePreferences } from "@/components/account/prefs-provider"
 import { useAccount } from "@/components/dashboard/account-context"
-import { ErrorNotice } from "@/components/dashboard/controls"
+import { ErrorNotice, Segmented } from "@/components/dashboard/controls"
 import { btn, Panel, Skeleton } from "@/components/site/states"
+import { ExportButton } from "@/components/sports/export-button"
 import { LocalTime, SpoilerGuard, SpoilerReveal, SpoilerScope } from "@/components/sports/parts"
 import { authFetch } from "@/lib/auth-fetch"
 import { hasPlusFeatures } from "@/lib/billing/plans"
-import type { Comparison, SplitRecord, TeamProfile } from "@/lib/sports/compare"
+import type { Comparison, PlayerComparison, SplitRecord, TeamProfile } from "@/lib/sports/compare"
+import { playerRows } from "@/lib/sports/compare-rows"
 import type { SportId } from "@/lib/sports/types"
 import { useLocale } from "@/lib/use-locale"
 import { cn } from "@/lib/utils"
@@ -50,8 +52,8 @@ function Row({ label, first, second }: { label: string; first: React.ReactNode; 
   )
 }
 
-function Results({ data }: { data: Comparison }) {
-  const { t } = useLocale()
+function Results({ data, asked }: { data: Comparison; asked: { first: string; second: string; sport: SportId | null } }) {
+  const { locale, t } = useLocale()
   const [one, two] = data.teams
   const line = (record: SplitRecord) => (record.played ? `${record.wins}-${record.draws}-${record.losses}` : "–")
   const both = (read: (team: TeamProfile) => React.ReactNode) => ({ first: read(one), second: read(two) })
@@ -105,6 +107,10 @@ function Results({ data }: { data: Comparison }) {
               </ul>
             </div>
           )}
+          {/* The file states results, so it sits behind the same reveal. */}
+          <div className="mt-4 border-t border-line pt-4">
+            <ExportButton endpoint="/api/exports/compare" body={{ mode: "teams", first: asked.first, second: asked.second, locale, ...(asked.sport ? { sport: asked.sport } : {}) }} label={t.compare.exportPdf} fileName="flacronsport-comparison.pdf" />
+          </div>
         </SpoilerGuard>
       </SpoilerScope>
       <dl className="mt-4 grid gap-3 border-t border-line pt-4 text-sm sm:grid-cols-2">
@@ -132,6 +138,98 @@ function TeamField({ id, label, value, onChange, options }: { id: string; label:
   )
 }
 
+interface PlayerOption {
+  id: string
+  name: string
+  team: string | null
+}
+
+const optionLabel = (player: PlayerOption) => (player.team ? `${player.name} (${player.team})` : player.name)
+
+function PlayerCompare() {
+  const { locale, t, href } = useLocale()
+  const { plan } = useAccount()
+  const [first, setFirst] = useState("")
+  const [second, setSecond] = useState("")
+  // Kept across searches, so finding the second player does not forget the first.
+  const [known, setKnown] = useState<Record<string, string>>({})
+  const [data, setData] = useState<PlayerComparison | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const suggest = (text: string) => {
+    if (timer.current) clearTimeout(timer.current)
+    if (text.trim().length < 2 || known[text]) return
+    timer.current = setTimeout(async () => {
+      const response = await authFetch(`/api/players/search?q=${encodeURIComponent(text.trim())}`).catch(() => null)
+      if (!response?.ok) return
+      const { players } = (await response.json()) as { players: PlayerOption[] }
+      setKnown((current) => ({ ...current, ...Object.fromEntries(players.map((player) => [optionLabel(player), player.id])) }))
+    }, 350)
+  }
+
+  const run = async () => {
+    setError(null)
+    setData(null)
+    const missing = [first, second].find((name) => !known[name])
+    if (missing !== undefined) return setError(t.compare.playerNotFound.replace("{player}", missing))
+    if (known[first] === known[second]) return setError(t.compare.samePlayer)
+    setBusy(true)
+    const query = new URLSearchParams({ first: known[first], second: known[second] })
+    const response = await authFetch(`/api/compare/players?${query}`).catch(() => null)
+    setBusy(false)
+    if (response?.ok) return setData(await response.json())
+    setError(t.compare.failed)
+  }
+
+  const options = Object.keys(known)
+  const [one, two] = data?.players ?? []
+  return (
+    <div className="space-y-4">
+      <Panel>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            void run()
+          }}
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+            <TeamField id="compare-player-first" label={t.compare.playerOne} value={first} options={options} onChange={(value) => { setFirst(value); suggest(value) }} />
+            <TeamField id="compare-player-second" label={t.compare.playerTwo} value={second} options={options} onChange={(value) => { setSecond(value); suggest(value) }} />
+            <button type="submit" disabled={busy || !first.trim() || !second.trim()} className={btn("navy", "md", "disabled:opacity-60")}>{t.compare.run}</button>
+          </div>
+        </form>
+      </Panel>
+      {error && <ErrorNotice>{error}</ErrorNotice>}
+      {busy && <Panel><div role="status" aria-label={t.ui.loading} className="space-y-2"><Skeleton className="h-4 w-3/4" /><Skeleton className="h-4 w-1/2" /></div></Panel>}
+      {data && one && two && (
+        <Panel title={`${one.profile.name} / ${two.profile.name}`} description={t.compare.playerBasis} icon={<GitCompareArrows aria-hidden />}>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px]">
+              <caption className="sr-only">{t.compare.title}</caption>
+              <thead>
+                <tr className="border-b border-line text-left text-xs text-ink-3">
+                  <th scope="col" className="py-2 pr-3 font-semibold">{t.compare.measure}</th>
+                  <th scope="col" className="py-2 pr-3 font-semibold">{one.profile.name}</th>
+                  <th scope="col" className="py-2 font-semibold">{two.profile.name}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {playerRows(data, t, locale).map(([label, left, right]) => <Row key={label} label={label} first={left} second={right} />)}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 border-t border-line pt-4">
+            <ExportButton endpoint="/api/exports/compare" body={{ mode: "players", first: one.profile.id, second: two.profile.id, locale }} label={t.compare.exportPdf} fileName="flacronsport-comparison.pdf" />
+          </div>
+        </Panel>
+      )}
+      {plan === "plus" && data && <p className="text-sm text-ink-2">{t.compare.playerPlusNote} <Link href={href("/app/billing#plans")} className="font-semibold text-hot-text hover:underline">{t.compare.upgrade}</Link></p>}
+    </div>
+  )
+}
+
 export function CompareTool({ sports }: { sports: { id: SportId; name: string }[] }) {
   const { t, href } = useLocale()
   const { plan, loaded } = useAccount()
@@ -141,9 +239,11 @@ export function CompareTool({ sports }: { sports: { id: SportId; name: string }[
   const [sport, setSport] = useState<SportId>("football")
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [data, setData] = useState<Comparison | null>(null)
+  const [asked, setAsked] = useState<{ first: string; second: string; sport: SportId | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [views, setViews] = useState<SavedView[]>([])
+  const [mode, setMode] = useState<"teams" | "players">("teams")
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const loadViews = useCallback(async () => {
@@ -171,7 +271,10 @@ export function CompareTool({ sports }: { sports: { id: SportId; name: string }[
     const query = new URLSearchParams({ first: one, second: two, ...(chosen ? { sport: chosen } : {}) })
     const response = await authFetch(`/api/compare?${query}`).catch(() => null)
     setBusy(false)
-    if (response?.ok) return setData(await response.json())
+    if (response?.ok) {
+      setAsked({ first: one, second: two, sport: chosen })
+      return setData(await response.json())
+    }
     const body = (await response?.json().catch(() => null)) as { code?: string; team?: string } | null
     if (body?.code === "team_not_found") return setError(t.compare.notFound.replace("{team}", body.team ?? ""))
     setError(body?.code === "same_team" ? t.compare.sameTeam : t.compare.failed)
@@ -207,8 +310,11 @@ export function CompareTool({ sports }: { sports: { id: SportId; name: string }[
   }
 
   const options = [...new Set([...suggestions, ...prefs.favorites])]
+  const modes = <Segmented<"teams" | "players"> label={t.compare.mode} value={mode} onChange={setMode} options={[{ value: "teams", label: t.compare.teams }, { value: "players", label: t.compare.players }]} />
+  if (mode === "players") return <div className="space-y-4">{modes}<PlayerCompare /></div>
   return (
     <div className="space-y-4">
+      {modes}
       <Panel>
         <form
           onSubmit={(event) => {
@@ -231,7 +337,7 @@ export function CompareTool({ sports }: { sports: { id: SportId; name: string }[
       </Panel>
       {error && <ErrorNotice>{error}</ErrorNotice>}
       {busy && <Panel><div role="status" aria-label={t.ui.loading} className="space-y-2"><Skeleton className="h-4 w-3/4" /><Skeleton className="h-4 w-1/2" /></div></Panel>}
-      {data && <Results data={data} />}
+      {data && asked && <Results data={data} asked={asked} />}
       {data && plan === "premium" && <button type="button" onClick={save} className={btn("outline", "md")}><Bookmark aria-hidden className="size-4" /> {t.compare.save}</button>}
       {plan === "plus" && data && <p className="text-sm text-ink-2">{t.compare.plusNote} <Link href={href("/app/billing#plans")} className="font-semibold text-hot-text hover:underline">{t.compare.upgrade}</Link></p>}
       {views.length > 0 && (

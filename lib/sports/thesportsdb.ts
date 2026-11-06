@@ -33,6 +33,7 @@ export interface RawEvent {
   strPostponed?: string | null
   /** Added from the live feed: minutes played, or the clock in the current period. */
   strProgress?: string | null
+  intRound?: string | number | null
 }
 
 const FINISHED = new Set(["FT", "AET", "PEN", "AOT", "AP", "AWD", "WO", "MATCH FINISHED", "FINISHED"])

@@ -7,7 +7,8 @@ import { countMetric } from "@/lib/ops/metrics"
 import { Breaker, CircuitOpenError, type BreakerStatus } from "./breaker"
 import { coverageRules, eventAllowed, sportAllowed } from "./coverage"
 import { normalizeLineups, normalizeStats, normalizeTimeline, type MatchDetail, type RawLineup, type RawStat, type RawTimeline } from "./detail"
-import { isPlayerId, normalizePlayer, type PlayerProfile, type RawPlayer } from "./player"
+import { advancedPlayer, isPlayerId, normalizeMoves, normalizePlayer, type PlayerAdvanced, type PlayerMove, type PlayerProfile, type RawFormerTeam, type RawPlayer } from "./player"
+import { CUP_COMPETITIONS, knockoutRounds, previousSeason, RACE_SERIES, raceWeekends, type KnockoutRound, type RaceWeekend, type SeasonView } from "./seasons"
 import { isCovered, normalizeEvent, PROVIDER_NAME, toUtc, type RawEvent } from "./thesportsdb"
 import { SPORTS, type EventFeed, type SportDefinition, type SportEvent, type SportId } from "./types"
 
@@ -568,10 +569,30 @@ const PLAYER_FRESH_MS = 24 * 3_600_000
 
 /** Null for an unknown player or one in a sport this site does not cover. A failed lookup throws. */
 export async function getPlayer(id: string): Promise<PlayerProfile | null> {
+  const raw = await rawPlayer(id)
+  return raw ? normalizePlayer(raw, sportOfKey) : null
+}
+
+async function rawPlayer(id: string): Promise<RawPlayer | null> {
   if (!isPlayerId(id)) return null
   const found = await loadDetail<{ players?: RawPlayer[] | null }>(`lookupplayer.php?id=${id}`, PLAYER_FRESH_MS)
-  const raw = found.players?.[0]
-  return raw ? normalizePlayer(raw, sportOfKey) : null
+  return found.players?.[0] ?? null
+}
+
+/** Only the comparison routes call this: what comes back here is gated by plan there. */
+export async function getPlayerForComparison(id: string): Promise<{ profile: PlayerProfile; advanced: PlayerAdvanced } | null> {
+  const raw = await rawPlayer(id)
+  const profile = raw && normalizePlayer(raw, sportOfKey)
+  return raw && profile ? { profile, advanced: advancedPlayer(raw) } : null
+}
+
+/** The provider stamps these with no update time, so the time is when it was last read. */
+export async function getPlayerMoves(id: string): Promise<{ moves: PlayerMove[]; checkedAt: string }> {
+  const raw = await rawPlayer(id)
+  if (!raw) return { moves: [], checkedAt: new Date().toISOString() }
+  const path = `lookupformerteams.php?id=${id}`
+  const found = await loadDetail<{ formerteams?: RawFormerTeam[] | null }>(path, PLAYER_FRESH_MS)
+  return { moves: normalizeMoves(found.formerteams, raw), checkedAt: new Date(savedAt.get(path) ?? Date.now()).toISOString() }
 }
 
 export async function searchPlayers(text: string): Promise<PlayerProfile[]> {
@@ -647,6 +668,8 @@ export interface StandingRow {
   difference: number | null
   points: number | null
   form: string | null
+  /** The provider's own words for what this place leads to, such as a qualification or relegation. */
+  zone: string | null
 }
 
 export interface Standings {
@@ -690,6 +713,7 @@ export function normalizeStandings(table: RawStanding[]): Pick<Standings, "leagu
       difference: count(row.intGoalDifference),
       points: count(row.intPoints),
       form: text(row.strForm),
+      zone: text(row.strDescription)?.trim() || null,
     })),
   }
 }
@@ -721,5 +745,81 @@ export async function getStandings(leagueId: string): Promise<Standings> {
     return { ...base, ...normalizeStandings(data.table), state: "ok" }
   } catch {
     return { ...base, ...none, state: "unavailable" }
+  }
+}
+
+const SEASON_FRESH_MS = 3_600_000
+
+interface RawLeagueInfo {
+  strLeague?: string | null
+  strSport?: string | null
+  strCurrentSeason?: string | null
+}
+
+async function leagueInfo(leagueId: string): Promise<RawLeagueInfo | null> {
+  const found = await loadDetail<{ leagues?: RawLeagueInfo[] | null }>(`lookupleague.php?id=${leagueId}`, PLAYER_FRESH_MS)
+  return found.leagues?.[0] ?? null
+}
+
+/** Stale when the provider could not be reached and an older reading stood in. */
+async function seasonRows(leagueId: string, season: string): Promise<{ rows: RawEvent[]; stale: boolean }> {
+  const path = `eventsseason.php?${new URLSearchParams({ id: leagueId, s: season })}`
+  const found = await loadDetail<{ events?: RawEvent[] | null }>(path, SEASON_FRESH_MS)
+  return { rows: found.events ?? [], stale: Date.now() - (savedAt.get(path) ?? Date.now()) >= SEASON_FRESH_MS }
+}
+
+const seasonView = <T,>(state: SeasonView<T>["state"]): SeasonView<T> => ({ state, competition: null, season: null, items: [], fetchedAt: new Date().toISOString() })
+
+export type RaceSchedule = SeasonView<RaceWeekend>
+
+/** A series' sessions by race weekend. Results are not part of this view. */
+export async function getRaceSchedule(leagueId: string): Promise<RaceSchedule> {
+  if (process.env.API_ORIGIN) {
+    return (await fromBackend<RaceSchedule>(`/api/motorsport/${encodeURIComponent(leagueId)}`).catch(whenWithheld(seasonView<RaceWeekend>("withheld")))) ?? seasonView("unavailable")
+  }
+  if (!RACE_SERIES.some((series) => series.id === leagueId)) return seasonView("empty")
+  try {
+    const league = await leagueInfo(leagueId)
+    const season = league?.strCurrentSeason
+    const competition = league?.strLeague
+    const rules = await coverageRules()
+    if (league?.strSport !== "Motorsport" || !season || !competition || !eventAllowed(rules, { sportId: "motorsport", competition: { id: leagueId, name: competition, country: null } })) return seasonView("empty")
+    const { rows, stale } = await seasonRows(leagueId, season)
+    const items = raceWeekends(rows)
+    return { ...seasonView<RaceWeekend>(items.length === 0 ? "empty" : stale ? "stale" : "ok"), competition, season, items }
+  } catch {
+    return seasonView("unavailable")
+  }
+}
+
+export type CupRounds = SeasonView<KnockoutRound<SportEvent>>
+
+/**
+ * A cup's knockout rounds. A new season has none until the league phase ends, so the
+ * season before stands in, under its own name. Rounds only show when the feed holds them whole.
+ */
+export async function getCupRounds(leagueId: string): Promise<CupRounds> {
+  if (process.env.API_ORIGIN) {
+    return (await fromBackend<CupRounds>(`/api/cups/${encodeURIComponent(leagueId)}`).catch(whenWithheld(seasonView<KnockoutRound<SportEvent>>("withheld")))) ?? seasonView("unavailable")
+  }
+  const football = enabledSports().find((sport) => sport.id === "football")
+  if (!football || !CUP_COMPETITIONS.some((cup) => cup.id === leagueId)) return seasonView("empty")
+  try {
+    const league = await leagueInfo(leagueId)
+    const current = league?.strCurrentSeason
+    const competition = league?.strLeague
+    const rules = await coverageRules()
+    if (league?.strSport !== football.providerKey || !current || !competition || !eventAllowed(rules, { sportId: "football", competition: { id: leagueId, name: competition, country: null } })) return seasonView("empty")
+    for (const season of [current, previousSeason(current)]) {
+      if (!season) continue
+      const { rows, stale } = await seasonRows(leagueId, season)
+      const rounds = knockoutRounds(rows)
+      if (!rounds) continue
+      const items = rounds.map(({ key, games }) => ({ key, games: rowsToEvents(games, football) }))
+      return { ...seasonView<KnockoutRound<SportEvent>>(stale ? "stale" : "ok"), competition, season, items }
+    }
+    return seasonView("empty")
+  } catch {
+    return seasonView("unavailable")
   }
 }

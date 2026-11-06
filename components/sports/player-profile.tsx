@@ -6,9 +6,9 @@ import { User } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
 import { DetailSkeleton, EmptyState, PageHeader, Panel } from "@/components/site/states"
 import { FollowPlayerButton } from "@/components/sports/event-actions"
-import { FavoriteStar } from "@/components/sports/parts"
+import { FavoriteStar, LocalTime } from "@/components/sports/parts"
 import { authFetch } from "@/lib/auth-fetch"
-import { TEAM_SPORTS, type PlayerProfile } from "@/lib/sports/player"
+import { TEAM_SPORTS, type PlayerMove, type PlayerProfile } from "@/lib/sports/player"
 import { SPORTS } from "@/lib/sports/types"
 import { useLocale } from "@/lib/use-locale"
 
@@ -16,6 +16,7 @@ export function PlayerProfileView({ id }: { id: string }) {
   const { locale, t, href } = useLocale()
   const copy = t.discover
   const [player, setPlayer] = useState<PlayerProfile | null>(null)
+  const [career, setCareer] = useState<{ moves: PlayerMove[]; checkedAt: string } | null>(null)
   const [state, setState] = useState<"loading" | "ready" | "missing" | "failed">("loading")
 
   const load = useCallback(async () => {
@@ -23,7 +24,9 @@ export function PlayerProfileView({ id }: { id: string }) {
     const response = await authFetch(`/api/players/${encodeURIComponent(id)}`).catch(() => null)
     if (response?.status === 404) return setState("missing")
     if (!response?.ok) return setState("failed")
-    setPlayer(((await response.json()) as { player: PlayerProfile }).player)
+    const body = (await response.json()) as { player: PlayerProfile; career?: { moves: PlayerMove[]; checkedAt: string } | null }
+    setPlayer(body.player)
+    setCareer(body.career ?? null)
     setState("ready")
   }, [id])
 
@@ -66,6 +69,19 @@ export function PlayerProfileView({ id }: { id: string }) {
         </dl>
         {!player.team && shown.length === 0 && <p className="text-sm text-ink-2">{copy.playerNoDetails}</p>}
       </Panel>
+      {career && career.moves.length > 0 && (
+        <Panel title={copy.moves} description={copy.movesLead} className="mt-4">
+          <ul className="divide-y divide-line">
+            {career.moves.map((move) => (
+              <li key={`${move.team}-${move.type}-${move.joined}`} className="flex items-baseline justify-between gap-3 py-2 text-sm">
+                <span className="min-w-0 font-medium text-ink">{move.team} <span className="font-normal text-ink-2">· {copy.moveTypes[move.type]}</span></span>
+                <span className="tabular shrink-0 text-ink-2">{move.left === null ? copy.moveJoined.replace("{year}", String(move.joined)) : `${move.joined}–${move.left}`}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs leading-5 text-ink-3">{t.feed.updated}: <LocalTime iso={career.checkedAt} mode="datetime" /></p>
+        </Panel>
+      )}
     </>
   )
 }

@@ -1,7 +1,8 @@
-// Team comparison, built only from games the feed reports. A team with no finished
-// games shows nothing rather than zeros.
+// Team and player comparison, built only from what the feed reports. A team with no
+// finished games shows nothing rather than zeros, and a detail nobody published stays blank.
 
-import { getStandings, getTeamFixtures, type StandingRow } from "./service"
+import type { PlayerAdvanced, PlayerProfile } from "./player"
+import { getPlayerForComparison, getStandings, getTeamFixtures, type StandingRow } from "./service"
 import type { SportEvent, SportId } from "./types"
 
 export type FormResult = "W" | "D" | "L"
@@ -146,4 +147,30 @@ export async function compareTeams(first: string, second: string, sport: SportId
     headToHead: tier === "advanced" ? headToHead(one.team.name, two.team.name, [...one.recent, ...two.recent]) : [],
     fetchedAt: new Date().toISOString(),
   }
+}
+
+export interface ComparedPlayer {
+  profile: PlayerProfile
+  /** Absent below Premium, so the reply itself holds nothing a lower plan cannot see. */
+  advanced?: PlayerAdvanced
+}
+
+export interface PlayerComparison {
+  tier: Comparison["tier"]
+  players: [ComparedPlayer, ComparedPlayer]
+  fetchedAt: string
+}
+
+export class PlayerNotFound extends Error {
+  constructor(public readonly id: string) {
+    super("Player not found")
+  }
+}
+
+export async function comparePlayers(first: string, second: string, tier: Comparison["tier"]): Promise<PlayerComparison> {
+  const [one, two] = await Promise.all([getPlayerForComparison(first), getPlayerForComparison(second)])
+  if (!one) throw new PlayerNotFound(first)
+  if (!two) throw new PlayerNotFound(second)
+  const side = ({ profile, advanced }: NonNullable<typeof one>): ComparedPlayer => (tier === "advanced" ? { profile, advanced } : { profile })
+  return { tier, players: [side(one), side(two)], fetchedAt: new Date().toISOString() }
 }

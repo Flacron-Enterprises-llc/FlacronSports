@@ -6,6 +6,7 @@ import { ErrorNotice } from "@/components/dashboard/controls"
 import { MemberDataPending } from "@/components/dashboard/member-data-pending"
 import { AppPage, Notice } from "@/components/site/states"
 import { FullReportSection } from "@/components/reports/paid-report"
+import { ReportAudio } from "@/components/reports/report-audio"
 import { SaveReportButton } from "@/components/reports/saved-reports"
 import { LocalTime, SpoilerGuard } from "@/components/sports/parts"
 import { getPublishedReport, type Report } from "@/lib/content/reports"
@@ -66,7 +67,10 @@ export default async function ReportPage({ params }: Props) {
         {report.competition && <p className="mt-1.5 text-sm text-ink-2">{report.competition}</p>}
         <div className="mt-3"><SaveReportButton slug={report.slug} /></div>
         <div className="mt-6 text-[15.5px] leading-7 text-ink">
-          <SpoilerGuard label={t.reports.reveal}><p className="whitespace-pre-line">{report.body}</p></SpoilerGuard>
+          <SpoilerGuard label={t.reports.reveal}>
+            <ReportAudio text={`${report.title}. ${report.body}`} />
+            <p className="whitespace-pre-line">{report.body}</p>
+          </SpoilerGuard>
         </div>
         {(report.type === "result" || report.type === "recap") && <FullReportSection slug={report.slug} />}
         {report.correctionNote && (

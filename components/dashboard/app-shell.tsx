@@ -6,7 +6,7 @@ import { Suspense, useEffect, useId, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
-  Bookmark, ChevronDown, ChevronRight, Compass, CreditCard, Home, LayoutDashboard, LayoutGrid, LogOut, Medal, Menu, GitCompareArrows, MessageCircleQuestion, Newspaper, PlayCircle, Search, Settings, Shield, ShieldCheck, Sparkles, Star, Trophy, Users, X,
+  Bookmark, CalendarClock, ChevronDown, ChevronRight, Compass, CreditCard, Home, LayoutDashboard, LayoutGrid, LogOut, Medal, Menu, GitCompareArrows, MessageCircleQuestion, Network, Newspaper, PlayCircle, Search, Settings, Shield, ShieldCheck, Sparkles, Star, Trophy, Users, X,
   Flag,
 } from "lucide-react"
 import { usePreferences } from "@/components/account/prefs-provider"
@@ -69,6 +69,8 @@ function useNav() {
         items: [
           { to: "/app/assistant", label: t.nav.assistant, icon: MessageCircleQuestion },
           { to: "/app/compare", label: t.compare.title, icon: GitCompareArrows },
+          { to: "/app/cups", label: t.cups.title, icon: Network },
+          { to: "/app/motorsport", label: t.motorsport.title, icon: CalendarClock },
           ...(community ? [{ to: "/app/rooms", label: t.dash.rooms, icon: Users }, { to: "/app/predictions", label: t.dash.predictions, icon: Medal }, { to: "/app/clubs", label: t.community.clubsTitle, icon: Flag }] : []),
         ],
       },
@@ -205,7 +207,7 @@ function Crumbs({ path }: { path: string }) {
   const { t, href } = useLocale()
   const roots: [string, string][] = [
     ["/app/scores", t.nav.scores], ["/app/watch", t.nav.watch], ["/app/news", t.nav.news], ["/app/my-teams", t.nav.myTeams], ["/app/notifications", t.dash.notifications], ["/app/search", t.discover.searchTitle], ["/app/board", t.discover.boardTitle],
-    ["/app/assistant", t.nav.assistant], ["/app/compare", t.compare.title], ["/app/rooms", t.dash.rooms], ["/app/predictions", t.dash.predictions], ["/app/clubs", t.community.clubsTitle], ["/app/billing", t.dash.billing], ["/app/settings", t.dash.settings], ["/app/admin", t.dash.admin],
+    ["/app/assistant", t.nav.assistant], ["/app/compare", t.compare.title], ["/app/cups", t.cups.title], ["/app/motorsport", t.motorsport.title], ["/app/rooms", t.dash.rooms], ["/app/predictions", t.dash.predictions], ["/app/clubs", t.community.clubsTitle], ["/app/billing", t.dash.billing], ["/app/settings", t.dash.settings], ["/app/admin", t.dash.admin],
   ]
   const details: [RegExp, string, string, string][] = [
     [/^\/app\/match\//, "/app/scores", t.nav.scores, t.ui.matchCenter],

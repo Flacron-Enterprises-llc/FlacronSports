@@ -2,6 +2,7 @@ import { ApiError, isStaff, requireUser, type AuthedUser } from "@/lib/api-auth"
 import { rateLimit } from "@/lib/rate-limit"
 import { hasLivePurchase, type AccessAddon, type AllowanceUnit } from "./addons"
 import { getEffectiveAccess, getUserPurchases } from "./firestore-store"
+import { hasPlusFeatures } from "./plans"
 
 const noPlan = () => new ApiError(402, "subscription_required", "Choose a plan to use FlacronSport")
 
@@ -9,6 +10,13 @@ const noPlan = () => new ApiError(402, "subscription_required", "Choose a plan t
 export async function requireSubscriber(uid: string): Promise<void> {
   const { plan } = await getEffectiveAccess(uid)
   if (plan === "none") throw noPlan()
+}
+
+/** Plus gets the basic comparison and Premium the advanced one, including in exports. */
+export async function comparisonTier(uid: string): Promise<"basic" | "advanced"> {
+  const { plan } = await getEffectiveAccess(uid)
+  if (!hasPlusFeatures(plan)) throw new ApiError(403, "plan_required", "Comparison needs the Plus or Premium plan")
+  return plan === "premium" ? "advanced" : "basic"
 }
 
 /** Reading sports data is not a privileged action, so the role alone counts here, as it does at the paywall. */

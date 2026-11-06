@@ -25,6 +25,8 @@ const LIVE_BASE = "https://www.thesportsdb.com/api/v2/json"
 const LIVE_FRESH_MS = 60_000
 const LIVE_LIMIT_MS = 5 * 60_000
 const LIVE_TIMEOUT_MS = 4000
+// Normalizing a busy day is real work on a small task, and every page view asks for it.
+const BUILT_FEED_MS = 30_000
 
 // "123" is the provider's public test key: a handful of events per query and no
 // commercial licence. The feed is reported as limited until a paid key is set.
@@ -41,10 +43,12 @@ const PEEK_LIMIT_MS = 48 * 3_600_000
 
 const memory = new Map<string, { data: unknown; at: number }>()
 const inFlight = new Map<string, Promise<unknown>>()
+const builtFeeds = new Map<string, { feed: Promise<EventFeed>; at: number }>()
 
 export function clearFeedCache(): void {
   memory.clear()
   inFlight.clear()
+  builtFeeds.clear()
   liveScores = { rows: new Map(), at: 0, tried: 0 }
 }
 
@@ -300,7 +304,24 @@ export async function fromBackend<T>(path: string): Promise<T | null> {
   return response.json() as Promise<T>
 }
 
+/** Requests for the same day share one build, so a burst of visitors costs one pass over the feed. */
 export async function getEvents(options: { date?: string; sport?: SportId; refresh?: boolean } = {}): Promise<EventFeed> {
+  if (options.refresh || process.env.API_ORIGIN) {
+    builtFeeds.clear()
+    return buildEvents(options)
+  }
+  const key = `${options.date ?? utcDate()}:${options.sport ?? "all"}`
+  const now = Date.now()
+  const built = builtFeeds.get(key)
+  if (built && now - built.at < BUILT_FEED_MS) return built.feed
+  for (const [stored, entry] of builtFeeds) if (now - entry.at >= BUILT_FEED_MS) builtFeeds.delete(stored)
+  const feed = buildEvents(options)
+  builtFeeds.set(key, { feed, at: now })
+  feed.catch(() => builtFeeds.delete(key))
+  return feed
+}
+
+async function buildEvents(options: { date?: string; sport?: SportId; refresh?: boolean }): Promise<EventFeed> {
   const date = options.date ?? utcDate()
   const query = new URLSearchParams({ date, pageSize: "3000", ...(options.sport ? { sport: options.sport } : {}) })
   const sports = enabledSports().filter((sport) => !options.sport || sport.id === options.sport)

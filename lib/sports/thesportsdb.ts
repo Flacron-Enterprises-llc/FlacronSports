@@ -106,6 +106,22 @@ function inferStatus(raw: RawEvent, settled: boolean, now: Date): EventStatus {
   return now.getTime() < startsBy ? "scheduled" : "unknown"
 }
 
+// Long enough for extra time or a slow baseball game.
+const LONGEST_GAME_MS = 8 * 3_600_000
+
+/**
+ * Regional games often stop updating part way through, which leaves a final-looking
+ * "2H" or "NS" on the record. A game that long past its start is not live or upcoming.
+ */
+function settledStatus(raw: RawEvent, now: Date): EventStatus {
+  const status = normalizeStatus(raw)
+  if (status !== "live" && status !== "scheduled") return status
+  const start = toUtc(raw.strTimestamp)
+  if (!start) return status
+  const limit = LONGEST_GAME_MS + (isDateOnly(raw) ? 86_400_000 : 0)
+  return now.getTime() - Date.parse(start) > limit ? "unknown" : status
+}
+
 const hidesResult = (status: EventStatus) => status === "scheduled" || status === "postponed" || status === "canceled"
 
 function parseWickets(value: string | number | null | undefined): number | null {
@@ -214,7 +230,8 @@ export function normalizeEvent(raw: RawEvent, sportId: SportId, now: Date = new 
   if (sportId === "combat-sports") return { ...shared, ...individual, ...combatFields(raw, now) }
   if (sportId === "motorsport") return { ...shared, ...individual, ...motorsportFields(raw, now) }
 
-  const status = normalizeStatus(raw)
+  const status = settledStatus(raw, now)
   const clock = status === "live" && raw.strProgress ? raw.strProgress : null
-  return { ...shared, ...teams, status, score: normalizeScore(raw, status), ...(clock ? { clock } : {}) }
+  // The score follows what the source stated: a game it never started has no score, however old.
+  return { ...shared, ...teams, status, score: normalizeScore(raw, normalizeStatus(raw)), ...(clock ? { clock } : {}) }
 }

@@ -24,7 +24,7 @@ import { normalizeEvent, normalizeStatus } from "@/lib/sports/thesportsdb"
 import type { SportEvent } from "@/lib/sports/types"
 
 const raw = (id: string, league = "L", extra = {}) => ({ idEvent: id, strHomeTeam: "A", strAwayTeam: "B", strLeague: league, strSport: "Soccer", strStatus: "NS", strTimestamp: "2026-11-05T18:00:00", ...extra })
-const event = (id: string, league: string, status: SportEvent["status"] = "scheduled") => normalizeEvent(raw(id, league, status === "live" ? { strStatus: "1H" } : {}), "football")
+const event = (id: string, league: string, status: SportEvent["status"] = "scheduled") => normalizeEvent(raw(id, league, status === "live" ? { strStatus: "1H" } : {}), "football", new Date("2026-11-05T19:00:00Z"))
 const today = () => new Date().toISOString().slice(0, 10)
 
 beforeEach(() => {
@@ -98,6 +98,16 @@ describe("live scores", () => {
     const calls = stub([])
     await getEvents({ date: today(), sport: "football" })
     expect(calls.some((url) => url.includes("livescore"))).toBe(false)
+  })
+
+  it("does not call a game live or upcoming long after it should have ended", () => {
+    const now = new Date("2026-11-06T12:00:00Z")
+    const old = "2026-11-05T13:00:00"
+    expect(normalizeEvent(raw("1", "L", { strStatus: "2H", strTimestamp: old }), "football", now).status).toBe("unknown")
+    const unstarted = normalizeEvent(raw("2", "L", { strStatus: "NS", intHomeScore: "0", intAwayScore: "0", strTimestamp: old }), "football", now)
+    expect(unstarted).toMatchObject({ status: "unknown", score: { kind: "none" } })
+    expect(normalizeEvent(raw("3", "L", { strStatus: "2H", strTimestamp: "2026-11-06T11:00:00" }), "football", now).status).toBe("live")
+    expect(normalizeEvent(raw("4", "L", { strStatus: "FT", intHomeScore: "1", intAwayScore: "0", strTimestamp: old }), "football", now).status).toBe("finished")
   })
 
   it("recognises hockey periods and baseball innings as live", () => {

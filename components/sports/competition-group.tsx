@@ -4,6 +4,9 @@ import type { Dictionary } from "@/lib/i18n"
 import type { CompetitionGroup } from "@/lib/sports/priority"
 import { EventCard } from "./event-card"
 
+// The source files a continental competition under one country.
+const CONTINENTAL = /^(?:UEFA|CAF|AFC|FIFA|CONCACAF|CONMEBOL|OFC)\b/
+
 export function CompetitionGroupSection({ group, total, t, href }: { group: CompetitionGroup; total: number; t: Dictionary; href: (path: string) => string }) {
   const { competition, events } = group
   const first = events[0]
@@ -15,7 +18,7 @@ export function CompetitionGroupSection({ group, total, t, href }: { group: Comp
         <h2 className="min-w-0 truncate text-sm font-semibold text-ink">
           {standings ? <Link href={href(`/app/standings/${competition.id}`)} className="underline-offset-2 hover:underline">{competition.name}</Link> : competition.name}
         </h2>
-        {competition.country && <span className="hidden min-w-0 truncate text-xs text-ink-3 sm:inline">{competition.country}</span>}
+        {competition.country && !CONTINENTAL.test(competition.name) && <span className="hidden min-w-0 truncate text-xs text-ink-3 sm:inline">{competition.country}</span>}
         <span className="tabular ml-auto shrink-0 text-xs text-ink-3">{t.scores.games.replace("{count}", String(total))}</span>
       </header>
       <div className="fs-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

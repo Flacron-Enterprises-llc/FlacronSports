@@ -82,14 +82,14 @@ export function MatchPlayer({ title }: { title: string }) {
 
   if (result?.video) {
     return (
-      <section aria-label={t.match.viewing} className="fs-rise mt-4">
-        <div className="mx-auto max-w-3xl"><HighlightPlayer matchId={matchId} title={title} channel={result.video.channel} /></div>
+      <section aria-label={t.match.viewing} className="fs-rise mt-3 overflow-hidden rounded-xl border border-line bg-surface shadow-[var(--shadow-sm)]">
+        <div className="mx-auto max-w-3xl p-3"><HighlightPlayer matchId={matchId} title={title} channel={result.video.channel} /></div>
       </section>
     )
   }
   if (result || !prefs.lowData) return null
   return (
-    <section aria-label={t.match.viewing} className="fs-rise mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4">
+    <section aria-label={t.match.viewing} className="fs-rise mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4">
       <p className="min-w-0 flex-1 text-sm leading-6 text-ink-2">{t.ui.lowDataVideo}</p>
       <button type="button" onClick={check} disabled={state === "loading"} className={btn("navy", "md")}><PlayCircle aria-hidden className="size-4" /> {t.ui.checkViewing}</button>
     </section>

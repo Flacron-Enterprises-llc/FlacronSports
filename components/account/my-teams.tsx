@@ -17,8 +17,8 @@ import { useLocale } from "@/lib/use-locale"
 import { MatchCalendar } from "./match-calendar"
 import { usePreferences, type MutateResult } from "./prefs-provider"
 
-const ROW = "flex min-w-0 items-center gap-2 rounded-xl border border-line bg-surface p-3 shadow-[var(--shadow-sm)]"
-const ICON = "inline-flex size-9 shrink-0 items-center justify-center rounded-md text-ink-2 hover:bg-surface-muted hover:text-ink disabled:pointer-events-none disabled:opacity-35"
+const ROW = "flex min-h-14 min-w-0 items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-1.5 shadow-[var(--shadow-sm)]"
+const ICON = "inline-flex size-10 shrink-0 items-center justify-center rounded-md text-ink-2 hover:bg-surface-muted hover:text-ink disabled:pointer-events-none disabled:opacity-35"
 
 function Order({ name, index, count, onMove }: { name: string; index: number; count: number; onMove(delta: -1 | 1): void }) {
   const { t } = useLocale()
@@ -80,7 +80,7 @@ export function MyTeams({ feed }: { feed: EventFeed }) {
         <section aria-label={copy.teamsAthletes}>
           <h2 className="text-[17px] font-semibold text-ink">{copy.teamsAthletes}</h2>
           <p className="mt-0.5 text-[13px] text-ink-2">{copy.priorityHelp}</p>
-          <ul className="fs-stagger mt-3 grid gap-3 sm:grid-cols-2">
+          <ul className="fs-settle mt-2 grid gap-2.5 sm:grid-cols-2">
             {names.map((name, index) => (
               <li key={name} className={ROW}>
                 <Crest name={name} />
@@ -97,7 +97,7 @@ export function MyTeams({ feed }: { feed: EventFeed }) {
       {leagues.length > 0 && (
         <section aria-label={copy.leagues}>
           <h2 className="text-[17px] font-semibold text-ink">{copy.leagues}</h2>
-          <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+          <ul className="mt-2 grid gap-2.5 sm:grid-cols-2">
             {leagues.map((league, index) => (
               <li key={league.id} className={ROW}>
                 <Link href={href(`/app/standings/${league.id}`)} className="min-w-0 flex-1 truncate font-medium text-ink underline-offset-2 hover:underline">{league.name}</Link>
@@ -112,7 +112,7 @@ export function MyTeams({ feed }: { feed: EventFeed }) {
       {players.length > 0 && (
         <section aria-label={copy.players}>
           <h2 className="text-[17px] font-semibold text-ink">{copy.players}</h2>
-          <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+          <ul className="mt-2 grid gap-2.5 sm:grid-cols-2">
             {players.map((player) => (
               <li key={player.id} className={ROW}>
                 <span className="min-w-0 flex-1">
@@ -132,7 +132,7 @@ export function MyTeams({ feed }: { feed: EventFeed }) {
         <Panel title={copy.reminders} description={copy.remindersHelp} icon={<Bell aria-hidden />}>
           <ul className="divide-y divide-line">
             {reminders.map((reminder) => (
-              <li key={reminder.eventId} className="flex min-w-0 items-center gap-2 py-1.5 text-sm">
+              <li key={reminder.eventId} className="flex min-h-12 min-w-0 items-center gap-2 py-1 text-sm">
                 <span className="min-w-0 flex-1">
                   <Link href={href(`/app/match/${reminder.eventId}`)} className="block truncate font-medium text-ink underline-offset-2 hover:underline">{reminder.title}</Link>
                   {reminder.startUTC && <span className="block text-xs text-ink-2"><LocalTime iso={reminder.startUTC} mode="datetime" /></span>}
@@ -149,7 +149,7 @@ export function MyTeams({ feed }: { feed: EventFeed }) {
       {today.length > 0 && (
         <section aria-label={t.dash.favorites}>
           <h2 className="text-[17px] font-semibold text-ink">{t.dash.favorites}</h2>
-          <div className="fs-stagger mt-3 grid gap-4 sm:grid-cols-2">
+          <div className="fs-settle mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {today.map((event) => <EventCard key={event.id} event={event} t={t} href={href} />)}
           </div>
         </section>

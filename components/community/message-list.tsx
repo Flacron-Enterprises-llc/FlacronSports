@@ -2,15 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
-import { Flag, Send, ShieldOff } from "lucide-react"
+import { Flag, Send, ShieldOff, SmilePlus } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
-import { btn, Notice, Skeleton } from "@/components/site/states"
+import { btn, Initials, Notice, Skeleton } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import type { Badge } from "@/lib/community/badges"
 import type { ReportScope } from "@/lib/community/chat"
 import type { Reaction } from "@/lib/community/engagement"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { useLocale } from "@/lib/use-locale"
+import { cn } from "@/lib/utils"
 import { BadgeList } from "./badge-list"
 import { BlockedPeople } from "./blocked-people"
 import { useCommunityGate } from "./community-gate"
@@ -74,6 +75,7 @@ export function MessageList({ scope, scopeId, path, closed = null }: { scope: Re
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
   const [reporting, setReporting] = useState<string | null>(null)
+  const [tools, setTools] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
 
   const load = useCallback(async (after: string | null) => {
@@ -161,13 +163,15 @@ export function MessageList({ scope, scopeId, path, closed = null }: { scope: Re
         <>
         <NameSetup user={user} />
         <form onSubmit={send} data-testid="chat-composer">
-          <label className="block">
-            <span className="sr-only">{t.community.message}</span>
-            <textarea className="fs-input block resize-y px-3 py-2 text-sm" rows={2} required maxLength={500} placeholder={t.community.message} value={text} onChange={(e) => setText(e.target.value)} />
-          </label>
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-            <button type="submit" disabled={busy} className={btn("navy", "sm")}><Send aria-hidden className="size-3.5" />{t.community.send}</button>
-            <Link href={href("/community-guidelines")} className="text-xs font-semibold text-hot-text hover:underline">{t.community.guidelines}</Link>
+          <div className="fs-joined items-end rounded-2xl">
+            <label className="block min-w-0 flex-1">
+              <span className="sr-only">{t.community.message}</span>
+              <textarea className="block w-full resize-none px-3.5 py-2.5 text-sm" rows={2} required maxLength={500} placeholder={t.community.message} value={text} onChange={(e) => setText(e.target.value)} />
+            </label>
+            <button type="submit" disabled={busy} className={btn("navy", "sm", "m-1.5 shrink-0 rounded-xl")}><Send aria-hidden className="size-3.5" /><span className="max-sm:sr-only">{t.community.send}</span></button>
+          </div>
+          <div className="mt-1 flex justify-end">
+            <Link href={href("/community-guidelines")} className="inline-flex min-h-10 items-center text-xs font-semibold text-hot-text hover:underline sm:min-h-6">{t.community.guidelines}</Link>
           </div>
         </form>
         </>
@@ -176,41 +180,58 @@ export function MessageList({ scope, scopeId, path, closed = null }: { scope: Re
       )}
       {notice && <p role="status" className="mt-2 text-sm text-ink">{notice}</p>}
       {failed && <div className="mt-3"><ErrorNotice onRetry={() => load(null)}>{t.community.loadFailed}</ErrorNotice></div>}
-      {!loaded && !failed && <div role="status" aria-label={t.ui.loading} className="mt-3 space-y-2"><Skeleton className="h-14 w-full" /><Skeleton className="h-14 w-full" /></div>}
-      {loaded && messages.length === 0 && <p data-testid="chat-empty" className="mt-3 text-sm text-ink-2">{t.community.noMessages}</p>}
-      <ul data-testid="chat-messages" className="mt-3 space-y-2">
+      {!loaded && !failed && (
+        <div role="status" aria-label={t.ui.loading} className="mt-3 space-y-3">
+          <div className="flex gap-2"><Skeleton className="size-8 shrink-0 rounded-full" /><Skeleton className="h-14 w-2/3 rounded-2xl" /></div>
+          <div className="flex flex-row-reverse gap-2"><Skeleton className="size-8 shrink-0 rounded-full" /><Skeleton className="h-10 w-1/2 rounded-2xl" /></div>
+        </div>
+      )}
+      {loaded && messages.length === 0 && <p data-testid="chat-empty" className="mt-3 rounded-xl bg-surface-muted px-4 py-3 text-center text-sm text-ink-2">{t.community.noMessages}</p>}
+      <ul data-testid="chat-messages" className="mt-3 space-y-3">
         {messages.map((message) => {
           const live = !message.removed && !message.formerMember
+          const open = tools === message.id
+          const name = message.formerMember ? t.community.formerMember : message.displayName
+          const counted = REACTIONS.filter((reaction) => message.reactions[reaction])
+          const shown = open && canAct ? REACTIONS : counted
           return (
-            <li key={message.id} className={`fs-panel-in rounded-xl border p-3 text-sm ${message.mine ? "border-line-strong bg-surface-muted" : "border-line"}`}>
-              <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs font-medium text-ink-2"><span>{message.formerMember ? t.community.formerMember : message.displayName}</span><BadgeList badges={message.badges} /><span>· {time(message.createdAtUTC)}</span></p>
-              <p className="mt-1 whitespace-pre-wrap break-words text-ink">{message.removed ? t.community.removed : message.formerMember ? t.community.formerMessage : message.text}</p>
-              {live && (
-                <div className="mt-2 flex flex-wrap gap-1" role="group" aria-label={t.community.reactions}>
-                  {REACTIONS.filter((reaction) => canAct || message.reactions[reaction]).map((reaction) => (
-                    <button
-                      key={reaction}
-                      type="button"
-                      disabled={!canAct}
-                      aria-pressed={message.myReaction === reaction}
-                      aria-label={t.community.reactionNames[reaction]}
-                      onClick={() => react(message.id, reaction)}
-                      className={`min-h-6 rounded-full border px-2 py-0.5 text-xs transition-colors ${message.myReaction === reaction ? "border-hot-text bg-surface-muted text-ink" : "border-line text-ink-2 hover:bg-surface-muted"}`}
-                    >
-                      {EMOJI[reaction]}{message.reactions[reaction] ? ` ${message.reactions[reaction]}` : ""}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {canAct && !message.mine && live && (
-                <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs">
-                  <button type="button" aria-expanded={reporting === message.id} className="inline-flex min-h-6 items-center gap-1 font-semibold text-ink-2 hover:text-ink" onClick={() => setReporting(reporting === message.id ? null : message.id)}><Flag aria-hidden className="size-3" />{t.community.report}</button>
-                  <button type="button" className="inline-flex min-h-6 items-center gap-1 font-semibold text-ink-2 hover:text-ink" onClick={() => flag("block", message.id)}><ShieldOff aria-hidden className="size-3" />{t.community.block}</button>
-                  {reporting === message.id && REPORT_REASONS.map((reason) => (
-                    <button key={reason} type="button" className="min-h-6 font-semibold text-hot-text hover:underline" onClick={() => flag("report", message.id, reason)}>{t.community.reportReasons[reason]}</button>
-                  ))}
-                </div>
-              )}
+            <li key={message.id} className={cn("fs-message fs-panel-in flex gap-2", message.mine && "flex-row-reverse")}>
+              <Initials name={name} mine={message.mine} className="mt-5" />
+              <div className={cn("flex min-w-0 max-w-[85%] flex-col sm:max-w-[75%]", message.mine ? "items-end" : "items-start")}>
+                <p className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-1 text-xs font-medium text-ink-2", message.mine && "justify-end")}><span className="font-semibold text-ink">{name}</span><BadgeList badges={message.badges} /><span>{time(message.createdAtUTC)}</span></p>
+                <p className={cn("mt-1 max-w-full whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-sm leading-6", message.mine ? "fs-bubble-mine rounded-tr-md" : "fs-bubble rounded-tl-md", !live && "italic opacity-80")}>{message.removed ? t.community.removed : message.formerMember ? t.community.formerMessage : message.text}</p>
+                {live && (shown.length > 0 || canAct) && (
+                  <div className={cn("mt-1 flex flex-wrap items-center gap-1", message.mine && "justify-end")} role="group" aria-label={t.community.reactions}>
+                    {shown.map((reaction) => (
+                      <button
+                        key={reaction}
+                        type="button"
+                        disabled={!canAct}
+                        aria-pressed={message.myReaction === reaction}
+                        aria-label={t.community.reactionNames[reaction]}
+                        onClick={() => react(message.id, reaction)}
+                        className={cn("inline-flex min-h-10 min-w-10 items-center justify-center rounded-full border px-2 text-xs transition-colors sm:min-h-6 sm:min-w-0 sm:py-0.5", message.myReaction === reaction ? "border-hot-text bg-surface-muted text-ink" : "border-line text-ink-2 hover:bg-surface-muted")}
+                      >
+                        {EMOJI[reaction]}{message.reactions[reaction] ? ` ${message.reactions[reaction]}` : ""}
+                      </button>
+                    ))}
+                    {canAct && (
+                      <button type="button" aria-expanded={open} aria-label={t.community.reactions} title={t.community.reactions} onClick={() => { setTools(open ? null : message.id); setReporting(null) }} className={cn("fs-bubble-tools inline-flex size-10 items-center justify-center rounded-full text-ink-3 transition-colors hover:bg-surface-muted hover:text-ink sm:size-6", open && "opacity-100")}>
+                        <SmilePlus aria-hidden className="size-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
+                {open && canAct && !message.mine && live && (
+                  <div className="fs-panel-in mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    <button type="button" aria-expanded={reporting === message.id} className="inline-flex min-h-10 items-center gap-1 font-semibold text-ink-2 hover:text-ink sm:min-h-6" onClick={() => setReporting(reporting === message.id ? null : message.id)}><Flag aria-hidden className="size-3" />{t.community.report}</button>
+                    <button type="button" className="inline-flex min-h-10 items-center gap-1 font-semibold text-ink-2 hover:text-ink sm:min-h-6" onClick={() => flag("block", message.id)}><ShieldOff aria-hidden className="size-3" />{t.community.block}</button>
+                    {reporting === message.id && REPORT_REASONS.map((reason) => (
+                      <button key={reason} type="button" className="min-h-10 font-semibold text-hot-text hover:underline sm:min-h-6" onClick={() => flag("report", message.id, reason)}>{t.community.reportReasons[reason]}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </li>
           )
         })}

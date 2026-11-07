@@ -20,6 +20,23 @@ export function livePhase(event: Pick<SportEvent, "status" | "sportId" | "provid
   return phase ? t.match.periodsShort[phase.key].replace("{n}", String(phase.number ?? "")) : null
 }
 
+/** Baseball's feed repeats the phase as a code ("IN4") in the clock field. Only a running clock adds anything. */
+export function liveClock(event: Pick<SportEvent, "status" | "clock">, phase: string | null): string | null {
+  if (event.status !== "live" || !event.clock) return null
+  if (phase && !/^\d/.test(event.clock)) return null
+  return clockText(event.clock)
+}
+
+/** Sets won by each side, in participant order, or null when a set was left unfinished. */
+export function setsWon(event: Pick<SportEvent, "score" | "participants">): [number, number] | null {
+  const { score, participants } = event
+  if (score.kind !== "sets" || score.retired || score.walkover || participants.length !== 2) return null
+  const [first, second] = participants.map((participant) => score.lines.find((line) => line.name === participant.name))
+  if (!first || !second || first.games.length === 0 || first.games.length !== second.games.length) return null
+  const wins = (mine: number[], theirs: number[]) => mine.filter((games, index) => games > theirs[index]).length
+  return [wins(first.games, second.games), wins(second.games, first.games)]
+}
+
 export function isDuel(event: SportEvent): boolean {
   return event.participants.length === 2 && event.score.kind !== "classification"
 }

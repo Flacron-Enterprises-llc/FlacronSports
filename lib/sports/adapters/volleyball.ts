@@ -13,7 +13,9 @@ export function volleyballBreakdown(text: string, sides: Sides): ScoreBreakdown 
   if (!pairs) return null
   const last = pairs.reduce((found, pair, index) => (pair ? index : found), -1)
   if (last < FEWEST_SETS - 1) return null
-  const segments = pairs.slice(0, last + 1).map((pair, index): ScoreSegment => ({ kind: "set", number: index + 1, home: pair?.[0] ?? null, away: pair?.[1] ?? null }))
+  // Sets played come from the final score, so a set the feed left empty shows as a gap and is not dropped.
+  const played = Math.min(sides.homeScore + sides.awayScore, HEADINGS.length)
+  const segments = Array.from({ length: Math.max(last + 1, played) }, (_, index): ScoreSegment => ({ kind: "set", number: index + 1, home: pairs[index]?.[0] ?? null, away: pairs[index]?.[1] ?? null }))
   const won = (side: "home" | "away", other: "home" | "away") => segments.filter((item) => (item[side] ?? 0) > (item[other] ?? 0)).length
   return won("home", "away") <= sides.homeScore && won("away", "home") <= sides.awayScore ? { segments } : null
 }

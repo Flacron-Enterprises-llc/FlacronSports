@@ -11,7 +11,7 @@ import { resolveHomeFeed } from "@/lib/sports/home-feed"
 import { useLocale } from "@/lib/use-locale"
 import { Switch } from "./controls"
 
-const ICON = "inline-flex size-9 shrink-0 items-center justify-center rounded-md text-ink-2 hover:bg-surface-muted hover:text-ink disabled:pointer-events-none disabled:opacity-35"
+const ICON = "inline-flex size-10 shrink-0 items-center justify-center rounded-md text-ink-2 hover:bg-surface-muted hover:text-ink disabled:pointer-events-none disabled:opacity-35"
 
 export function HomeFeedEditor() {
   const { t } = useLocale()
@@ -31,7 +31,7 @@ export function HomeFeedEditor() {
 
   return (
     <Panel
-      className="w-full"
+      className="w-full basis-full"
       title={copy.customise}
       description={copy.customiseLead}
       icon={<SlidersHorizontal aria-hidden />}

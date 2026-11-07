@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { Trophy, Users } from "lucide-react"
-import { CopyButton, ErrorNotice, useConfirm } from "@/components/dashboard/controls"
-import { btn, EmptyState, ListSkeleton, Notice, Panel, Skeleton } from "@/components/site/states"
+import { ErrorNotice, ShareLink, useConfirm } from "@/components/dashboard/controls"
+import { btn, EmptyState, ListSkeleton, Notice, Panel, RankBadge, Skeleton } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import type { Badge } from "@/lib/community/badges"
 import { useLocale } from "@/lib/use-locale"
@@ -38,16 +38,7 @@ const ERRORS: Record<string, "groupLimit" | "groupFull" | "inviteInvalid" | "rem
 function GroupInvite({ token }: { token: string }) {
   const { t, href } = useLocale()
   const link = `${window.location.origin}${href(`/app/predictions/join/${token}`)}`
-  return (
-    <div className="mt-3 rounded-lg border border-line bg-surface-muted p-3">
-      <p className="text-sm text-ink-2">{t.community.inviteOnce}</p>
-      <label className="mt-2 block text-sm font-medium text-ink">
-        {t.community.inviteLink}
-        <input readOnly value={link} onFocus={(event) => event.target.select()} className="fs-input mt-1 h-10 px-3 text-sm" />
-      </label>
-      <div className="mt-2"><CopyButton value={link} label={t.community.copy} done={t.community.copied} /></div>
-    </div>
-  )
+  return <ShareLink value={link} label={t.community.inviteLink} copy={t.community.copy} copied={t.community.copied} note={t.community.inviteOnce} />
 }
 
 function GroupView({ id, onClosed, firstInvite }: { id: string; onClosed(): void; firstInvite: string | null }) {
@@ -108,10 +99,10 @@ function GroupView({ id, onClosed, firstInvite }: { id: string; onClosed(): void
       {notice && <div className="mb-3"><Notice tone="danger" role="alert">{notice}</Notice></div>}
       {detail && (
         <>
-          <ol className="divide-y divide-line text-sm">
+          <ol className="-my-1 divide-y divide-line text-sm">
             {detail.entries.map((entry) => (
-              <li key={entry.ref} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
-                <span className="tabular w-6 shrink-0 text-right font-semibold text-ink-2">{entry.rank}</span>
+              <li key={entry.ref} className="flex min-h-11 items-center gap-2.5 py-1">
+                <RankBadge rank={entry.rank} />
                 <span className="min-w-0 flex-1">
                   <span className={cn("truncate font-medium", entry.mine ? "text-hot-text" : "text-ink")}>{entry.displayName}</span>{" "}
                   <BadgeList badges={entry.badges} />
@@ -123,12 +114,12 @@ function GroupView({ id, onClosed, firstInvite }: { id: string; onClosed(): void
           </ol>
           <p className="mt-3 text-[13px] leading-5 text-ink-2">{t.community.groupRules}</p>
           {detail.isOwner && (
-            <div className="mt-3 border-t border-line pt-3">
+            <div className="mt-3 space-y-3 border-t border-line pt-3">
+              {invite && <GroupInvite token={invite} />}
               <div className="flex flex-wrap gap-2">
                 <button type="button" className={btn("outline", "sm")} onClick={() => rotate("POST")}>{t.community.newInvite}</button>
                 {detail.inviteActive && <button type="button" className={btn("ghost", "sm")} onClick={() => rotate("DELETE")}>{t.community.revokeInvite}</button>}
               </div>
-              {invite && <GroupInvite token={invite} />}
             </div>
           )}
         </>
@@ -185,11 +176,11 @@ export function GroupsPanel({ inviteToken = null }: { inviteToken?: string | nul
 
   return (
     <section aria-label={t.community.groupsTitle} className="space-y-4">
-      <h2 className="text-base font-semibold text-ink">{t.community.groupsTitle}</h2>
+      <h2 className="text-[17px] font-semibold text-ink">{t.community.groupsTitle}</h2>
       {notice && <Notice tone="danger" role="alert">{notice}</Notice>}
       {invited && <Notice tone="info" title={t.community.groupInvited} action={gate.locked ? undefined : <button type="button" onClick={join} className={btn("primary")}>{t.community.joinGroup}</button>}>{t.community.groupRules}</Notice>}
       {invited && gate.prompt}
-      <div className="grid items-start gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+      <div className="grid items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
         <div className="min-w-0 space-y-4">
           {failed && <ErrorNotice onRetry={load}>{t.community.groupFailed}</ErrorNotice>}
           {!groups && !failed && <div role="status" aria-label={t.ui.loading}><ListSkeleton rows={2} /></div>}
@@ -209,7 +200,7 @@ export function GroupsPanel({ inviteToken = null }: { inviteToken?: string | nul
           {gate.locked ? (
             !invited && gate.prompt
           ) : (
-            <form onSubmit={(event) => { event.preventDefault(); void create() }} className="space-y-3 rounded-xl border border-line bg-surface p-4">
+            <form onSubmit={(event) => { event.preventDefault(); void create() }} className="space-y-3 rounded-xl border border-line bg-surface p-4 shadow-[var(--shadow-sm)]">
               <label className="block text-sm font-medium text-ink">{t.community.groupName}<input className="fs-input mt-1 h-10 px-3 text-sm" required maxLength={60} value={name} onChange={(event) => setName(event.target.value)} /></label>
               <button type="submit" className={btn("primary", "md", "w-full")}>{t.community.createGroup}</button>
             </form>

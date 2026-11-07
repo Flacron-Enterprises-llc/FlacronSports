@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation"
 import { Globe2, Newspaper, Search, Shield, Trophy, User } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
 import { SportIcon } from "@/components/site/sport-icon"
-import { CardGridSkeleton, EmptyState, ListSkeleton, Notice, Panel } from "@/components/site/states"
+import { CardGridSkeleton, chipClass, EmptyState, ListSkeleton, Notice, Panel, SectionHeading } from "@/components/site/states"
 import { EventCard } from "@/components/sports/event-card"
 import { FollowLeagueButton, FollowPlayerButton } from "@/components/sports/event-actions"
 import { FavoriteStar, LocalTime } from "@/components/sports/parts"
@@ -16,7 +16,7 @@ import type { CompetitionHit } from "@/lib/search/match"
 import { playerPath, TEAM_SPORTS } from "@/lib/sports/player"
 import { useLocale } from "@/lib/use-locale"
 
-const row = "flex min-w-0 items-center gap-2 py-1.5"
+const row = "flex min-h-11 min-w-0 items-center gap-2.5 py-1"
 
 function Competitions({ items, standings }: { items: CompetitionHit[]; standings: boolean }) {
   const { t, href } = useLocale()
@@ -24,7 +24,7 @@ function Competitions({ items, standings }: { items: CompetitionHit[]; standings
     <ul className="divide-y divide-line">
       {items.map((item) => (
         <li key={item.id} className={row}>
-          <SportIcon id={item.sportId} className="size-4 shrink-0 text-ink-3" />
+          <SportIcon id={item.sportId} className="size-4 shrink-0 text-brand" />
           <span className="min-w-0 flex-1">
             <Link href={href(standings ? `/app/standings/${item.id}` : `/app/scores?q=${encodeURIComponent(item.name)}`)} className="block truncate text-sm font-medium text-ink underline-offset-2 hover:underline">{item.name}</Link>
             {item.today > 0 && <span className="text-xs text-ink-2">{t.discover.gamesToday.replace("{count}", String(item.today))}</span>}
@@ -49,7 +49,7 @@ function Africa({ data }: { data: Results["africa"] }) {
       {data.fixtures.length > 0 && (
         <div>
           <h3 className="text-sm font-semibold text-ink">{copy.africaFixtures}</h3>
-          <div className="fs-stagger mt-2 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="fs-settle mt-2 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {data.fixtures.map((event) => <EventCard key={event.id} event={event} t={t} href={href} />)}
           </div>
         </div>
@@ -59,7 +59,7 @@ function Africa({ data }: { data: Results["africa"] }) {
           <Panel title={copy.africaTeams} icon={<Shield aria-hidden />}>
             <ul className="flex flex-wrap gap-1.5">
               {data.teams.map((name) => (
-                <li key={name}><Link href={href(`/app/team/${encodeURIComponent(name)}?sport=football`)} className="inline-flex min-h-8 items-center rounded-full border border-line bg-surface px-3 text-[13px] font-medium text-ink-2 hover:border-line-strong hover:text-ink">{name}</Link></li>
+                <li key={name}><Link href={href(`/app/team/${encodeURIComponent(name)}?sport=football`)} className={chipClass(false)}>{name}</Link></li>
               ))}
             </ul>
           </Panel>
@@ -106,8 +106,8 @@ export function SearchResults() {
 
       {data.fixtures.length > 0 && (
         <section aria-label={copy.fixtures}>
-          <h2 className="text-[17px] font-semibold text-ink">{copy.fixtures}</h2>
-          <div className="fs-stagger mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <SectionHeading title={copy.fixtures} />
+          <div className="fs-settle mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {data.fixtures.map((event) => <EventCard key={event.id} event={event} t={t} href={href} />)}
           </div>
         </section>
@@ -120,7 +120,7 @@ export function SearchResults() {
               <ul className="divide-y divide-line">
                 {data.teams.map((team) => (
                   <li key={`${team.sportId}-${team.name}`} className={row}>
-                    <SportIcon id={team.sportId} className="size-4 shrink-0 text-ink-3" />
+                    <SportIcon id={team.sportId} className="size-4 shrink-0 text-brand" />
                     <Link href={href(`/app/team/${encodeURIComponent(team.name)}?sport=${team.sportId}`)} className="min-w-0 flex-1 truncate text-sm font-medium text-ink underline-offset-2 hover:underline">{team.name}</Link>
                     <FavoriteStar team={team.name} />
                   </li>
@@ -133,7 +133,7 @@ export function SearchResults() {
               <ul className="divide-y divide-line">
                 {data.players.map((player) => (
                   <li key={player.id} className={row}>
-                    <SportIcon id={player.sportId} className="size-4 shrink-0 text-ink-3" />
+                    <SportIcon id={player.sportId} className="size-4 shrink-0 text-brand" />
                     <span className="min-w-0 flex-1">
                       <Link href={href(playerPath(player.id))} className="block truncate text-sm font-medium text-ink underline-offset-2 hover:underline">{player.name}</Link>
                       {player.team && <span className="block truncate text-xs text-ink-2">{player.team}</span>}

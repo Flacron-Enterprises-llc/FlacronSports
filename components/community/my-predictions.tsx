@@ -55,18 +55,18 @@ export function MyPredictions() {
   }, [load])
 
   return (
-    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <Panel id="my-predictions" title={t.community.myPredictions} description={t.community.myPredictionsLead} icon={<Medal aria-hidden />}>
         {failed && !picks && <ErrorNotice onRetry={load}>{t.community.myPredictionsFailed}</ErrorNotice>}
         {!picks && !failed && <div role="status" aria-label={t.ui.loading}><ListSkeleton rows={3} /></div>}
         {picks?.length === 0 && <EmptyState compact icon={<Medal aria-hidden />} title={t.community.noPredictions} body={t.community.noPredictionsBody} action={{ href: href("/app/scores?status=upcoming"), label: t.community.browseUpcoming }} />}
         {picks && picks.length > 0 && (
-          <ul className="divide-y divide-line text-sm">
+          <ul className="space-y-2 text-sm">
             {picks.map((pick) => (
-              <li key={pick.matchId} data-testid="my-prediction" className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 py-3 first:pt-0 last:pb-0">
+              <li key={pick.matchId} data-testid="my-prediction" className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 rounded-lg border border-line px-3 py-2.5">
                 <div className="min-w-0 flex-1 basis-56">
-                  <Link href={href(`/app/match/${pick.matchId}?tab=chat`)} className="block truncate font-semibold text-hot-text hover:underline">{pick.game?.title ?? t.community.gameUnavailable}</Link>
-                  <p className="mt-0.5 break-words text-ink">{pickWords(pick, pick.game, t.community)}</p>
+                  <Link href={href(`/app/match/${pick.matchId}?tab=chat`)} className="block truncate font-semibold text-ink underline-offset-2 hover:underline">{pick.game?.title ?? t.community.gameUnavailable}</Link>
+                  <p className="mt-0.5 break-words font-medium text-hot-text">{pickWords(pick, pick.game, t.community)}</p>
                   <p className="mt-0.5 text-xs text-ink-2"><LocalTime iso={pick.kickoffUTC} mode="datetime" /></p>
                 </div>
                 <PickStatus pick={pick} />

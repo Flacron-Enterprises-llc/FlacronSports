@@ -31,7 +31,7 @@ function Chips({ tips, onPick }: { tips: string[]; onPick(tip: string): void }) 
   return (
     <ul className="flex flex-wrap gap-2 [.fs-chips-center_&]:justify-center">
       {tips.map((tip) => (
-        <li key={tip}><button type="button" onClick={() => onPick(tip)} className="rounded-full border border-line px-3 py-1.5 text-[13px] font-medium text-ink-2 transition-colors hover:border-line-strong hover:bg-surface-muted hover:text-ink">{tip}</button></li>
+        <li key={tip}><button type="button" onClick={() => onPick(tip)} className="min-h-10 rounded-full border border-line bg-surface px-3.5 py-1.5 text-[13px] font-medium text-ink-2 transition-colors hover:border-line-strong hover:text-ink sm:min-h-9">{tip}</button></li>
       ))}
     </ul>
   )
@@ -86,14 +86,15 @@ function AnswerBody({ answer }: { answer: AssistantAnswer }) {
       )}
       {answer.table && (
         <SpoilerGuard label={t.spoiler.reveal}>
-          <table className="mt-3 w-full rounded-lg border border-line bg-surface text-sm">
-            <caption className="px-3 pt-2 text-left text-ink-2">{answer.table.league}{answer.table.season ? ` · ${answer.table.season}` : ""}</caption>
+          <div className="mt-3 overflow-x-auto rounded-lg border border-line bg-surface">
+          <table className="w-full text-sm">
+            <caption className="px-3 pt-2 text-left text-ink-2">{answer.table.league}{answer.table.season ? ` · ${answer.table.season}` : ""}{answer.table.calculated ? ` · ${t.standings.calculated}` : ""}</caption>
             <thead>
               <tr className="text-left text-xs text-ink-2">
                 <th scope="col" className="px-3 py-1.5 font-medium">{t.standings.rank}</th>
                 <th scope="col" className="py-1.5 font-medium">{t.standings.team}</th>
                 <th scope="col" className="px-2 py-1.5 text-right font-medium">{t.standings.played}</th>
-                <th scope="col" className="px-3 py-1.5 text-right font-medium">{t.standings.points}</th>
+                <th scope="col" className="px-3 py-1.5 text-right font-medium">{answer.table.calculated ? t.standings.record : t.standings.points}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -102,11 +103,12 @@ function AnswerBody({ answer }: { answer: AssistantAnswer }) {
                   <td className="tabular px-3 py-1.5">{row.rank ?? t.standings.notSupplied}</td>
                   <td className="py-1.5">{row.team}</td>
                   <td className="tabular px-2 py-1.5 text-right">{row.played ?? t.standings.notSupplied}</td>
-                  <td className="tabular px-3 py-1.5 text-right">{row.points ?? t.standings.notSupplied}</td>
+                  <td className="tabular px-3 py-1.5 text-right">{(answer.table?.calculated ? row.record : row.points) ?? t.standings.notSupplied}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
           <Link href={href(`/app/standings/${answer.table.leagueId}`)} className="mt-2 inline-block text-sm font-semibold text-hot-text hover:underline">{t.assistant.fullTable.replace("{total}", String(answer.table.total))}</Link>
         </SpoilerGuard>
       )}
@@ -189,27 +191,27 @@ export function AssistantPanel() {
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
       <div className="min-w-0 space-y-3">
         {addon === "success" && <Notice tone="success" role="status">{t.addons.confirming}</Notice>}
         {addon === "canceled" && <Notice role="status">{t.account.checkoutCanceled}</Notice>}
-        <section aria-label={t.assistant.title} className="fs-rise flex h-[min(68dvh,640px)] min-h-[420px] flex-col rounded-xl border border-line bg-surface shadow-[var(--shadow-sm)]">
-          <div ref={log} role="log" aria-live="polite" aria-busy={busy} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
+        <section aria-label={t.assistant.title} className="fs-rise flex h-[calc(100dvh-16rem)] min-h-[440px] flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-[var(--shadow-sm)] sm:h-[calc(100dvh-13.5rem)]">
+          <div ref={log} role="log" aria-live="polite" aria-busy={busy} className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-5">
             {turns.length === 0 && (
               <div className="flex h-full flex-col items-center justify-center text-center">
-                <span className="inline-flex size-12 items-center justify-center rounded-2xl border border-line bg-surface text-brand shadow-[var(--shadow-sm)]"><Sparkles aria-hidden className="size-5" /></span>
-                <h2 className="mt-4 text-base font-semibold text-ink">{t.ui.assistantHello}</h2>
-                <div className="fs-chips-center mt-4 max-w-lg"><Chips tips={tips} onPick={(tip) => void ask(tip)} /></div>
+                <span className="inline-flex size-14 items-center justify-center rounded-2xl bg-navy text-white dark:bg-surface-muted dark:text-brand"><Sparkles aria-hidden className="size-6" /></span>
+                <h2 className="mt-4 text-lg font-semibold text-ink">{t.ui.assistantHello}</h2>
+                <div className="fs-chips-center mt-4 max-w-xl"><Chips tips={tips} onPick={(tip) => void ask(tip)} /></div>
               </div>
             )}
             {turns.map((turn) => (
               <div key={turn.id} className="fs-panel-in space-y-3">
                 <div className="flex justify-end">
-                  <p className="fs-chat-user max-w-[85%] break-words rounded-2xl rounded-br-md px-4 py-2.5 text-sm leading-6">{turn.question}</p>
+                  <p className="fs-chat-user max-w-[85%] break-words rounded-2xl rounded-tr-md px-4 py-2.5 text-sm leading-6 sm:max-w-[70%]">{turn.question}</p>
                 </div>
                 <div className="flex gap-2.5">
-                  <span aria-hidden className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-muted text-brand"><Bot className="size-4" /></span>
-                  <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md bg-surface-muted px-4 py-3 text-sm">
+                  <span aria-hidden className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-navy text-white dark:bg-surface-muted dark:text-brand"><Bot className="size-4" /></span>
+                  <div className="min-w-0 max-w-full flex-1 rounded-2xl rounded-tl-md bg-surface-muted px-4 py-3 text-sm sm:max-w-[85%] sm:flex-initial">
                     {turn.answer && <AnswerBody answer={turn.answer} />}
                     {turn.error && (
                       <div role="alert">
@@ -228,33 +230,35 @@ export function AssistantPanel() {
             ))}
             {turns.length > 0 && !busy && <div className="pl-[2.625rem]"><Chips tips={tips} onPick={(tip) => void ask(tip)} /></div>}
           </div>
-          <form onSubmit={(event) => { event.preventDefault(); void ask(question) }} className="flex items-end gap-2 border-t border-line p-3">
-            <label className="min-w-0 flex-1">
-              <span className="sr-only">{t.assistant.question}</span>
-              <textarea
-                className="fs-input block max-h-32 resize-none px-3 py-2 text-sm"
-                rows={1}
-                required
-                minLength={2}
-                maxLength={300}
-                placeholder={t.assistant.placeholder}
-                value={question}
-                onChange={(event) => setQuestion(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault()
-                    void ask(question)
-                  }
-                }}
-              />
-            </label>
-            <button type="submit" disabled={busy || question.trim().length < 2} className={btn("primary", "md", "shrink-0")}>
-              <Send aria-hidden className="size-4" /><span className="hidden sm:inline">{t.assistant.ask}</span><span className="sr-only sm:hidden">{t.assistant.ask}</span>
-            </button>
+          <form onSubmit={(event) => { event.preventDefault(); void ask(question) }} className="border-t border-line p-2.5 sm:p-3">
+            <div className="fs-joined items-end rounded-2xl">
+              <label className="min-w-0 flex-1">
+                <span className="sr-only">{t.assistant.question}</span>
+                <textarea
+                  className="block max-h-32 w-full resize-none px-3.5 py-2.5 text-sm"
+                  rows={1}
+                  required
+                  minLength={2}
+                  maxLength={300}
+                  placeholder={t.assistant.placeholder}
+                  value={question}
+                  onChange={(event) => setQuestion(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault()
+                      void ask(question)
+                    }
+                  }}
+                />
+              </label>
+              <button type="submit" disabled={busy || question.trim().length < 2} className={btn("primary", "sm", "m-1 min-h-10 shrink-0 rounded-xl sm:min-h-9")}>
+                <Send aria-hidden className="size-4" /><span className="hidden sm:inline">{t.assistant.ask}</span><span className="sr-only sm:hidden">{t.assistant.ask}</span>
+              </button>
+            </div>
           </form>
         </section>
       </div>
-      <aside aria-label={t.ui.assistantAllowance} className="min-w-0 space-y-4">
+      <aside aria-label={t.ui.assistantAllowance} className="min-w-0 space-y-4 xl:max-h-[max(calc(100dvh-13.5rem),440px)] xl:overflow-y-auto">
         <Allowance />
         <AddonOffers compact />
       </aside>

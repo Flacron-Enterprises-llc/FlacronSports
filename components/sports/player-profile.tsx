@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { User } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
-import { DetailSkeleton, EmptyState, PageHeader, Panel } from "@/components/site/states"
+import { DetailSkeleton, EmptyState, FactGrid, PageHeader, Panel } from "@/components/site/states"
 import { FollowPlayerButton } from "@/components/sports/event-actions"
 import { FavoriteStar, LocalTime } from "@/components/sports/parts"
 import { authFetch } from "@/lib/auth-fetch"
@@ -51,35 +51,30 @@ export function PlayerProfileView({ id }: { id: string }) {
 
   return (
     <>
-      <PageHeader title={player.name} lead={sport?.name[locale]} icon={<User aria-hidden />} actions={<span className="rounded-lg border border-line bg-surface">{follow}</span>} />
+      <PageHeader title={player.name} lead={sport?.name[locale]} icon={<User aria-hidden />} actions={<span className="inline-flex size-10 items-center justify-center rounded-lg border border-line bg-surface">{follow}</span>} />
       <Panel>
-        <dl className="grid gap-4 text-sm sm:grid-cols-2">
-          {player.team && (
-            <div className="min-w-0">
-              <dt className="text-ink-2">{copy.team}</dt>
-              <dd className="mt-0.5 font-medium text-ink"><Link href={href(`/app/team/${encodeURIComponent(player.team)}?sport=${player.sportId}`)} className="text-hot-text underline-offset-2 hover:underline">{player.team}</Link></dd>
-            </div>
-          )}
-          {shown.map(([label, value]) => (
-            <div key={label} className="min-w-0">
-              <dt className="text-ink-2">{label}</dt>
-              <dd className="mt-0.5 font-medium text-ink">{value}</dd>
-            </div>
-          ))}
-        </dl>
+        {(player.team || shown.length > 0) && (
+          <FactGrid
+            className="grid-cols-2 sm:grid-cols-3"
+            facts={[
+              ...(player.team ? [{ label: copy.team, value: <Link href={href(`/app/team/${encodeURIComponent(player.team)}?sport=${player.sportId}`)} className="text-hot-text underline-offset-2 hover:underline">{player.team}</Link> }] : []),
+              ...shown.map(([label, value]) => ({ label, value })),
+            ]}
+          />
+        )}
         {!player.team && shown.length === 0 && <p className="text-sm text-ink-2">{copy.playerNoDetails}</p>}
       </Panel>
       {career && career.moves.length > 0 && (
         <Panel title={copy.moves} description={copy.movesLead} className="mt-4">
           <ul className="divide-y divide-line">
             {career.moves.map((move) => (
-              <li key={`${move.team}-${move.type}-${move.joined}`} className="flex items-baseline justify-between gap-3 py-2 text-sm">
+              <li key={`${move.team}-${move.type}-${move.joined}`} className="flex min-h-10 items-center justify-between gap-3 py-1.5 text-sm">
                 <span className="min-w-0 font-medium text-ink">{move.team} <span className="font-normal text-ink-2">· {copy.moveTypes[move.type]}</span></span>
                 <span className="tabular shrink-0 text-ink-2">{move.left === null ? copy.moveJoined.replace("{year}", String(move.joined)) : `${move.joined}–${move.left}`}</span>
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-xs leading-5 text-ink-3">{t.feed.updated}: <LocalTime iso={career.checkedAt} mode="datetime" /></p>
+          <p className="mt-3 text-xs leading-5 text-ink-2">{t.feed.updated}: <LocalTime iso={career.checkedAt} mode="datetime" /></p>
         </Panel>
       )}
     </>

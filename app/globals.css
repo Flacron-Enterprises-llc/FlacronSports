@@ -500,6 +500,99 @@ p { text-wrap: pretty; }
 .fs-chat-user { background: var(--fs-navy); color: #fff; }
 [data-theme='dark'] .fs-chat-user { background: #17335f; }
 
+/* ------------------------------------------------------------- Dashboard design layer */
+
+:root { --app-bar: 7.4rem; }
+@media (min-width: 640px) { :root { --app-bar: 4.0625rem; } }
+
+/* A list settles as one piece. Delays per card leave long pages blank while they run. */
+.fs-settle > * { animation: fs-fade 240ms var(--ease) both; }
+
+/* Stays under the app bar, which keeps its own height on each breakpoint. */
+.fs-stick { position: sticky; top: var(--app-bar); z-index: 10; }
+
+/* Footer strip of a card, in place of a rule. */
+.fs-foot { background: color-mix(in oklab, var(--surface-muted) 62%, var(--surface)); }
+
+.fs-row { position: relative; transition: background-color 160ms; }
+.fs-row:hover { background: color-mix(in oklab, var(--surface-muted) 55%, var(--surface)); }
+.fs-row-live::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 9999px 9999px 0;
+  background: var(--live);
+}
+
+/* Two columns of rows on wide screens, with hairlines that never double up. */
+.fs-rows { display: grid; overflow: hidden; }
+.fs-rows > * { min-width: 0; border-bottom: 1px solid var(--line); margin-bottom: -1px; }
+@media (min-width: 1280px) {
+  .fs-rows-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fs-rows-2 > :nth-child(odd) { border-right: 1px solid var(--line); }
+}
+
+/* The scoreboard: match hero numerals and the strip of periods beneath them. */
+.fs-score { font-family: var(--font-sora), ui-sans-serif, system-ui, sans-serif; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; line-height: 1; }
+.fs-hero-live::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #ff6b7f 22%, #ff6b7f 78%, transparent);
+  animation: fs-hero-pulse 2.8s ease-in-out infinite;
+}
+@keyframes fs-hero-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+.fs-seg { background: rgb(255 255 255 / 0.08); border: 1px solid rgb(255 255 255 / 0.1); }
+
+/* Comparison bars meet in the middle, so each side reads from its own edge. */
+.fs-bar-home { background: var(--fs-navy); }
+[data-theme='dark'] .fs-bar-home { background: var(--brand); }
+.fs-bar-away { background: var(--accent); }
+.fs-bar-grow { transform-origin: var(--from, left) center; animation: fs-bar-grow 620ms var(--ease) both; }
+@keyframes fs-bar-grow { from { transform: scaleX(0); } to { transform: none; } }
+
+/* Result pills. */
+.fs-form-win { color: var(--success); background: color-mix(in oklab, var(--success) 14%, transparent); }
+.fs-form-loss { color: var(--danger); background: color-mix(in oklab, var(--danger) 12%, transparent); }
+.fs-form-draw { color: var(--ink-2); background: var(--surface-muted); }
+
+/* Video tiles. The scrim keeps the play control readable on any thumbnail. */
+.fs-thumb { position: relative; display: block; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: var(--fs-navy-deep); }
+.fs-thumb img { transition: transform 420ms var(--ease); }
+.fs-thumb::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to top, rgb(0 26 63 / 0.62), transparent 52%); }
+.fs-play { box-shadow: 0 6px 20px -6px rgb(0 0 0 / 0.6); transition: transform 200ms var(--ease), background-color 200ms; }
+.fs-tile:hover .fs-thumb img { transform: scale(1.03); }
+.fs-tile:hover .fs-play, .fs-thumb:focus-visible .fs-play { transform: scale(1.08); }
+
+/* Chat. Reactions and moderation stay out of the way until a message is in use. */
+.fs-bubble-mine { background: var(--fs-navy); color: #fff; }
+[data-theme='dark'] .fs-bubble-mine { background: #17335f; }
+.fs-bubble { background: var(--surface-muted); color: var(--ink); }
+.fs-bubble-tools { opacity: 0; transition: opacity 160ms; }
+.fs-message:hover .fs-bubble-tools, .fs-message:focus-within .fs-bubble-tools { opacity: 1; }
+@media (hover: none) { .fs-bubble-tools { opacity: 1; } }
+
+/* Tick boxes drawn as whole rows, so the target is the row and not a 13 px square. */
+.fs-check-row { transition: border-color 160ms, background-color 160ms; }
+.fs-check-row:has(input:checked) { border-color: var(--success); background: color-mix(in oklab, var(--success) 7%, var(--surface)); }
+.fs-check-row:has(input:focus-visible), .fs-choice:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.fs-choice:has(input:checked) { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 6%, var(--surface)); }
+
+/* A joined field and button, for a link to copy or a message to send. */
+.fs-joined { display: flex; align-items: stretch; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); transition: border-color 160ms, box-shadow 160ms; }
+.fs-joined:focus-within { border-color: var(--accent); box-shadow: var(--ring-soft); }
+.fs-joined input, .fs-joined textarea { min-width: 0; flex: 1; border: 0; background: transparent; color: var(--ink); outline: none; }
+.fs-joined input::placeholder, .fs-joined textarea::placeholder { color: var(--ink-3); }
+
+.fs-summary { list-style: none; }
+.fs-summary::-webkit-details-marker { display: none; }
+details[open] > .fs-summary .fs-chevron { transform: rotate(90deg); }
+.fs-chevron { transition: transform 200ms var(--ease); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-delay: 0ms !important;
@@ -512,6 +605,8 @@ p { text-wrap: pretty; }
   .js-reveal [data-reveal] { opacity: 1; transform: none; }
   .fs-radar { animation: none; }
   .fs-boot-ring, .fs-boot-pulse, .fs-boot-bar::after, .fs-live-dot, .fs-badge-dot { animation: none !important; }
+  .fs-hero-live::after, .fs-bar-grow { animation: none !important; }
+  .fs-tile:hover .fs-thumb img, .fs-tile:hover .fs-play { transform: none; }
   .fs-navbar[data-state='loading'] { animation: none; transform: scaleX(0.6); }
   .fs-lift:hover { transform: none; }
   .fs-success circle, .fs-success path { animation: none; stroke-dashoffset: 0; }
@@ -526,5 +621,5 @@ p { text-wrap: pretty; }
 
 @media print {
   .skip-link, .fs-consent { display: none !important; }
-  .fs-stagger > *, .fs-rise, [data-reveal] { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .fs-stagger > *, .fs-settle > *, .fs-rise, [data-reveal] { animation: none !important; opacity: 1 !important; transform: none !important; }
 }

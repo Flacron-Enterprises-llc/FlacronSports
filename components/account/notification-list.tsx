@@ -37,12 +37,12 @@ export function NotificationList() {
   if (items.length === 0) return <EmptyState icon={<Bell aria-hidden />} title={t.notifications.empty} body={t.notifications.emptyBody} action={{ href: href("/app/scores"), label: t.notifications.browse }} />
 
   return (
-    <ul className="fs-stagger space-y-2.5">
+    <ul className="fs-settle space-y-2">
       {items.map((item) => {
         const fresh = item.createdAt > seenBefore
         const Icon = item.type === "start" ? PlayCircle : Flag
         return (
-          <li key={item.id} className={cn("fs-lift flex gap-3 rounded-xl border bg-surface p-4 shadow-[var(--shadow-sm)]", fresh ? "border-orange" : "border-line")}>
+          <li key={item.id} className={cn("flex gap-3 rounded-xl border bg-surface p-3.5 shadow-[var(--shadow-sm)]", fresh ? "border-orange" : "border-line")}>
             <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-brand"><Icon aria-hidden className="size-[18px]" /></span>
             <div className="min-w-0 flex-1">
               <h2 className="font-sans text-sm font-semibold leading-5 text-ink">
@@ -50,7 +50,7 @@ export function NotificationList() {
                 {fresh && <span className="sr-only"> ({t.ui.unread})</span>}
               </h2>
               <p className="mt-0.5 text-sm leading-6 text-ink-2">{item.body}</p>
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-2">
+              <div className="mt-1 flex min-h-8 flex-wrap items-center justify-between gap-2 text-xs text-ink-2">
                 <LocalTime iso={item.createdAt} mode="datetime" />
                 {item.path.startsWith("/app/match/") && <Link href={href(item.path)} className="inline-flex items-center gap-1 font-semibold text-hot-text hover:underline">{t.notifications.open}<ArrowRight aria-hidden className="size-3.5" /></Link>}
               </div>

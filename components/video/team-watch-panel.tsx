@@ -28,12 +28,12 @@ export function TeamWatchPanel({ sport, team, recent, feed, t, href }: { sport: 
   const more = onWatch ? <Link href={href(`/app/watch?${new URLSearchParams({ sport, team })}`)} className="inline-flex items-center gap-1 text-[13px] font-semibold text-hot-text hover:underline">{t.watch.teamMore}<ArrowRight aria-hidden className="size-3.5" /></Link> : undefined
 
   return (
-    <Panel className="mb-7" title={t.watch.teamPanel} icon={<Clapperboard aria-hidden />} actions={more}>
+    <Panel className="mb-6" title={t.watch.teamPanel} icon={<Clapperboard aria-hidden />} actions={more}>
       <div className="space-y-5">
         {live.length > 0 && (
           <div>
             <h3 className="text-sm font-semibold text-ink">{copy.live}</h3>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">{live.map((event) => <EventCard key={event.id} event={event} t={t} href={href} />)}</div>
+            <div className="fs-settle mt-3 grid gap-3 sm:grid-cols-2">{live.map((event) => <EventCard key={event.id} event={event} t={t} href={href} />)}</div>
           </div>
         )}
         {highlights.length > 0 && (
@@ -50,8 +50,8 @@ export function TeamWatchPanel({ sport, team, recent, feed, t, href }: { sport: 
         )}
         {listings.length > 0 && (
           <div>
-            <h3 className="mb-1 text-sm font-semibold text-ink">{copy.listings}</h3>
-            <ListingList broadcasts={listings} href={href} />
+            <h3 className="mb-3 text-sm font-semibold text-ink">{copy.listings}</h3>
+            <ListingList broadcasts={listings} href={href} className="xl:grid-cols-2" />
           </div>
         )}
       </div>

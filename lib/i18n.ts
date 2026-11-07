@@ -407,6 +407,11 @@ const en = {
     empty: "No standings available", emptyBody: "No table is available for this competition.",
     limited: "Only part of this table is available right now.",
     sourceUpdated: "Last updated", notSupplied: "Not supplied", browse: "Browse scores", zones: "Qualification and relegation places",
+    winPercent: "Win %", overtimeLosses: "OT or shootout losses",
+    record: "W-L", calculated: "Calculated from results", calculatedBasis: "{games} games counted, the latest on {date}. This is not an official table: league points, conferences, tiebreakers and any deductions are not included.",
+    calculatedCricket: "A game with no stated result goes to the higher total, so one decided on a revised target can be counted the wrong way round. Games with no result are left out.",
+    calculatedStale: "This table may be out of date: the latest update could not be confirmed.",
+    scored: { points: ["Points for", "Points against"], goals: ["Goals for", "Goals against"], sets: ["Sets for", "Sets against"], runs: ["Runs for", "Runs against"] },
   },
   cups: {
     title: "Cup rounds", lead: "Knockout games, round by round, in the cups where every round is confirmed.", link: "See knockout rounds", choose: "Competition",
@@ -1029,6 +1034,11 @@ const fr: Dictionary = {
     empty: "Aucun classement disponible", emptyBody: "Aucun classement n'est disponible pour cette compétition.",
     limited: "Seule une partie de ce classement est disponible pour le moment.",
     sourceUpdated: "Dernière mise à jour", notSupplied: "Non fourni", browse: "Voir les scores", zones: "Places de qualification et de relégation",
+    winPercent: "% de victoires", overtimeLosses: "Défaites en prolongation ou aux tirs",
+    record: "V-D", calculated: "Calculé à partir des résultats", calculatedBasis: "{games} matchs comptés, le dernier le {date}. Ce n'est pas un classement officiel : les points de ligue, les conférences, les critères de départage et les éventuelles pénalités ne sont pas inclus.",
+    calculatedCricket: "Un match sans résultat indiqué revient au total le plus élevé : un match décidé sur un objectif révisé peut donc être compté à l'envers. Les matchs sans décision ne sont pas comptés.",
+    calculatedStale: "Ce classement n'est peut-être pas à jour : la dernière mise à jour n'a pas pu être confirmée.",
+    scored: { points: ["Points pour", "Points contre"], goals: ["Buts pour", "Buts contre"], sets: ["Sets pour", "Sets contre"], runs: ["Points pour", "Points contre"] },
   },
   cups: {
     title: "Tours de coupe", lead: "Les matchs à élimination directe, tour par tour, dans les coupes où chaque tour est confirmé.", link: "Voir les tours à élimination directe", choose: "Compétition",

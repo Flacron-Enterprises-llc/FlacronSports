@@ -7,7 +7,8 @@ import { Bell, ChevronRight, CircleHelp, Lock, ShieldCheck, SlidersHorizontal } 
 import { toast } from "sonner"
 import { useAccount } from "@/components/dashboard/account-context"
 import { Switch, useConfirm } from "@/components/dashboard/controls"
-import { btn, Panel } from "@/components/site/states"
+import { SportIcon } from "@/components/site/sport-icon"
+import { btn, chipClass, Panel } from "@/components/site/states"
 import { startTour } from "@/components/tour/app-tour"
 import { authFetch } from "@/lib/auth-fetch"
 import { signOutUser } from "@/lib/firebase-auth"
@@ -27,7 +28,7 @@ const DETECTED_KEY = "fs-time-zone-detected"
 function Row({ title, help, children }: { title: string; help?: string; children: (labelId: string) => React.ReactNode }) {
   const id = useId()
   return (
-    <div className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+    <div className="flex min-h-12 items-center justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
       <div className="min-w-0">
         <p id={id} className="text-sm font-medium text-ink">{title}</p>
         {help && <p className="mt-0.5 text-[13px] leading-5 text-ink-2">{help}</p>}
@@ -93,17 +94,17 @@ export function SettingsPanel() {
   }
 
   const sections = [["general", t.settings.general], ["alerts", t.settings.alerts], ["calendar", t.discover.feedManage], ["privacy", t.settings.privacy], ["help", t.settings.help]]
-  const selectClass = "fs-input h-9 w-auto max-w-[11rem] px-2 text-sm"
+  const selectClass = "fs-input h-10 w-auto max-w-[11rem] px-2 text-sm sm:h-9"
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[180px_minmax(0,1fr)]">
+    <div className="grid gap-4 lg:grid-cols-[170px_minmax(0,1fr)] lg:gap-6">
       {dialog}
       <nav aria-label={t.settings.title} className="fs-noscrollbar -mx-1 flex gap-1 overflow-x-auto px-1 lg:sticky lg:top-24 lg:mx-0 lg:flex-col lg:self-start lg:px-0">
-        {sections.map(([id, label]) => <a key={id} href={`#${id}`} className="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-ink-2 transition-colors hover:bg-surface-muted hover:text-ink">{label}</a>)}
-        <Link href={href("/app/settings/security")} className="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-ink-2 transition-colors hover:bg-surface-muted hover:text-ink">{t.security.title}</Link>
+        {sections.map(([id, label]) => <a key={id} href={`#${id}`} className="inline-flex min-h-10 shrink-0 items-center rounded-lg px-3 text-sm font-medium text-ink-2 transition-colors hover:bg-surface-muted hover:text-ink">{label}</a>)}
+        <Link href={href("/app/settings/security")} className="inline-flex min-h-10 shrink-0 items-center rounded-lg px-3 text-sm font-medium text-ink-2 transition-colors hover:bg-surface-muted hover:text-ink">{t.security.title}</Link>
       </nav>
 
-      <div className="fs-stagger min-w-0 space-y-5">
+      <div className="fs-settle min-w-0 space-y-4">
         <Panel id="general" title={t.settings.general} icon={<SlidersHorizontal aria-hidden />}>
           <div className="divide-y divide-line">
             <Row title={t.settings.language}>
@@ -168,8 +169,8 @@ export function SettingsPanel() {
                   {SPORTS.filter((sport) => sport.enabled).map((sport) => {
                     const active = filters.sports.includes(sport.id)
                     return (
-                      <button key={sport.id} type="button" aria-pressed={active} disabled={prefs.alerts.muted} onClick={() => save({ alerts: { ...prefs.alerts, filters: { ...filters, sports: active ? filters.sports.filter((item) => item !== sport.id) : [...filters.sports, sport.id] } } })} className={`min-h-8 rounded-full border px-3 text-[13px] font-medium ${active ? "border-navy bg-navy text-white dark:border-brand dark:bg-brand dark:text-brand-on" : "border-line bg-surface text-ink-2 hover:text-ink"}`}>
-                        {sport.name[locale]}
+                      <button key={sport.id} type="button" aria-pressed={active} disabled={prefs.alerts.muted} onClick={() => save({ alerts: { ...prefs.alerts, filters: { ...filters, sports: active ? filters.sports.filter((item) => item !== sport.id) : [...filters.sports, sport.id] } } })} className={chipClass(active)}>
+                        <SportIcon id={sport.id} className="size-3.5" />{sport.name[locale]}
                       </button>
                     )
                   })}
@@ -185,7 +186,7 @@ export function SettingsPanel() {
               {(["quietStart", "quietEnd"] as const).map((field) => (
                 <label key={field} className="flex items-center gap-2 whitespace-nowrap">
                   {t.settings[field]}
-                  <select className="fs-input h-9 w-auto px-2 text-sm" value={prefs.alerts[field] ?? ""} onChange={(event) => save({ alerts: { ...prefs.alerts, [field]: event.target.value === "" ? null : Number(event.target.value) } })}>
+                  <select className="fs-input h-10 w-auto px-2 text-sm sm:h-9" value={prefs.alerts[field] ?? ""} onChange={(event) => save({ alerts: { ...prefs.alerts, [field]: event.target.value === "" ? null : Number(event.target.value) } })}>
                     <option value="">{t.settings.off}</option>
                     {Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}:00</option>)}
                   </select>

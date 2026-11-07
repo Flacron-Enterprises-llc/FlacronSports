@@ -40,14 +40,16 @@ export function AddonOffers({ compact }: { compact?: boolean }) {
 
   return (
     <Panel id="addons" title={t.addons.title} description={t.addons.lead} icon={<ShoppingBag aria-hidden />}>
-      <ul className={cn("grid gap-3", !compact && "sm:grid-cols-2")}>
+      <ul className={cn("grid gap-2.5", !compact && "sm:grid-cols-2 xl:grid-cols-4")}>
         {skus.map((sku) => (
-          <li key={sku} className="fs-lift flex flex-col rounded-lg border border-line p-4">
-            <h3 className="text-sm font-semibold text-ink">{t.addons.items[sku][0]}</h3>
-            <p className="mt-1 text-lg font-semibold text-ink tabular">{money(ADDONS[sku].priceUsd)}</p>
-            <p className="mt-1 flex-1 text-sm leading-6 text-ink-2">{t.addons.items[sku][1]}</p>
+          <li key={sku} className={cn("fs-lift flex flex-col rounded-lg border border-line", compact ? "p-3" : "p-4")}>
+            <div className="flex items-baseline justify-between gap-2">
+              <h3 className="min-w-0 text-sm font-semibold text-ink">{t.addons.items[sku][0]}</h3>
+              <p className="tabular shrink-0 font-display text-[15px] font-semibold text-ink">{money(ADDONS[sku].priceUsd)}</p>
+            </div>
+            <p className={cn("mt-1 flex-1 leading-5 text-ink-2", compact ? "text-xs" : "text-[13px]")}>{t.addons.items[sku][1]}</p>
             {user && (
-              <button type="button" disabled={pending !== null} onClick={() => buy(sku)} className={btn("outline", "md", "mt-3 w-full")}>
+              <button type="button" disabled={pending !== null} onClick={() => buy(sku)} className={btn("outline", "sm", "mt-2.5 w-full")}>
                 {pending === sku ? t.pricing.opening : t.addons.buy}
               </button>
             )}

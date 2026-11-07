@@ -14,7 +14,7 @@ export function DateJump({ value, template }: { value: string; template: string 
         type="date"
         value={value}
         onChange={(event) => { if (event.target.value) router.push(template.replace("{date}", event.target.value)) }}
-        className="fs-input h-10 px-3 text-sm sm:w-40"
+        className="fs-input h-10 px-3 text-sm"
       />
     </label>
   )

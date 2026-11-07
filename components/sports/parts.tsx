@@ -30,17 +30,17 @@ export function useFavorites() {
   return { names: prefs.favorites, toggle: toggleFavorite }
 }
 
-/** Athletes and entrants have no crest, and low-data mode never loads one. */
-export function Crest({ name, url, size = "sm" }: { name: string; url?: string | null; size?: "sm" | "lg" }) {
+/** Athletes and entrants have no crest, and low-data mode never loads one. `band` is for the navy hero. */
+export function Crest({ name, url, size = "sm", band }: { name: string; url?: string | null; size?: "xs" | "sm" | "lg"; band?: boolean }) {
   const { prefs } = usePreferences()
-  const box = size === "lg" ? "size-14 text-base" : "size-7 text-[10px]"
+  const box = size === "lg" ? "size-14 text-base sm:size-[4.5rem] sm:text-lg" : size === "xs" ? "size-5 text-[8px]" : "size-6 text-[9px] sm:size-7 sm:text-[10px]"
   const [broken, setBroken] = useState(false)
   if (url && !prefs.lowData && !broken) {
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={url} alt="" loading="lazy" decoding="async" onError={() => setBroken(true)} className={cn("shrink-0 object-contain", box)} />
   }
   const letters = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase()
-  return <span aria-hidden className={cn("inline-flex shrink-0 items-center justify-center rounded-full bg-surface-muted font-display font-semibold text-ink-2", box)}>{letters}</span>
+  return <span aria-hidden className={cn("inline-flex shrink-0 items-center justify-center rounded-full font-display font-semibold", band ? "bg-white/10 text-white" : "bg-surface-muted text-ink-2", box)}>{letters}</span>
 }
 
 export function FavoriteStar({ team }: { team: string }) {
@@ -64,9 +64,9 @@ export function FavoriteStar({ team }: { team: string }) {
       aria-pressed={on}
       aria-label={`${on ? t.myTeams.unfollow : t.myTeams.follow}: ${team}`}
       onClick={press}
-      className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-ink-3 transition-colors hover:bg-surface-muted hover:text-ink"
+      className="-mx-1.5 -my-1 inline-flex size-10 shrink-0 items-center justify-center rounded-md text-ink-3 transition-colors hover:text-ink sm:mx-0 sm:my-0 sm:size-7 sm:hover:bg-surface-muted"
     >
-      <Star aria-hidden className={cn("size-4", on && "fs-star-on fill-orange text-orange")} />
+      <Star aria-hidden className={cn("size-3.5", on && "fs-star-on fill-orange text-orange")} />
     </button>
   )
 }
@@ -103,16 +103,16 @@ export function ScoreValue({ value, label, dim }: { value: number | string | und
   const { hidden, pending, scoped, reveal } = useSpoiler()
 
   if (value === undefined) return null
-  if (pending) return <Skeleton className="h-5 w-6" />
-  if (hidden && scoped) return <span aria-hidden className="inline-flex h-7 w-8 items-center justify-center rounded-md bg-surface-muted text-ink-3">•</span>
+  if (pending) return <Skeleton className="h-5 w-6 shrink-0" />
+  if (hidden && scoped) return <span aria-hidden className="inline-flex h-6 w-7 shrink-0 items-center justify-center rounded-md bg-surface-muted text-ink-3">•</span>
   if (hidden) {
     return (
-      <button type="button" onClick={reveal} aria-label={`${t.spoiler.reveal}: ${label}`} className="inline-flex size-7 items-center justify-center rounded-md bg-surface-muted text-ink-3 hover:text-ink">
+      <button type="button" onClick={reveal} aria-label={`${t.spoiler.reveal}: ${label}`} className="inline-flex size-10 shrink-0 items-center justify-center rounded-md bg-surface-muted text-ink-3 hover:text-ink sm:size-7">
         <Eye aria-hidden className="size-4" />
       </button>
     )
   }
-  return <span className={cn("tabular shrink-0 font-display text-lg font-semibold", dim ? "text-ink-3" : "text-ink")}>{value}</span>
+  return <span className={cn("tabular shrink-0 text-right font-display text-base font-semibold", dim ? "text-ink-3" : "text-ink")}>{value}</span>
 }
 
 /** The single reveal control of a SpoilerScope. Renders nothing once revealed. */
@@ -120,7 +120,7 @@ export function SpoilerReveal({ label }: { label: string }) {
   const { hidden, pending, reveal } = useSpoiler()
   if (!hidden || pending) return null
   return (
-    <button type="button" onClick={reveal} className="inline-flex min-h-8 items-center gap-1.5 rounded-md bg-surface-muted px-2.5 text-[13px] font-semibold text-ink-2 hover:text-ink">
+    <button type="button" onClick={reveal} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-surface-muted px-2.5 text-[13px] font-semibold text-ink-2 hover:text-ink sm:min-h-8">
       <Eye aria-hidden className="size-3.5" /> {label}
     </button>
   )
@@ -139,7 +139,7 @@ export function SpoilerGuard({ label, children, quiet }: { label: string; childr
   if (hidden) {
     if (quiet) return null
     return (
-      <button type="button" onClick={reveal} className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-surface-muted px-3 text-sm font-semibold text-ink-2 hover:text-ink">
+      <button type="button" onClick={reveal} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-surface-muted px-3 text-sm font-semibold text-ink-2 hover:text-ink sm:min-h-9">
         <Eye aria-hidden className="size-4" /> {label}
       </button>
     )
@@ -151,15 +151,20 @@ export function MatchScore({ home, away, label }: { home: number; away: number; 
   const { t } = useLocale()
   const { hidden, pending, reveal } = useSpoiler()
 
-  if (pending) return <Skeleton className="mx-auto h-9 w-20 opacity-30" />
+  if (pending) return <Skeleton className="mx-auto h-12 w-28 opacity-30" />
   if (hidden) {
     return (
-      <button type="button" onClick={reveal} aria-label={`${t.spoiler.reveal}: ${label}`} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-white/10 px-3 text-sm font-semibold text-white hover:bg-white/15">
+      <button type="button" onClick={reveal} aria-label={`${t.spoiler.reveal}: ${label}`} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-white/10 px-3.5 text-sm font-semibold text-white hover:bg-white/15">
         <Eye aria-hidden className="size-4" /> {t.spoiler.reveal}
       </button>
     )
   }
-  return <span className="tabular whitespace-nowrap font-display text-3xl font-bold text-white sm:text-[2.5rem]">{home} – {away}</span>
+  const long = Math.max(String(home).length, String(away).length) > 2
+  return (
+    <span className={cn("fs-score inline-flex items-baseline gap-2 whitespace-nowrap font-bold text-white sm:gap-3.5", long ? "text-[2.125rem] sm:text-6xl" : "text-[2.625rem] sm:text-7xl")}>
+      <span>{home}</span><span aria-hidden className="font-medium text-white/40">–</span><span className="sr-only"> – </span><span>{away}</span>
+    </span>
+  )
 }
 
 /** Refreshes the page while something is live. Low-data mode loads only on request. */

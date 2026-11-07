@@ -72,7 +72,7 @@ export function SavedReports() {
   if (reports.length === 0) return <EmptyState icon={<Bookmark aria-hidden />} title={copy.savedEmpty} body={copy.savedEmptyBody} action={{ href: href("/app/news"), label: t.dash.allReports }} />
 
   return (
-    <ul className="fs-stagger grid gap-3 sm:grid-cols-2">
+    <ul className="fs-settle grid gap-3 sm:grid-cols-2">
       {reports.map((report) => (
         <li key={report.slug} className="flex min-w-0 items-start gap-2 rounded-xl border border-line bg-surface p-4 shadow-[var(--shadow-sm)]">
           <div className="min-w-0 flex-1">

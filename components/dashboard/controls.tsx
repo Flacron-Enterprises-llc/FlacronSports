@@ -73,7 +73,7 @@ export function Switch({ checked, onChange, label, labelledBy, disabled }: { che
       aria-labelledby={labelledBy}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={cn("relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors duration-200 [transition-timing-function:var(--ease)] disabled:opacity-50", checked ? "border-transparent bg-good" : "border-line-strong bg-surface-muted")}
+      className={cn("relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors duration-200 [transition-timing-function:var(--ease)] after:absolute after:-inset-x-1 after:-inset-y-2.5 after:content-[''] disabled:opacity-50", checked ? "border-transparent bg-good" : "border-line-strong bg-surface-muted")}
     >
       <span aria-hidden className={cn("inline-block size-[18px] rounded-full bg-white shadow-sm transition-transform duration-200 [transition-timing-function:var(--ease)]", checked ? "translate-x-[22px]" : "translate-x-[3px]")} />
     </button>
@@ -82,9 +82,9 @@ export function Switch({ checked, onChange, label, labelledBy, disabled }: { che
 
 export function Segmented<T extends string>({ value, onChange, options, label }: { value: T; onChange(value: T): void; options: { value: T; label: string }[]; label: string }) {
   return (
-    <div role="group" aria-label={label} className="inline-flex gap-1 rounded-lg border border-line bg-surface-muted p-1">
+    <div role="group" aria-label={label} className="inline-flex max-w-full gap-1 rounded-xl bg-surface-muted p-1">
       {options.map((option) => (
-        <button key={option.value} type="button" aria-pressed={value === option.value} onClick={() => onChange(option.value)} className={cn("rounded-md px-3 py-1.5 text-sm font-semibold transition-colors", value === option.value ? "bg-surface text-ink shadow-[var(--shadow-sm)]" : "text-ink-2 hover:text-ink")}>
+        <button key={option.value} type="button" aria-pressed={value === option.value} onClick={() => onChange(option.value)} className={cn("min-h-9 rounded-lg px-3.5 text-sm font-semibold transition-colors", value === option.value ? "bg-surface text-ink shadow-[var(--shadow-sm)]" : "text-ink-2 hover:text-ink")}>
           {option.label}
         </button>
       ))}
@@ -117,7 +117,7 @@ export function Tabs<T extends string>({ value, onChange, tabs, label, children 
         {tabs.map((tab) => {
           const on = tab.value === value
           return (
-            <button key={tab.value} data-tab={tab.value} id={`${id}-${tab.value}`} type="button" role="tab" aria-selected={on} aria-controls={`${id}-panel`} tabIndex={on ? 0 : -1} onClick={() => onChange(tab.value)} className={cn("relative -mb-px inline-flex items-center gap-2 whitespace-nowrap px-3.5 pb-3 pt-2 text-sm font-medium transition-colors", on ? "text-ink" : "text-ink-2 hover:text-ink")}>
+            <button key={tab.value} data-tab={tab.value} id={`${id}-${tab.value}`} type="button" role="tab" aria-selected={on} aria-controls={`${id}-panel`} tabIndex={on ? 0 : -1} onClick={() => onChange(tab.value)} className={cn("relative -mb-px inline-flex min-h-11 items-center gap-2 whitespace-nowrap px-3.5 text-sm font-medium transition-colors", on ? "text-ink" : "text-ink-2 hover:text-ink")}>
               {tab.icon}
               {tab.label}
               {tab.count !== undefined && <span className={cn("tabular rounded-full px-1.5 py-px text-[11px] font-semibold", on ? "fs-chip-hot" : "bg-surface-muted text-ink-2")}>{tab.count}</span>}
@@ -126,7 +126,7 @@ export function Tabs<T extends string>({ value, onChange, tabs, label, children 
           )
         })}
       </div>
-      <div key={value} id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${value}`} tabIndex={0} className="fs-panel-in pt-5 focus-visible:outline-none">{children}</div>
+      <div key={value} id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${value}`} tabIndex={0} className="fs-panel-in pt-4 focus-visible:outline-none sm:pt-5">{children}</div>
     </div>
   )
 }
@@ -165,6 +165,25 @@ export function CopyButton({ value, label, done }: { value: string; label: strin
       {copied ? <Check aria-hidden className="size-3.5 text-good" /> : <Copy aria-hidden className="size-3.5" />}
       <span aria-live="polite">{copied ? done : label}</span>
     </button>
+  )
+}
+
+/** A link to hand on: the field and its copy button read as one control. */
+export function ShareLink({ value, label, copy, copied, note, testId }: { value: string; label: string; copy: string; copied: string; note?: string; testId?: string }) {
+  const [done, setDone] = useState(false)
+  const press = () => navigator.clipboard.writeText(value).then(() => { setDone(true); setTimeout(() => setDone(false), 2000) }).catch(() => undefined)
+  return (
+    <div className="fs-pop">
+      <label className="block text-[13px] font-medium text-ink" htmlFor={testId}>{label}</label>
+      <div className="fs-joined mt-1.5">
+        <input id={testId} readOnly data-testid={testId} value={value} onFocus={(event) => event.target.select()} className="h-10 px-3 text-sm" />
+        <button type="button" onClick={press} className="inline-flex shrink-0 items-center gap-1.5 border-l border-line bg-surface-muted px-3 text-[13px] font-semibold text-ink transition-colors hover:text-hot-text">
+          {done ? <Check aria-hidden className="size-3.5 text-good" /> : <Copy aria-hidden className="size-3.5" />}
+          <span aria-live="polite">{done ? copied : copy}</span>
+        </button>
+      </div>
+      {note && <p className="mt-1.5 text-xs leading-5 text-ink-2">{note}</p>}
+    </div>
   )
 }
 

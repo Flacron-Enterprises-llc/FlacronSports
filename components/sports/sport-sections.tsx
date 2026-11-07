@@ -1,29 +1,21 @@
-import { Flag, Info, ListChecks, Medal, Users } from "lucide-react"
-import { Panel } from "@/components/site/states"
+import { Check, Flag, Info, ListChecks, Medal, Users } from "lucide-react"
+import { FactGrid, Panel, type FactItem } from "@/components/site/states"
 import type { Dictionary } from "@/lib/i18n"
 import { boutRounds, resultFacts, setScore, sportFacts, sportSteps, weightClassText, type Fact } from "@/lib/sports/sport-terms"
 import { inningsText } from "@/lib/sports/presentation"
 import type { ClassificationEntry, ClassifiedOut, CombatBout, CombatDetails, Innings, SportEvent, StandingEntry, TennisDetails } from "@/lib/sports/types"
+import { cn } from "@/lib/utils"
 import { FavoriteStar } from "./parts"
 
 function FactList({ facts }: { facts: Fact[] }) {
-  return (
-    <dl className="grid gap-3 text-sm sm:grid-cols-2">
-      {facts.map((fact) => (
-        <div key={fact.label} className="min-w-0">
-          <dt className="text-ink-2">{fact.label}</dt>
-          <dd className="mt-0.5 font-medium text-ink">{fact.value}</dd>
-        </div>
-      ))}
-    </dl>
-  )
+  return <FactGrid facts={facts} className="sm:grid-cols-2" />
 }
 
-/** Overview: what this event is, in the sport's own terms. States no result. */
-export function SportFacts({ event, t }: { event: SportEvent; t: Dictionary }) {
-  const facts = sportFacts(event, t)
+/** Overview: what this event is, in the sport's own terms, after any facts common to every sport. States no result. */
+export function SportFacts({ event, t, lead = [] }: { event: SportEvent; t: Dictionary; lead?: FactItem[] }) {
+  const facts = [...lead, ...sportFacts(event, t)]
   if (facts.length === 0) return null
-  return <Panel title={t.sportTerms.facts} icon={<Info aria-hidden />}><FactList facts={facts} /></Panel>
+  return <Panel title={t.sportTerms.facts} icon={<Info aria-hidden />}><FactGrid facts={facts} className="grid-cols-2 sm:grid-cols-3 xl:grid-cols-1" /></Panel>
 }
 
 function inningsNote(innings: Innings, t: Dictionary): string {
@@ -38,13 +30,13 @@ function CricketScorecard({ event, t }: { event: SportEvent; t: Dictionary }) {
     { name: participants[1]?.name, list: score.awayInnings, total: score.away },
   ]
   return (
-    <div className="space-y-4">
+    <div className="grid gap-3 sm:grid-cols-2">
       {sides.map(({ name, list, total }) => (list || total) && (
-        <section key={name} className="min-w-0">
-          <h3 className="text-sm font-semibold text-ink">{name}</h3>
-          <dl className="mt-1 divide-y divide-line text-sm">
+        <section key={name} className="min-w-0 overflow-hidden rounded-lg border border-line">
+          <h3 className="fs-foot truncate border-b border-line px-3 py-2 text-sm font-semibold text-ink">{name}</h3>
+          <dl className="divide-y divide-line px-3 text-sm">
             {(list ?? [total as Innings]).map((innings, index) => (
-              <div key={index} className="flex items-baseline justify-between gap-3 py-1.5">
+              <div key={index} className="flex items-baseline justify-between gap-3 py-2">
                 <dt className="text-ink-2">{list ? t.sportTerms.innings.replace("{n}", String(index + 1)) : score.totalsOnly ? t.sportTerms.matchTotal : t.event.innings}</dt>
                 <dd className="tabular text-right text-ink">
                   <span className="font-semibold">{inningsText(innings)}</span>
@@ -79,11 +71,11 @@ function RaceTable({ entries, t }: { entries: ClassificationEntry[]; t: Dictiona
   const grid = has("grid") || has("pitLane")
   return (
     <div className="overflow-x-auto rounded-lg border border-line">
-      <table className="w-full text-sm">
+      <table className="w-full text-sm [&_td]:py-2 [&_th[scope=row]]:py-2">
         <caption className="sr-only">{t.event.classification}</caption>
         <thead>
           <tr className="bg-surface-muted text-left text-xs text-ink-2">
-            <th scope="col" className="px-2 py-2 font-medium">{copy.position}</th>
+            <th scope="col" className="px-3 py-2 font-medium">{copy.position}</th>
             {has("number") && <th scope="col" className="px-2 py-2 font-medium">{copy.number}</th>}
             <th scope="col" className="px-2 py-2 font-medium">{t.event.name}</th>
             {has("team") && <th scope="col" className="px-2 py-2 font-medium">{copy.team}</th>}
@@ -95,8 +87,8 @@ function RaceTable({ entries, t }: { entries: ClassificationEntry[]; t: Dictiona
         </thead>
         <tbody>
           {entries.map((entry) => (
-            <tr key={entry.position} className="border-t border-line">
-              <td className="tabular px-2 py-1.5 font-semibold text-ink">{entry.position}</td>
+            <tr key={entry.position} className="fs-row border-t border-line">
+              <td className="tabular px-3 py-1.5 font-bold text-ink">{entry.position}</td>
               {has("number") && <td className="tabular px-2 py-1.5 text-ink-2">{entry.number ?? ""}</td>}
               <th scope="row" className="min-w-32 px-2 py-1.5 text-left font-medium text-ink">{entry.name}</th>
               {has("team") && <td className="min-w-32 px-2 py-1.5 text-ink-2">{entry.team}</td>}
@@ -158,14 +150,17 @@ function BoutRow({ bout, t }: { bout: CombatBout; t: Dictionary }) {
   const how = [bout.method && t.event.methods[bout.method], bout.round ? t.event.round.replace("{round}", String(bout.round)) : null, bout.time].filter(Boolean).join(" · ")
   const about = [bout.section && t.sportTerms.cardSections[bout.section], bout.weightClass && weightClassText(bout.weightClass, t), boutRounds(bout, t)].filter(Boolean).join(" · ")
   return (
-    <li className="py-2">
+    <li className="py-2.5 first:pt-0 last:pb-0">
       {about && <p className="text-xs text-ink-2">{about}</p>}
-      <p className="font-medium text-ink">
-        {bout.names.map((name, index) => (
-          <span key={name}>{index > 0 && " / "}<span className={name === bout.winner ? "font-semibold" : undefined}>{name}</span></span>
+      <ul className="mt-0.5 flex flex-wrap items-center gap-x-4 gap-y-0.5">
+        {bout.names.map((name) => (
+          <li key={name} className={cn("inline-flex min-w-0 items-center gap-1", name === bout.winner ? "font-semibold text-ink" : "text-ink-2")}>
+            {name === bout.winner && <Check aria-hidden className="size-3.5 shrink-0 text-good" />}
+            <span className="min-w-0 break-words">{name}</span>
+          </li>
         ))}
-      </p>
-      {bout.winner && <p className="text-xs text-ink-2">{[t.event.won.replace("{name}", bout.winner), how, bout.scorecards].filter(Boolean).join(" · ")}</p>}
+      </ul>
+      {bout.winner && <p className="mt-0.5 text-xs text-ink-2">{[t.event.won.replace("{name}", bout.winner), how, bout.scorecards].filter(Boolean).join(" · ")}</p>}
     </li>
   )
 }
@@ -205,7 +200,14 @@ export function SportUpdates({ event, t }: { event: SportEvent; t: Dictionary })
   if (steps.length === 0) return null
   return (
     <Panel title={t.match.liveUpdates} icon={<ListChecks aria-hidden />}>
-      <ol className="divide-y divide-line text-sm">{steps.map((step) => <li key={step} className="py-1.5 text-ink">{step}</li>)}</ol>
+      <ol className="relative space-y-3 text-sm before:absolute before:bottom-1.5 before:left-[5px] before:top-1.5 before:w-px before:bg-line">
+        {steps.map((step) => (
+          <li key={step} className="relative flex items-start gap-3 text-ink">
+            <span aria-hidden className="relative mt-1.5 size-[11px] shrink-0 rounded-full border-2 border-surface bg-brand" />
+            <span className="min-w-0">{step}</span>
+          </li>
+        ))}
+      </ol>
     </Panel>
   )
 }
@@ -214,9 +216,9 @@ export function SportUpdates({ event, t }: { event: SportEvent; t: Dictionary })
 export function CardParticipants({ details, t }: { details: CombatDetails; t: Dictionary }) {
   return (
     <Panel title={t.match.participants} icon={<Users aria-hidden />}>
-      <ol className="divide-y divide-line text-sm">
+      <ol className="grid gap-2.5 text-sm sm:grid-cols-2">
         {details.bouts.map((bout, index) => (
-          <li key={index} className="py-2">
+          <li key={index} className="min-w-0 rounded-lg border border-line px-3 py-2">
             {(bout.weightClass || bout.scheduledRounds) && <p className="text-xs text-ink-2">{[bout.weightClass && weightClassText(bout.weightClass, t), boutRounds(bout, t)].filter(Boolean).join(" · ")}</p>}
             <p className="flex flex-wrap items-center gap-x-3 font-medium text-ink">
               {bout.names.map((name) => <span key={name} className="inline-flex min-w-0 items-center gap-1">{name}<FavoriteStar team={name} /></span>)}
@@ -236,9 +238,9 @@ export function RankedPlayers({ event, t }: { event: SportEvent; t: Dictionary }
     <Panel title={t.match.participants} icon={<Users aria-hidden />}>
       <ul className="divide-y divide-line text-sm">
         {event.participants.map((participant, index) => (
-          <li key={participant.name} className="flex items-center gap-2 py-1.5">
+          <li key={participant.name} className="flex min-h-11 items-center gap-2 py-1">
             <span className="min-w-0 flex-1 truncate font-medium text-ink">{participant.name}</span>
-            {ranks[index] !== null && ranks[index] !== undefined && <span className="tabular text-ink-2">{t.sportTerms.ranking.replace("{rank}", String(ranks[index]))}</span>}
+            {ranks[index] !== null && ranks[index] !== undefined && <span className="tabular rounded-full bg-surface-muted px-2 py-0.5 text-xs font-semibold text-ink-2">{t.sportTerms.ranking.replace("{rank}", String(ranks[index]))}</span>}
             <FavoriteStar team={participant.name} />
           </li>
         ))}
@@ -253,9 +255,9 @@ export function WeekendSessions({ sessions, currentId, t, href }: { sessions: { 
   if (others.length === 0) return null
   return (
     <Panel title={t.sportTerms.weekendSessions} icon={<Flag aria-hidden />}>
-      <ul className="divide-y divide-line text-sm">
+      <ul className="-my-1 divide-y divide-line text-sm">
         {others.map((session) => (
-          <li key={session.id} className="flex items-baseline justify-between gap-3 py-1.5">
+          <li key={session.id} className="flex min-h-10 items-center justify-between gap-3 py-1">
             <a href={href(`/app/match/${session.id}`)} className="min-w-0 font-medium text-ink underline-offset-2 hover:underline">{session.name ?? t.sportTerms.sessions.race}</a>
             <span className="shrink-0 text-xs text-ink-2">{t.status[session.status]}</span>
           </li>

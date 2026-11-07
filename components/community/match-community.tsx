@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react"
 import Link from "next/link"
-import { Medal, MessagesSquare, Users } from "lucide-react"
+import { ChevronRight, Medal, MessagesSquare, Trophy, Users } from "lucide-react"
 import { btn, Notice, Panel } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import { pickWords, type PickFields } from "@/lib/community/pick-words"
@@ -88,7 +88,7 @@ function Predictions({ matchId, kind, predictable, home, away, combat }: { match
       {mine && <Notice tone="success" role="status">{t.community.yourPrediction} <span data-testid="own-prediction" className="tabular font-semibold text-ink">{pickWords(mine, { home, away }, t.community)}</span></Notice>}
       {!mine && user && predictable && gate.prompt}
       {!mine && user && predictable && !gate.locked && kind === "score" && (
-        <form onSubmit={submitted({ home: Number(homeScore), away: Number(awayScore) })} className="grid grid-cols-2 gap-3">
+        <form onSubmit={submitted({ home: Number(homeScore), away: Number(awayScore) })} className="grid grid-cols-2 gap-3 rounded-lg bg-surface-muted p-3">
           <label className="min-w-0 text-sm font-medium text-ink"><span className="block truncate">{home}</span><input className={field} type="number" min={0} max={300} required value={homeScore} onChange={(event) => setHomeScore(event.target.value)} /></label>
           <label className="min-w-0 text-sm font-medium text-ink"><span className="block truncate">{away}</span><input className={field} type="number" min={0} max={300} required value={awayScore} onChange={(event) => setAwayScore(event.target.value)} /></label>
           <button type="submit" disabled={busy} className={btn("primary", "md", "col-span-2")}>{t.community.predict}</button>
@@ -112,7 +112,7 @@ function Predictions({ matchId, kind, predictable, home, away, combat }: { match
       {!mine && !predictable && <p className="text-sm text-ink-2">{t.community.predictionLocked}</p>}
       {notice && <p role="status" className="mt-2 text-sm text-ink">{notice}</p>}
       <details className="mt-3 text-[13px] leading-5 text-ink-2">
-        <summary className="cursor-pointer font-semibold hover:text-ink">{t.community.pointRules}</summary>
+        <summary className="fs-summary inline-flex min-h-10 cursor-pointer items-center gap-1 font-semibold hover:text-ink sm:min-h-8"><ChevronRight aria-hidden className="fs-chevron size-4" />{t.community.pointRules}</summary>
         <div className="mt-2"><RuleList /></div>
       </details>
     </div>
@@ -123,10 +123,10 @@ export function MatchCommunity({ matchId, predictable, kind, combat = false, hom
   const { t, href } = useLocale()
   const title = kind === "podium" ? t.community.pickPodium : kind === "winner" ? t.community.pickTitle : t.community.predictions
   return (
-    <div className="space-y-5">
-      <div className="grid gap-5 md:grid-cols-2">
+    <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2">
         {kind && <Panel title={title} icon={<Medal aria-hidden />}><Predictions matchId={matchId} kind={kind} predictable={predictable} home={home} away={away} combat={combat} /></Panel>}
-        <Panel title={t.community.leaderboard} icon={<Medal aria-hidden />}><Leaderboard /></Panel>
+        <Panel title={t.community.leaderboard} icon={<Trophy aria-hidden />}><Leaderboard /></Panel>
       </div>
       <Panel
         title={t.community.chat}

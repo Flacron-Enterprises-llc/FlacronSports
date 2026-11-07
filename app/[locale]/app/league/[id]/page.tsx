@@ -2,7 +2,7 @@ import { notFound } from "next/navigation"
 import { Trophy } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
 import { MemberDataPending } from "@/components/dashboard/member-data-pending"
-import { AppPage, EmptyState, Notice, PageHeader } from "@/components/site/states"
+import { AppPage, EmptyState, Notice, PageHeader, SectionHeading } from "@/components/site/states"
 import { EventCard } from "@/components/sports/event-card"
 import { pageContext, titled } from "@/lib/page-context"
 import { getLeagueEvents } from "@/lib/sports/service"
@@ -22,15 +22,15 @@ export default async function LeaguePage({ params }: Props) {
 
   const section = (title: string, events: SportEvent[]) => events.length > 0 && (
     <section className="mt-5">
-      <h2 className="text-sm font-semibold text-ink-2">{title}</h2>
-      <div className="mt-2 grid gap-3 sm:grid-cols-2">
+      <SectionHeading title={title} />
+      <div className="fs-settle mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {events.map((event) => <EventCard key={event.id} event={event} t={t} href={href} timeMode="datetime" />)}
       </div>
     </section>
   )
 
   return (
-    <AppPage width="md">
+    <AppPage>
       <PageHeader title={league.competition ?? t.scores.competition} icon={<Trophy aria-hidden />} />
       {league.state === "unavailable" && <ErrorNotice>{t.feed.unavailable}</ErrorNotice>}
       {league.state === "stale" && <Notice tone="warning" role="status">{t.feed.stale}</Notice>}

@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import { usePathname, useSearchParams } from "next/navigation"
-import { AppPage, CardGridSkeleton, DetailSkeleton, ListSkeleton, Skeleton, StatRowSkeleton } from "@/components/site/states"
+import { AppPage, CardGridSkeleton, DetailSkeleton, ListSkeleton, RowGroupSkeleton, Skeleton, StatRowSkeleton } from "@/components/site/states"
 import { useLocale } from "@/lib/use-locale"
 import { cn } from "@/lib/utils"
 
@@ -84,19 +84,20 @@ export function NavProgress() {
 }
 
 /** The route-level skeleton: the shell stays mounted and only the page area shimmers. */
-export function PageLoading({ variant = "cards", width = "lg" }: { variant?: "cards" | "dashboard" | "list" | "detail" | "form"; width?: "lg" | "md" | "sm" }) {
+export function PageLoading({ variant = "cards", width = "lg" }: { variant?: "cards" | "rows" | "dashboard" | "list" | "detail" | "form"; width?: "lg" | "xl" | "md" | "sm" }) {
   const { t } = useLocale()
   return (
     <AppPage width={width}>
       <div role="status" aria-label={t.ui.loading} className="space-y-6">
-        {variant !== "detail" && (
-          <div className="flex items-start gap-4">
-            <Skeleton className="hidden size-11 rounded-xl sm:block" />
-            <div className="flex-1 space-y-2.5"><Skeleton className="h-7 w-56 max-w-full" /><Skeleton className="h-4 w-96 max-w-full" /></div>
+        {variant !== "detail" && variant !== "dashboard" && (
+          <div className="flex items-center gap-3.5">
+            <Skeleton className="hidden size-12 rounded-2xl sm:block" />
+            <div className="flex-1 space-y-2"><Skeleton className="h-8 w-56 max-w-full" /><Skeleton className="h-4 w-96 max-w-full" /></div>
           </div>
         )}
         {variant === "dashboard" && <StatRowSkeleton />}
         {(variant === "cards" || variant === "dashboard") && <CardGridSkeleton />}
+        {variant === "rows" && <RowGroupSkeleton />}
         {variant === "list" && <ListSkeleton />}
         {variant === "detail" && <DetailSkeleton />}
         {variant === "form" && <><Skeleton className="h-44 w-full rounded-xl" /><Skeleton className="h-64 w-full rounded-xl" /></>}

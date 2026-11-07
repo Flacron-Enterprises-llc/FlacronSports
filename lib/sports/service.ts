@@ -6,6 +6,7 @@ import { memberFetch, MemberAccessRequired } from "@/lib/member-fetch"
 import { countMetric } from "@/lib/ops/metrics"
 import { hockeyPeriods } from "./adapters/ice-hockey"
 import { Breaker, CircuitOpenError, type BreakerStatus } from "./breaker"
+import { calculatesTable, calculateTable, canHaveTable, type CalculatedTable, type CalculatedUnit } from "./calculated"
 import { activeLeagues, chooseLeagues, dayPath, fileRows, indexPath, LEAGUE_COLLECTED, leaguePaths, mergeRows, nextDates, RESULT_CALLS, RESULT_SPORTS, resultsWanted, type CollectIndex, type CollectLeague, type GameDate } from "./collect"
 import { coverageRules, eventAllowed, sportAllowed } from "./coverage"
 import { normalizeLineups, normalizeStats, normalizeTimeline, type MatchDetail, type RawLineup, type RawStat, type RawTimeline } from "./detail"
@@ -808,6 +809,10 @@ export interface StandingRow {
   form: string | null
   /** The provider's own words for what this place leads to, such as a qualification or relegation. */
   zone: string | null
+  /** Calculated tables only. From 0 to 1, with a draw counting as half a win. */
+  winPercent?: number
+  /** Calculated tables only, when the games state how they ended. */
+  overtimeLosses?: number
 }
 
 export interface Standings {
@@ -820,6 +825,8 @@ export interface Standings {
   /** The provider's own update time for the table, when it supplies one. */
   sourceUpdatedAt: string | null
   limited: boolean
+  /** Set when this table was worked out from results, because the league has no table of its own. */
+  calculated?: { games: number; latestGame: string; unit: CalculatedUnit; stale: boolean }
 }
 
 type RawStanding = Record<string, string | number | null | undefined>
@@ -877,13 +884,70 @@ export async function getStandings(leagueId: string): Promise<Standings> {
   if (process.env.API_ORIGIN) {
     return (await fromBackend<Standings>(`/api/standings/${encodeURIComponent(leagueId)}`).catch(whenWithheld({ ...withheldFeed(base.fetchedAt), ...none }))) ?? { ...base, ...none, limited: false, state: "unavailable" }
   }
+  const path = calculatedPath(leagueId)
+  const stored = await storedCalculation(path)
+  // Today's answer already says the provider has no table, so no call is needed to hear it again.
+  if (stored && Date.now() - stored.at < CALCULATED_FRESH_MS) return calculatedStandings(base, stored)
   try {
     const data = await fetchJson<{ table: RawStanding[] | null }>(`lookuptable.php?${new URLSearchParams({ l: leagueId })}`)
-    if (!data.table?.length) return { ...base, ...none, state: "empty" }
-    return { ...base, ...normalizeStandings(data.table), state: "ok" }
+    if (data.table?.length) return { ...base, ...normalizeStandings(data.table), state: "ok" }
+    const calculation = await calculateStandings(leagueId)
+    if (!calculation) return { ...base, ...none, state: "empty" }
+    const at = Date.now()
+    remember(path, calculation, at)
+    await writeSnapshot(path, calculation, at)
+    return calculatedStandings(base, { data: calculation, at })
   } catch {
-    return { ...base, ...none, state: "unavailable" }
+    return stored ? calculatedStandings(base, stored, true) : { ...base, ...none, state: "unavailable" }
   }
+}
+
+/** The worked out table, or why there is none, so a league without one costs no more calls that day. */
+interface Calculation {
+  league: string
+  season: string | null
+  table: CalculatedTable | null
+}
+
+const CALCULATED_FRESH_MS = 24 * 3_600_000
+const calculatedPath = (leagueId: string) => `calculated/standings?${new URLSearchParams({ l: leagueId })}`
+
+async function storedCalculation(path: string): Promise<{ data: Calculation; at: number } | null> {
+  const cached = memory.get(path)
+  if (cached) return { data: cached.data as Calculation, at: cached.at }
+  const snapshot = await readSnapshot(path)
+  if (!snapshot) return null
+  remember(path, snapshot.data, snapshot.at)
+  return { data: snapshot.data as Calculation, at: snapshot.at }
+}
+
+function calculatedStandings(base: Pick<Standings, "source" | "fetchedAt" | "limited">, { data, at }: { data: Calculation; at: number }, stale = false): Standings {
+  const { league, season, table } = data
+  const when = new Date(at).toISOString()
+  if (!table) return { ...base, league, season, rows: [], sourceUpdatedAt: null, state: "empty" }
+  const { rows, games, latestGame, unit } = table
+  return { ...base, fetchedAt: when, league, season, rows, sourceUpdatedAt: when, state: "ok", calculated: { games, latestGame, unit, stale } }
+}
+
+/**
+ * Null for a sport with no calculation. The season is read straight from the provider and
+ * only the result is stored, because a whole season can pass the 1 MB a document can hold.
+ */
+async function calculateStandings(leagueId: string): Promise<Calculation | null> {
+  const info = await leagueInfo(leagueId)
+  const sport = enabledSports().find((item) => item.providerKey === info?.strSport)
+  const league = info?.strLeague
+  if (!sport || !league || !calculatesTable(sport.id)) return null
+  const rules = await coverageRules()
+  const allowed = eventAllowed(rules, { sportId: sport.id, competition: { id: leagueId, name: league, country: null } })
+  if (!allowed || !canHaveTable(sport.id, league)) return { league, season: null, table: null }
+  const seasons = (await latestSeason(leagueId, info?.strCurrentSeason ?? "")).filter(Boolean)
+  for (const season of seasons) {
+    const found = await request<{ events?: RawEvent[] | null }>(`eventsseason.php?${new URLSearchParams({ id: leagueId, s: season })}`)
+    const table = calculateTable(found.events ?? [], sport.id, leagueId, league)
+    if (table) return { league, season, table }
+  }
+  return { league, season: seasons[0] ?? null, table: null }
 }
 
 const SEASON_FRESH_MS = 3_600_000

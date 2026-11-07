@@ -3,10 +3,13 @@
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Flag } from "lucide-react"
+import { ChevronRight, Flag } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
-import { btn, EmptyState, ListSkeleton, Notice, Panel } from "@/components/site/states"
+import { SportIcon } from "@/components/site/sport-icon"
+import { btn, EmptyState, ListSkeleton, Notice, SectionHeading } from "@/components/site/states"
+import { Crest } from "@/components/sports/parts"
 import { authFetch } from "@/lib/auth-fetch"
+import type { SportId } from "@/lib/sports/types"
 import { useLocale } from "@/lib/use-locale"
 import { clubName } from "./club-view"
 import { useCommunityGate } from "./community-gate"
@@ -58,41 +61,59 @@ export function ClubsPanel() {
   if (failed) return <ErrorNotice onRetry={load}>{t.community.clubsFailed}</ErrorNotice>
   if (!list) return <div role="status" aria-label={t.ui.loading}><ListSkeleton rows={4} /></div>
 
+  const tile = "flex min-w-0 items-center gap-3 rounded-xl border border-line bg-surface p-3 shadow-[var(--shadow-sm)]"
+  const mark = "inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-brand"
+
   return (
     <div className="space-y-5">
       {notice && <Notice tone="danger" role="alert">{notice}</Notice>}
       {gate.prompt}
-      <Panel title={t.community.yourClubs} icon={<Flag aria-hidden />}>
-        {list.mine.length === 0 ? (
-          <EmptyState compact title={t.community.noClubs} body={t.community.noClubsBody} />
-        ) : (
-          <ul className="divide-y divide-line text-sm">
+      {list.mine.length === 0 ? (
+        <EmptyState inline icon={<Flag aria-hidden />} title={t.community.noClubs} body={t.community.noClubsBody} />
+      ) : (
+        <section aria-label={t.community.yourClubs}>
+          <SectionHeading title={t.community.yourClubs} />
+          <ul className="fs-settle mt-2 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
             {list.mine.map((club) => (
-              <li key={club.id} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
-                <Link href={href(`/app/clubs/${club.id}`)} className="min-w-0 truncate font-semibold text-hot-text hover:underline">{clubName(club, locale)}</Link>
-                <span className="tabular shrink-0 text-ink-2">{members(club.members)}</span>
+              <li key={club.id}>
+                <Link href={href(`/app/clubs/${club.id}`)} className={`fs-lift ${tile}`}>
+                  <span className={mark}><SportIcon id={club.sportId as SportId} className="size-5" /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-ink">{clubName(club, locale)}</span>
+                    <span className="tabular block text-xs text-ink-2">{members(club.members)}</span>
+                  </span>
+                  <ChevronRight aria-hidden className="size-4 shrink-0 text-ink-3" />
+                </Link>
               </li>
             ))}
           </ul>
-        )}
-      </Panel>
+        </section>
+      )}
       {list.followed.length > 0 && (
-        <Panel title={t.community.teamClubs} description={t.community.teamClubsLead}>
-          <ul className="divide-y divide-line text-sm">
+        <section aria-label={t.community.teamClubs}>
+          <SectionHeading title={t.community.teamClubs} />
+          <p className="text-[13px] leading-5 text-ink-2">{t.community.teamClubsLead}</p>
+          <ul className="fs-settle mt-2 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
             {list.followed.map((team) => (
-              <li key={team} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
-                <span className="min-w-0 truncate font-medium text-ink">{team}</span>
+              <li key={team} className={tile}>
+                <Crest name={team} />
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{team}</span>
                 {!gate.locked && <button type="button" className={btn("outline", "sm")} onClick={() => join({ kind: "team", team })}>{t.community.joinClub}<span className="sr-only">: {team}</span></button>}
               </li>
             ))}
           </ul>
-        </Panel>
+        </section>
       )}
-      <Panel title={t.community.sportClubs}>
-        <ul className="divide-y divide-line text-sm">
+      <section aria-label={t.community.sportClubs}>
+        <SectionHeading title={t.community.sportClubs} />
+        <ul className="fs-settle mt-2 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
           {list.sports.map((club) => (
-            <li key={club.id} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
-              <span className="min-w-0"><span className="block truncate font-medium text-ink">{clubName({ ...club, kind: "sport" }, locale)}</span><span className="tabular text-xs text-ink-2">{members(club.members)}</span></span>
+            <li key={club.id} className={tile}>
+              <span className={mark}><SportIcon id={club.sportId as SportId} className="size-5" /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-ink">{clubName({ ...club, kind: "sport" }, locale)}</span>
+                <span className="tabular block text-xs text-ink-2">{members(club.members)}</span>
+              </span>
               {club.joined ? (
                 <Link href={href(`/app/clubs/${club.id}`)} className={btn("ghost", "sm")}>{t.community.openClub}<span className="sr-only">: {club.name}</span></Link>
               ) : !gate.locked && (
@@ -101,7 +122,7 @@ export function ClubsPanel() {
             </li>
           ))}
         </ul>
-      </Panel>
+      </section>
     </div>
   )
 }

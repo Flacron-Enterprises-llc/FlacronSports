@@ -3,7 +3,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { ArrowRight, ListOrdered, Newspaper, Shield } from "lucide-react"
 import { MemberDataPending } from "@/components/dashboard/member-data-pending"
-import { AppPage, EmptyState, PageHeader, Panel } from "@/components/site/states"
+import { AppPage, EmptyState, PageHeader, Panel, SectionHeading } from "@/components/site/states"
 import { EventCard, FeedNotice } from "@/components/sports/event-card"
 import { FavoriteStar, LocalTime, SpoilerGuard, SpoilerReveal, SpoilerScope } from "@/components/sports/parts"
 import { TeamWatchPanel } from "@/components/video/team-watch-panel"
@@ -39,7 +39,7 @@ async function checkedVideos(events: SportEvent[]) {
   return checked.flatMap(({ event, video }) => (video ? [{ event, channel: video.channel }] : [])).slice(0, VIDEO_LIMIT)
 }
 
-const FORM_TONE: Record<FormResult, string> = { win: "bg-good text-white", draw: "bg-surface-muted text-ink-2", loss: "bg-bad text-white" }
+const FORM_TONE: Record<FormResult, string> = { win: "fs-form-win", draw: "fs-form-draw", loss: "fs-form-loss" }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const name = decodeName((await params).name)
@@ -69,11 +69,12 @@ export default async function TeamPage({ params, searchParams }: Props) {
   const rows: StandingRow[] = standings?.state === "ok" ? tableAround(standings.rows, displayName) : []
   const form = formByGame(recent, displayName)
 
+  const hasSide = form.length > 0 || rows.length > 0
   const list = (heading: string, events: SportEvent[]) =>
     events.length > 0 && (
-      <section aria-label={heading} className="mb-7">
-        <h2 className="text-[17px] font-semibold text-ink">{heading}</h2>
-        <div className="fs-stagger mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <section aria-label={heading}>
+        <SectionHeading title={heading} />
+        <div className={cn("fs-settle mt-2 grid gap-3 sm:grid-cols-2", !hasSide && "xl:grid-cols-3")}>
           {events.map((event) => <EventCard key={event.id} event={event} t={t} href={href} timeMode="datetime" />)}
         </div>
       </section>
@@ -81,65 +82,70 @@ export default async function TeamPage({ params, searchParams }: Props) {
 
   return (
     <AppPage>
-      <PageHeader title={displayName} lead={t.team.lead} icon={<Shield aria-hidden />} actions={<span className="rounded-lg border border-line bg-surface"><FavoriteStar team={displayName} /></span>} />
-      {list(t.team.upcoming, upcoming)}
-      {list(t.team.recent, recent)}
+      <PageHeader title={displayName} lead={t.team.lead} icon={<Shield aria-hidden />} actions={<span className="inline-flex size-10 items-center justify-center rounded-lg border border-line bg-surface"><FavoriteStar team={displayName} /></span>} />
+      <div className={cn("mb-6 grid items-start gap-5", hasSide && "xl:grid-cols-[minmax(0,1fr)_320px]")}>
+        <div className="min-w-0 space-y-6 empty:hidden">
+          {list(t.team.upcoming, upcoming)}
+          {list(t.team.recent, recent)}
+        </div>
 
-      {(form.length > 0 || rows.length > 0) && (
-        <SpoilerScope>
-          <div className="mb-7 space-y-4">
-            <SpoilerReveal label={copy.revealForm} />
-            <SpoilerGuard label={copy.revealForm} quiet>
-              <div className="grid gap-4 lg:grid-cols-2">
-                {form.length > 0 && (
-                  <Panel title={copy.form} description={copy.formLast.replace("{count}", String(form.length))}>
-                    <ol className="flex gap-1.5">
-                      {form.map(({ eventId, result }) => (
-                        <li key={eventId}>
-                          <Link href={href(`/app/match/${eventId}`)} aria-label={copy.formNames[result]} title={copy.formNames[result]} className={cn("tabular inline-flex size-9 items-center justify-center rounded-md text-sm font-semibold", FORM_TONE[result])}>{copy.formLetters[result]}</Link>
-                        </li>
-                      ))}
-                    </ol>
-                  </Panel>
-                )}
-                {rows.length > 0 && (
-                  <Panel title={team?.league?.name ?? copy.standings} icon={<ListOrdered aria-hidden />} actions={<Link href={href(`/app/standings/${leagueId}`)} className="inline-flex items-center gap-1 text-[13px] font-semibold text-hot-text hover:underline">{copy.fullTable}<ArrowRight aria-hidden className="size-3.5" /></Link>}>
-                    <table className="w-full text-sm">
-                      <caption className="sr-only">{copy.standings}</caption>
-                      <thead>
-                        <tr className="border-b border-line text-left text-xs text-ink-2">
-                          <th scope="col" className="py-1.5 pr-2 font-medium">{t.standings.rank}</th>
-                          <th scope="col" className="py-1.5 pr-2 font-medium">{t.standings.team}</th>
-                          <th scope="col" className="py-1.5 pl-2 text-right font-medium">{t.standings.played}</th>
-                          <th scope="col" className="py-1.5 pl-2 text-right font-medium">{t.standings.points}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rows.map((row) => {
-                          const own = row.team.toLowerCase() === displayName.toLowerCase()
-                          return (
-                            <tr key={`${row.rank}-${row.team}`} aria-current={own ? "true" : undefined} className={cn("border-b border-line last:border-0", own && "font-semibold text-ink")}>
-                              <td className="tabular py-1.5 pr-2 text-ink-2">{row.rank ?? "–"}</td>
-                              <th scope="row" className="min-w-0 py-1.5 pr-2 text-left font-medium text-ink">{row.team}</th>
-                              <td className="tabular py-1.5 pl-2 text-right text-ink-2">{row.played ?? "–"}</td>
-                              <td className="tabular py-1.5 pl-2 text-right text-ink">{row.points ?? "–"}</td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </Panel>
-                )}
-              </div>
-            </SpoilerGuard>
-          </div>
-        </SpoilerScope>
-      )}
+        {hasSide && (
+          <SpoilerScope>
+            <aside aria-label={copy.form} className="min-w-0 space-y-3">
+              <SpoilerReveal label={copy.revealForm} />
+              <SpoilerGuard label={copy.revealForm} quiet>
+                <div className="space-y-4">
+                  {form.length > 0 && (
+                    <Panel title={copy.form} description={copy.formLast.replace("{count}", String(form.length))}>
+                      <ol className="flex gap-1.5">
+                        {form.map(({ eventId, result }) => (
+                          <li key={eventId}>
+                            <Link href={href(`/app/match/${eventId}`)} aria-label={copy.formNames[result]} title={copy.formNames[result]} className={cn("tabular inline-flex size-10 items-center justify-center rounded-lg text-sm font-bold", FORM_TONE[result])}>{copy.formLetters[result]}</Link>
+                          </li>
+                        ))}
+                      </ol>
+                    </Panel>
+                  )}
+                  {rows.length > 0 && (
+                    <Panel title={team?.league?.name ?? copy.standings} icon={<ListOrdered aria-hidden />} actions={<Link href={href(`/app/standings/${leagueId}`)} className="inline-flex min-h-10 items-center gap-1 text-[13px] font-semibold text-hot-text hover:underline sm:min-h-8">{copy.fullTable}<ArrowRight aria-hidden className="size-3.5" /></Link>}>
+                      <table className="w-full text-sm">
+                        <caption className="sr-only">{copy.standings}</caption>
+                        <thead>
+                          <tr className="border-b border-line text-left text-xs text-ink-2">
+                            <th scope="col" className="py-1.5 pr-2 font-medium">{t.standings.rank}</th>
+                            <th scope="col" className="py-1.5 pr-2 font-medium">{t.standings.team}</th>
+                            <th scope="col" className="py-1.5 pl-2 text-right font-medium">{t.standings.played}</th>
+                            <th scope="col" className="py-1.5 pl-2 text-right font-medium">{standings?.calculated ? t.standings.record : t.standings.points}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row) => {
+                            const own = row.team.toLowerCase() === displayName.toLowerCase()
+                            return (
+                              <tr key={`${row.rank}-${row.team}`} aria-current={own ? "true" : undefined} className={cn("border-b border-line last:border-0", own && "fs-foot font-semibold text-ink")}>
+                                <td className="tabular py-2 pr-2 text-ink-2">{row.rank ?? "–"}</td>
+                                <th scope="row" className={cn("min-w-0 py-2 pr-2 text-left text-ink", own ? "font-semibold" : "font-medium")}>{row.team}</th>
+                                <td className="tabular py-2 pl-2 text-right text-ink-2">{row.played ?? "–"}</td>
+                                <td className="tabular py-2 pl-2 text-right font-semibold text-ink">{standings?.calculated ? `${row.won ?? "–"}-${row.lost ?? "–"}` : row.points ?? "–"}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                      {standings?.calculated && <p className="mt-2 text-xs text-ink-3">{t.standings.calculated}</p>}
+                    </Panel>
+                  )}
+                </div>
+              </SpoilerGuard>
+            </aside>
+          </SpoilerScope>
+        )}
+      </div>
 
       {team && <TeamWatchPanel sport={team.sportId} team={team.name} recent={videos} feed={watch?.feed ?? null} t={t} href={href} />}
 
       {related.length > 0 && (
-        <Panel className="mb-7" title={copy.relatedReports} icon={<Newspaper aria-hidden />}>
+        <Panel className="mb-6" title={copy.relatedReports} icon={<Newspaper aria-hidden />}>
           <ul className="-my-2 divide-y divide-line">
             {related.map((report) => (
               <li key={report.id} className="py-2.5">

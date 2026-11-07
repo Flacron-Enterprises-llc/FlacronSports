@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { MessagesSquare, Plus, Users } from "lucide-react"
 import { useAccount } from "@/components/dashboard/account-context"
-import { CopyButton, ErrorNotice, useConfirm } from "@/components/dashboard/controls"
-import { btn, EmptyState, ListSkeleton, Notice, Panel, Skeleton } from "@/components/site/states"
+import { ErrorNotice, ShareLink, useConfirm } from "@/components/dashboard/controls"
+import { btn, EmptyState, Initials, ListSkeleton, Notice, Panel, Skeleton } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import { ROOM_PASS_PARTICIPANTS } from "@/lib/billing/addons"
 import { PLANS } from "@/lib/billing/plans"
@@ -50,15 +50,16 @@ const hasEnded = (expiresAtUTC: string) => Date.now() >= Date.parse(expiresAtUTC
 function InviteLink({ token }: { token: string }) {
   const { t, href } = useLocale()
   const link = `${window.location.origin}${href(`/app/rooms/join/${token}`)}`
+  return <ShareLink testId="room-invite-link" value={link} label={t.community.inviteLink} copy={t.community.copy} copied={t.community.copied} note={t.community.inviteOnce} />
+}
+
+/** A numbered step of the create form. */
+function Step({ number, children }: { number: number; children: React.ReactNode }) {
   return (
-    <div className="mt-3 rounded-lg border border-line bg-surface-muted p-3">
-      <p className="text-sm text-ink-2">{t.community.inviteOnce}</p>
-      <label className="mt-2 block text-sm font-medium text-ink">
-        {t.community.inviteLink}
-        <input readOnly data-testid="room-invite-link" value={link} onFocus={(event) => event.target.select()} className="fs-input mt-1 h-10 px-3 text-sm" />
-      </label>
-      <div className="mt-2"><CopyButton value={link} label={t.community.copy} done={t.community.copied} /></div>
-    </div>
+    <li className="flex gap-2.5">
+      <span aria-hidden className="tabular mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-navy text-[11px] font-semibold text-white dark:bg-brand dark:text-brand-on">{number}</span>
+      <div className="min-w-0 flex-1">{children}</div>
+    </li>
   )
 }
 
@@ -136,12 +137,13 @@ function RoomView({ id, name, matchId, firstInvite, onClosed, onGone }: { id: st
       {notice && <div className="mt-3"><Notice tone="danger" role="alert">{notice}</Notice></div>}
       {detail && (
         <section aria-label={t.community.membersTitle} className="mt-3 border-t border-line pt-3">
-          <h3 className="text-sm font-semibold text-ink">{t.community.membersTitle}</h3>
-          <ul data-testid="room-members" className="mt-1 divide-y divide-line text-sm text-ink">
+          <h3 className="text-[13px] font-semibold text-ink">{t.community.membersTitle}</h3>
+          <ul data-testid="room-members" className="mt-1.5 grid gap-1.5 text-sm text-ink sm:grid-cols-2">
             {detail.members.map((member) => (
-              <li key={member.ref} data-testid="room-member" className="flex items-center gap-2 py-1.5">
-                <span className="min-w-0 flex-1 truncate">{member.displayName}{member.mine && <span className="text-ink-2"> {t.community.you}</span>}</span>
-                <span className="shrink-0 rounded-full bg-surface-muted px-2 py-0.5 text-[11.5px] font-semibold text-ink-2">{member.role === "host" ? t.community.roleHost : t.community.roleMember}</span>
+              <li key={member.ref} data-testid="room-member" className="flex min-h-11 min-w-0 items-center gap-2 rounded-lg bg-surface-muted px-2 py-1">
+                <Initials name={member.displayName} mine={member.mine} className="size-7" />
+                <span className="min-w-0 flex-1 truncate font-medium">{member.displayName}{member.mine && <span className="font-normal text-ink-2"> {t.community.you}</span>}</span>
+                <span className="shrink-0 text-xs font-semibold text-ink-2">{member.role === "host" ? t.community.roleHost : t.community.roleMember}</span>
                 {detail.isHost && member.role !== "host" && <button type="button" className={btn("ghost", "sm")} onClick={() => remove(member.ref, member.displayName)}>{t.community.remove}<span className="sr-only">: {member.displayName}</span></button>}
               </li>
             ))}
@@ -149,13 +151,13 @@ function RoomView({ id, name, matchId, firstInvite, onClosed, onGone }: { id: st
         </section>
       )}
       {detail?.isHost && !ended && (
-        <div className="mt-3 border-t border-line pt-3">
-          {!invite && <p className="mb-2 text-[13px] leading-5 text-ink-2">{detail.room.inviteActive ? t.community.inviteActiveHint : t.community.noInviteActive}</p>}
+        <div className="mt-3 space-y-3 border-t border-line pt-3">
+          {invite && <InviteLink token={invite} />}
+          {!invite && <p className="text-[13px] leading-5 text-ink-2">{detail.room.inviteActive ? t.community.inviteActiveHint : t.community.noInviteActive}</p>}
           <div className="flex flex-wrap gap-2">
             <button type="button" className={btn("outline", "sm")} onClick={() => rotate("POST")}>{t.community.newInvite}</button>
             {detail.room.inviteActive && <button type="button" className={btn("ghost", "sm")} onClick={() => rotate("DELETE")}>{t.community.revokeInvite}</button>}
           </div>
-          {invite && <InviteLink token={invite} />}
         </div>
       )}
       <div className="mt-4 border-t border-line pt-4">
@@ -242,12 +244,12 @@ export function RoomsPanel({ matchId, inviteToken = null }: { matchId: string | 
         <Notice tone="info" title={t.community.invited} action={gate.locked ? undefined : <button type="button" onClick={join} data-testid="room-join" className={btn("primary")}>{t.community.join}</button>}>{t.community.independentVideo}</Notice>
       )}
       {invited && gate.prompt}
-      <div className="grid items-start gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
+      <div className="grid items-start gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
         <div className="min-w-0 space-y-4">
           {failed && <ErrorNotice onRetry={load}>{t.community.loadFailed}</ErrorNotice>}
           {!rooms && !failed && <div role="status" aria-label={t.ui.loading}><ListSkeleton rows={3} /></div>}
           {rooms && rooms.length > 0 && (
-            <ul aria-label={t.community.roomsTitle} className="fs-stagger space-y-2">
+            <ul aria-label={t.community.roomsTitle} className="fs-settle space-y-2">
               {rooms.map((room) => (
                 <li key={room.id}>
                   <button type="button" data-testid="room-row" aria-pressed={selected === room.id} onClick={() => { setSelected(room.id); setCreated(null) }} className={cn("fs-lift flex w-full items-center gap-3 rounded-xl border bg-surface p-3 text-left shadow-[var(--shadow-sm)]", selected === room.id ? "border-orange" : "border-line")}>
@@ -268,15 +270,19 @@ export function RoomsPanel({ matchId, inviteToken = null }: { matchId: string | 
               {gate.locked ? (
                 !invited && gate.prompt
               ) : (
-                <form onSubmit={(event) => { event.preventDefault(); void createRoom() }} className="space-y-3">
-                  <GamePicker value={game} onChange={setGame} presetMatch={matchId} />
-                  <label className="block text-sm font-medium text-ink">{t.community.roomName}<input data-testid="room-name" className="fs-input mt-1 h-10 px-3 text-sm" required maxLength={60} value={name} onChange={(event) => setName(event.target.value)} /></label>
-                  <label className="block text-sm font-medium text-ink">
-                    {t.community.participantLimit}
-                    <input data-testid="room-limit" className="fs-input mt-1 h-10 px-3 text-sm" type="number" min={2} max={maxParticipants} value={limit} onChange={(event) => setLimit(event.target.value)} />
-                    <span className="mt-1 block text-xs font-normal text-ink-2">{t.community.participantLimitHint.replace("{max}", String(maxParticipants))}</span>
-                  </label>
-                  <button type="submit" disabled={busy} data-testid="room-create-submit" className={btn("primary", "md", "w-full")}>{t.community.createRoom}</button>
+                <form onSubmit={(event) => { event.preventDefault(); void createRoom() }}>
+                  <ol className="space-y-4">
+                    <Step number={1}><GamePicker value={game} onChange={setGame} presetMatch={matchId} /></Step>
+                    <Step number={2}><label className="block text-sm font-medium text-ink">{t.community.roomName}<input data-testid="room-name" className="fs-input mt-1 h-10 px-3 text-sm" required maxLength={60} value={name} onChange={(event) => setName(event.target.value)} /></label></Step>
+                    <Step number={3}>
+                      <label className="block text-sm font-medium text-ink">
+                        {t.community.participantLimit}
+                        <input data-testid="room-limit" className="fs-input mt-1 h-10 px-3 text-sm" type="number" min={2} max={maxParticipants} value={limit} onChange={(event) => setLimit(event.target.value)} />
+                        <span className="mt-1 block text-xs font-normal text-ink-2">{t.community.participantLimitHint.replace("{max}", String(maxParticipants))}</span>
+                      </label>
+                    </Step>
+                  </ol>
+                  <button type="submit" disabled={busy} data-testid="room-create-submit" className={btn("primary", "md", "mt-4 w-full")}>{t.community.createRoom}</button>
                 </form>
               )}
             </Panel>

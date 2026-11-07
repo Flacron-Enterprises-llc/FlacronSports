@@ -125,7 +125,7 @@ export default async function NewsPage({ params, searchParams }: Props) {
 
       {matching.length > 0 && (
         <>
-          <ul data-testid="news-list" className="fs-stagger mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <ul data-testid="news-list" className="fs-settle mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {lead && <li className="min-w-0 sm:col-span-2 xl:row-span-2"><LeadStory report={lead} t={t} locale={locale} href={href} /></li>}
             {cards.map((report) => <li key={report.id} className="min-w-0"><NewsCard report={report} t={t} locale={locale} href={href} /></li>)}
           </ul>

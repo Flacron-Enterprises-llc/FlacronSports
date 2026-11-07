@@ -6,7 +6,7 @@ import type { SportEvent } from "@/lib/sports/types"
 import { cn } from "@/lib/utils"
 import { SpoilerGuard } from "./parts"
 
-const TONE: Record<FormResult, string> = { win: "fs-tone-good text-good", draw: "bg-surface-muted text-ink-2", loss: "fs-tone-bad text-bad" }
+const TONE: Record<FormResult, string> = { win: "fs-form-win", draw: "fs-form-draw", loss: "fs-form-loss" }
 
 export function MatchFormSkeleton() {
   return <Panel><div className="space-y-2"><Skeleton className="h-4 w-1/2" /><Skeleton className="h-4 w-2/3" /></div></Panel>
@@ -27,13 +27,13 @@ export async function MatchForm({ event, t }: { event: SportEvent; t: Dictionary
   return (
     <Panel title={t.match.form} description={t.match.formLatest}>
       <SpoilerGuard label={t.spoiler.revealResult}>
-        <ul className="space-y-2">
+        <ul className="grid gap-3 sm:grid-cols-2">
           {rows.map(({ name, form }) => (
-            <li key={name} className="flex flex-wrap items-center justify-between gap-2">
-              <span className="min-w-0 truncate text-sm font-medium text-ink">{name}</span>
-              <span className="flex gap-1">
+            <li key={name} className="min-w-0">
+              <p className="truncate text-sm font-medium text-ink">{name}</p>
+              <span className="mt-1.5 flex gap-1">
                 {form.map((result, index) => (
-                  <span key={index} className={cn("inline-flex size-6 items-center justify-center rounded-md border border-transparent text-[11px] font-semibold", TONE[result])}>
+                  <span key={index} className={cn("inline-flex size-7 items-center justify-center rounded-lg text-xs font-bold", TONE[result])}>
                     <span aria-hidden>{t.match.formLetters[result]}</span>
                     <span className="sr-only">{t.match.formNames[result]}</span>
                   </span>

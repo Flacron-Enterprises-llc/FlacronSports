@@ -9,7 +9,7 @@ import { SPORTS, type SportId } from "@/lib/sports/types"
 import { cn } from "@/lib/utils"
 
 export const newsChip = (active: boolean) =>
-  cn("inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors", active ? "fs-chip-hot" : "border-line bg-surface text-ink-2 hover:text-ink")
+  cn("inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors sm:min-h-9", active ? "fs-chip-hot" : "border-line bg-surface text-ink-2 hover:text-ink")
 
 /** The shared daily roundup has no single sport. */
 export const sportOf = (report: Pick<Report, "sportId">, locale: Locale) => {

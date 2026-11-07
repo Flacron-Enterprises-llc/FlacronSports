@@ -2,7 +2,7 @@ import Link from "next/link"
 import { ChevronLeft, ChevronRight, Globe2, Search, Trophy, X } from "lucide-react"
 import { MemberDataPending } from "@/components/dashboard/member-data-pending"
 import { SportIcon } from "@/components/site/sport-icon"
-import { AppPage, btn, EmptyState, PageHeader } from "@/components/site/states"
+import { AppPage, btn, chipClass, EmptyState, PageHeader } from "@/components/site/states"
 import { DateJump } from "@/components/sports/date-jump"
 import { FeedNotice } from "@/components/sports/event-card"
 import { CompetitionGroupSection } from "@/components/sports/competition-group"
@@ -72,9 +72,6 @@ export default async function ScoresPage({ params, searchParams }: Props) {
   const day = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" })
   const dayNumber = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", timeZone: "UTC" })
   const strip = [-3, -2, -1, 0, 1, 2, 3].map((offset) => shiftDate(date, offset))
-  const chip = (active: boolean) =>
-    cn("inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-[13px] font-medium transition-colors", active ? "border-navy bg-navy text-white dark:border-brand dark:bg-brand dark:text-brand-on" : "border-line bg-surface text-ink-2 hover:border-line-strong hover:text-ink")
-
   const hiddenFilters = (
     <>
       {search.fav && <input type="hidden" name="fav" value={search.fav} />}
@@ -87,16 +84,16 @@ export default async function ScoresPage({ params, searchParams }: Props) {
       <LiveRefresh live={date === today && feed.events.some((event) => event.status === "live")} />
       <PageHeader title={t.scores.title} lead={t.scores.lead} icon={<Trophy aria-hidden />} />
 
-      <div className="fs-rise rounded-xl border border-line bg-surface p-3 shadow-[var(--shadow-sm)] sm:p-4" style={{ ["--i" as string]: 1 }}>
-        <div className="flex flex-wrap items-center gap-2">
-          <Link href={dated(shiftDate(date, -1))} aria-label={t.ui.previousDay} className={btn("outline", "md", "size-10 shrink-0 px-0")}><ChevronLeft aria-hidden className="size-4" /></Link>
-          <ol className="fs-noscrollbar flex min-w-0 flex-1 gap-1 overflow-x-auto">
+      <div className="fs-rise rounded-xl border border-line bg-surface p-2.5 shadow-[var(--shadow-sm)] sm:p-3" style={{ ["--i" as string]: 1 }}>
+        <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap">
+          <Link href={dated(shiftDate(date, -1))} aria-label={t.ui.previousDay} className={btn("ghost", "md", "size-10 shrink-0 px-0")}><ChevronLeft aria-hidden className="size-4" /></Link>
+          <ol className="fs-noscrollbar flex min-w-0 flex-1 basis-0 gap-1 overflow-x-auto">
             {strip.map((value) => {
               const active = value === date
               const when = new Date(`${value}T12:00:00Z`)
               return (
                 <li key={value} className="min-w-[3.25rem] flex-1">
-                  <Link href={dated(value)} aria-current={active ? "date" : undefined} className={cn("flex min-h-10 flex-col items-center justify-center rounded-lg px-1 py-1 text-center transition-colors", active ? "bg-navy text-white dark:bg-brand dark:text-brand-on" : "text-ink-2 hover:bg-surface-muted hover:text-ink")}>
+                  <Link href={dated(value)} aria-current={active ? "date" : undefined} className={cn("flex min-h-11 flex-col items-center justify-center rounded-lg px-1 py-1 text-center transition-colors", active ? "bg-navy text-white dark:bg-brand dark:text-brand-on" : "text-ink-2 hover:bg-surface-muted hover:text-ink")}>
                     <span className="text-[11px] font-medium capitalize leading-4">{value === today ? t.ui.today : day.format(when)}</span>
                     <span className="tabular whitespace-nowrap text-[13px] font-semibold leading-4">{dayNumber.format(when)}</span>
                   </Link>
@@ -104,68 +101,73 @@ export default async function ScoresPage({ params, searchParams }: Props) {
               )
             })}
           </ol>
-          <Link href={dated(shiftDate(date, 1))} aria-label={t.ui.nextDay} className={btn("outline", "md", "size-10 shrink-0 px-0")}><ChevronRight aria-hidden className="size-4" /></Link>
-          <DateJump value={date} template={link({ date: "{date}" }).replace("%7Bdate%7D", "{date}")} />
+          <Link href={dated(shiftDate(date, 1))} aria-label={t.ui.nextDay} className={btn("ghost", "md", "size-10 shrink-0 px-0")}><ChevronRight aria-hidden className="size-4" /></Link>
+          <div className="w-full sm:w-40 sm:shrink-0"><DateJump value={date} template={link({ date: "{date}" }).replace("%7Bdate%7D", "{date}")} /></div>
         </div>
 
-        <form className="relative mt-3" role="search">
-          {sport && <input type="hidden" name="sport" value={sport} />}
-          {search.status && <input type="hidden" name="status" value={search.status} />}
-          {search.date && <input type="hidden" name="date" value={search.date} />}
-          {competition && <input type="hidden" name="competition" value={competition} />}
-          {hiddenFilters}
-          <label htmlFor="scores-q" className="sr-only">{t.scores.search}</label>
-          <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
-          <input id="scores-q" type="search" name="q" defaultValue={q} placeholder={t.scores.search} className="fs-input h-10 pl-9 pr-24 text-sm" />
-          <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1">
-            {q && <Link href={link({ q: undefined })} aria-label={t.ui.clearSearch} className="inline-flex size-8 items-center justify-center rounded-md text-ink-3 hover:bg-surface-muted hover:text-ink"><X aria-hidden className="size-4" /></Link>}
-            <button type="submit" className={btn("navy", "sm", "min-h-8")}>{t.scores.apply}</button>
+        <div className="mt-2 flex flex-col gap-2 border-t border-line pt-2 lg:flex-row lg:items-center">
+          <form className="relative min-w-0 lg:flex-1" role="search">
+            {sport && <input type="hidden" name="sport" value={sport} />}
+            {search.status && <input type="hidden" name="status" value={search.status} />}
+            {search.date && <input type="hidden" name="date" value={search.date} />}
+            {competition && <input type="hidden" name="competition" value={competition} />}
+            {hiddenFilters}
+            <label htmlFor="scores-q" className="sr-only">{t.scores.search}</label>
+            <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
+            <input id="scores-q" type="search" name="q" defaultValue={q} placeholder={t.scores.search} className="fs-input h-10 pl-9 pr-24 text-sm" />
+            <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1">
+              {q && <Link href={link({ q: undefined })} aria-label={t.ui.clearSearch} className="inline-flex size-8 items-center justify-center rounded-md text-ink-3 hover:bg-surface-muted hover:text-ink"><X aria-hidden className="size-4" /></Link>}
+              <button type="submit" className={btn("navy", "sm", "min-h-8 sm:min-h-8")}>{t.scores.apply}</button>
+            </div>
+          </form>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {competitions.length > 0 && (
+              <form className="flex min-w-0 max-w-full items-center gap-2">
+                {sport && <input type="hidden" name="sport" value={sport} />}
+                {search.status && <input type="hidden" name="status" value={search.status} />}
+                {search.date && <input type="hidden" name="date" value={search.date} />}
+                {q && <input type="hidden" name="q" value={q} />}
+                {hiddenFilters}
+                <label htmlFor="scores-competition" className="sr-only">{t.scores.competition}</label>
+                <FilterSelect id="scores-competition" name="competition" value={competition ?? ""} className="fs-input h-10 w-full max-w-72 px-2 text-sm sm:w-64">
+                  <option value="">{t.scores.allCompetitions}</option>
+                  {competitions.map((option) => <option key={option.key} value={option.key}>{option.name}</option>)}
+                </FilterSelect>
+                <noscript><button type="submit" className={btn("outline", "sm")}>{t.scores.apply}</button></noscript>
+              </form>
+            )}
+            <FavoritesFilter />
           </div>
-        </form>
+        </div>
+      </div>
 
-        <nav aria-label={t.scores.title} className="fs-noscrollbar mt-3 flex gap-1.5 overflow-x-auto">
-          {TABS.map((item) => {
-            const [key] = item
-            const count = inTab(item).length
-            return (
-              <Link key={key} href={link({ status: key })} aria-current={tab[0] === key ? "page" : undefined} className={chip(tab[0] === key)}>
-                {key === "live" && count > 0 && <span aria-hidden className="fs-live-dot size-1.5 rounded-full bg-live" />}
-                {t.scores[key]}{feed.state !== "unavailable" && <span className="tabular text-xs opacity-80">{count}</span>}
-              </Link>
-            )
-          })}
-        </nav>
-        <div className="fs-noscrollbar mt-2 flex gap-1.5 overflow-x-auto">
-          <Link href={link({ sport: undefined, competition: undefined })} aria-current={!sport ? "true" : undefined} className={chip(!sport)}>{t.scores.allSports}</Link>
-          <Link href={link({ region: africa ? undefined : "africa", competition: undefined })} aria-pressed={africa} className={chip(africa)}><Globe2 aria-hidden className="size-3.5" />{t.discover.africaFilter}</Link>
+      <div className="fs-stick fs-glass -mx-4 mt-3 border-b border-line px-4 py-2 sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
+        <div className="fs-noscrollbar flex items-center gap-1.5 overflow-x-auto">
+          <nav aria-label={t.scores.title} className="flex shrink-0 gap-1.5">
+            {TABS.map((item) => {
+              const [key] = item
+              const count = inTab(item).length
+              return (
+                <Link key={key} href={link({ status: key })} aria-current={tab[0] === key ? "page" : undefined} className={chipClass(tab[0] === key)}>
+                  {key === "live" && count > 0 && <span aria-hidden className="fs-live-dot size-1.5 rounded-full bg-live" />}
+                  {t.scores[key]}{feed.state !== "unavailable" && <span className="tabular text-xs opacity-80">{count}</span>}
+                </Link>
+              )
+            })}
+          </nav>
+          <span aria-hidden className="mx-1 h-6 w-px shrink-0 bg-line" />
+          <Link href={link({ sport: undefined, competition: undefined })} aria-current={!sport ? "true" : undefined} className={chipClass(!sport)}>{t.scores.allSports}</Link>
+          <Link href={link({ region: africa ? undefined : "africa", competition: undefined })} aria-pressed={africa} className={chipClass(africa)}><Globe2 aria-hidden className="size-3.5" />{t.discover.africaFilter}</Link>
           {enabledSports().map((item) => (
-            <Link key={item.id} href={link({ sport: item.id, competition: undefined })} aria-current={sport === item.id ? "true" : undefined} className={chip(sport === item.id)}>
+            <Link key={item.id} href={link({ sport: item.id, competition: undefined })} aria-current={sport === item.id ? "true" : undefined} className={chipClass(sport === item.id)}>
               <SportIcon id={item.id} className="size-3.5" />{item.name[locale]}
             </Link>
           ))}
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-          {competitions.length > 0 && (
-            <form className="flex min-w-0 items-center gap-2">
-              {sport && <input type="hidden" name="sport" value={sport} />}
-              {search.status && <input type="hidden" name="status" value={search.status} />}
-              {search.date && <input type="hidden" name="date" value={search.date} />}
-              {q && <input type="hidden" name="q" value={q} />}
-              {hiddenFilters}
-              <label htmlFor="scores-competition" className="sr-only">{t.scores.competition}</label>
-              <FilterSelect id="scores-competition" name="competition" value={competition ?? ""} className="fs-input h-9 w-full max-w-72 px-2 text-sm sm:w-72">
-                <option value="">{t.scores.allCompetitions}</option>
-                {competitions.map((option) => <option key={option.key} value={option.key}>{option.name}</option>)}
-              </FilterSelect>
-              <noscript><button type="submit" className={btn("outline", "sm")}>{t.scores.apply}</button></noscript>
-            </form>
-          )}
-          <FavoritesFilter />
-        </div>
       </div>
 
       {events.length > 0 && (
-        <div className="mt-5 space-y-6">
+        <div className="mt-4 space-y-4">
           {shown.map((group) => <CompetitionGroupSection key={group.key} group={group} total={totals.get(group.key) ?? group.events.length} t={t} href={href} />)}
         </div>
       )}
@@ -177,12 +179,12 @@ export default async function ScoresPage({ params, searchParams }: Props) {
         </nav>
       )}
       {sport && feed.nextDates && feed.nextDates.length > 0 && (
-        <nav aria-label={t.scores.nextDates} data-testid="next-dates" className="mt-5 rounded-xl border border-line bg-surface p-4">
+        <nav aria-label={t.scores.nextDates} data-testid="next-dates" className="mt-4 rounded-xl border border-line bg-surface p-4 shadow-[var(--shadow-sm)]">
           <h2 className="text-sm font-semibold text-ink">{t.scores.nextDates}</h2>
           <ul className="mt-2 flex flex-wrap gap-1.5">
             {feed.nextDates.map((item) => (
               <li key={item.date}>
-                <Link href={dated(item.date)} className={chip(false)}>
+                <Link href={dated(item.date)} className={chipClass(false)}>
                   <span className="capitalize">{day.format(new Date(`${item.date}T12:00:00Z`))} {dayNumber.format(new Date(`${item.date}T12:00:00Z`))}</span>
                   <span className="tabular text-xs opacity-80">{(item.games === 1 ? t.scores.oneGame : t.scores.games).replace("{count}", String(item.games))}</span>
                 </Link>
@@ -192,7 +194,7 @@ export default async function ScoresPage({ params, searchParams }: Props) {
         </nav>
       )}
       {events.length === 0 && feed.state !== "unavailable" && (
-        <EmptyState className="mt-5" icon={<Trophy aria-hidden />} title={following ? t.scores.noFavorites : t.scores.empty} body={following ? t.scores.noFavoritesBody : t.ui.scoresEmptyBody} action={q || sport || search.status || competition || africa ? { href: dated(date).split("?")[0] + (date !== today ? `?date=${date}` : ""), label: t.ui.clearFilters } : undefined} />
+        <EmptyState className="mt-4" icon={<Trophy aria-hidden />} title={following ? t.scores.noFavorites : t.scores.empty} body={following ? t.scores.noFavoritesBody : t.ui.scoresEmptyBody} action={q || sport || search.status || competition || africa ? { href: dated(date).split("?")[0] + (date !== today ? `?date=${date}` : ""), label: t.ui.clearFilters } : undefined} />
       )}
       <div className="mt-5"><FeedNotice feed={feed} t={t} /></div>
     </AppPage>

@@ -97,6 +97,10 @@ const OVER_STATUSES: EventStatus[] = ["finished", "canceled", "abandoned"]
 const sessionOver = (session: RaceSession, now: Date) =>
   OVER_STATUSES.includes(session.status) || (session.startUTC !== null && Date.parse(session.startUTC) + 2 * DAY_MS < now.getTime())
 
+/** The status to show for a session, since a past one can still read as upcoming. */
+export const sessionStatus = (session: RaceSession, now: Date): EventStatus =>
+  session.status === "scheduled" && sessionOver(session, now) ? "finished" : session.status
+
 export function raceWeekends(rows: RawEvent[], now: Date = new Date()): RaceWeekend[] {
   const groups = new Map<string, RawEvent[]>()
   for (const raw of rows) {

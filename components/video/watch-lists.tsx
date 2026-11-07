@@ -1,63 +1,77 @@
 import Link from "next/link"
-import { Tv } from "lucide-react"
+import { SportIcon } from "@/components/site/sport-icon"
 import { LocalTime } from "@/components/sports/parts"
+import { ChannelLogo } from "@/components/video/channel-logo"
 import { HighlightPlayer } from "@/components/video/highlight-player"
 import type { Broadcast } from "@/lib/sports/service"
 import type { Highlight } from "@/lib/video/catalog"
+import { groupListings } from "@/lib/video/listings"
 import type { Clip } from "@/lib/video/scorebat"
+import { cn } from "@/lib/utils"
 
 type Href = (path: string) => string
 
-const CARD = "min-w-0 rounded-xl border border-line bg-surface p-3 shadow-[var(--shadow-sm)]"
-const GRID = "fs-stagger mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+const CARD = "fs-tile fs-lift min-w-0 overflow-hidden rounded-xl border border-line bg-surface pb-3 shadow-[var(--shadow-sm)]"
+// The first two tiles run larger. On a shorter list every tile is already large.
+const GRID = "fs-settle mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-6 xl:[&>li]:col-span-2 xl:[&>li:nth-child(-n+2)]:col-span-3"
+const GRID_EVEN = "fs-settle mt-3 grid gap-4 sm:grid-cols-2"
 
-export function HighlightGrid({ highlights, href }: { highlights: Omit<Highlight, "youtubeId">[]; href: Href }) {
+export function HighlightGrid({ highlights, href, even }: { highlights: Omit<Highlight, "youtubeId">[]; href: Href; even?: boolean }) {
   return (
-    <ul className={GRID}>
+    <ul className={even ? GRID_EVEN : GRID}>
       {highlights.map((item) => (
         <li key={item.matchId} className={CARD}>
-          <HighlightPlayer matchId={item.matchId} title={item.title} thumbnailUrl={item.thumbnailUrl} channel={item.channel} />
-          <Link href={href(`/app/match/${item.matchId}`)} className="mt-2 block font-semibold text-ink hover:underline">{item.title}</Link>
-          <p className="mt-0.5 truncate text-[13px] text-ink-2">{item.competition}</p>
+          <HighlightPlayer flush matchId={item.matchId} title={item.title} thumbnailUrl={item.thumbnailUrl} channel={item.channel} />
+          <div className="px-3">
+            <Link href={href(`/app/match/${item.matchId}`)} className="mt-0.5 line-clamp-2 text-[15px] font-semibold leading-5 text-ink underline-offset-2 hover:underline">{item.title}</Link>
+            <p className="mt-0.5 truncate text-[13px] text-ink-2">{item.competition}</p>
+          </div>
         </li>
       ))}
     </ul>
   )
 }
 
-export function ClipGrid({ clips }: { clips: Clip[] }) {
+export function ClipGrid({ clips, even }: { clips: Clip[]; even?: boolean }) {
   return (
-    <ul className={GRID}>
+    <ul className={even ? GRID_EVEN : GRID}>
       {clips.map((item) => (
         <li key={item.id} className={CARD}>
-          <HighlightPlayer clipId={item.id} title={item.title} thumbnailUrl={item.thumbnailUrl} />
-          <p className="mt-2 font-semibold text-ink">{item.title}</p>
-          <p className="mt-0.5 truncate text-[13px] text-ink-2">{item.competition}</p>
-          {item.dateUTC && <p className="mt-0.5 text-xs text-ink-2"><LocalTime iso={item.dateUTC} mode="datetime" /></p>}
+          <HighlightPlayer flush clipId={item.id} title={item.title} thumbnailUrl={item.thumbnailUrl} />
+          <div className="px-3 pt-2">
+            <p className="line-clamp-2 text-[15px] font-semibold leading-5 text-ink">{item.title}</p>
+            <p className="mt-0.5 truncate text-[13px] text-ink-2">{item.competition}</p>
+            {item.dateUTC && <p className="mt-0.5 text-xs text-ink-2"><LocalTime iso={item.dateUTC} mode="datetime" /></p>}
+          </div>
         </li>
       ))}
     </ul>
   )
 }
 
-export function ListingList({ broadcasts, href }: { broadcasts: Broadcast[]; href: Href }) {
+/** One card for each game, with its channels as chips. The feed lists one row per channel. */
+export function ListingList({ broadcasts, href, className }: { broadcasts: Broadcast[]; href: Href; className?: string }) {
   return (
-    <ul className="divide-y divide-line">
-      {broadcasts.map((item) => {
-        const row = (
-          <>
-            <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-white">
-              {item.logoUrl ? <img src={item.logoUrl} alt="" loading="lazy" decoding="async" className="size-full object-contain p-1" /> : <Tv aria-hidden className="size-4 text-ink-3" />}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-semibold text-ink">{item.eventName}</span>
-              <span className="block truncate text-[13px] text-ink-2">{item.channel}{item.country ? ` · ${item.country}` : ""}</span>
-            </span>
-            {item.startUTC && <span className="shrink-0 text-xs text-ink-2"><LocalTime iso={item.startUTC} mode="datetime" /></span>}
-          </>
-        )
-        return <li key={item.id}>{item.matchId ? <Link href={href(`/app/match/${item.matchId}`)} className="flex items-center gap-3 py-2.5 hover:bg-surface-muted">{row}</Link> : <div className="flex items-center gap-3 py-2.5">{row}</div>}</li>
-      })}
+    <ul className={cn("fs-settle grid gap-3 sm:grid-cols-2 xl:grid-cols-3", className)}>
+      {groupListings(broadcasts).map((game) => (
+        <li key={game.key} className="flex min-w-0 flex-col rounded-xl border border-line bg-surface p-3.5 shadow-[var(--shadow-sm)]">
+          <p className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-ink-2">
+            <SportIcon id={game.sportId} className="size-3.5 shrink-0" />
+            {game.startUTC && <LocalTime iso={game.startUTC} mode="datetime" />}
+          </p>
+          {game.matchId
+            ? <Link href={href(`/app/match/${game.matchId}`)} className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-ink underline-offset-2 hover:underline">{game.eventName}</Link>
+            : <p className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-ink">{game.eventName}</p>}
+          <ul className="mt-2.5 flex flex-wrap gap-1.5">
+            {game.channels.map((item) => (
+              <li key={item.id} className="flex min-h-8 min-w-0 max-w-full items-center gap-1.5 rounded-full border border-line py-0.5 pl-1 pr-2.5 text-xs text-ink">
+                <ChannelLogo url={item.logoUrl} className="size-6 rounded-full border border-line" />
+                <span className="min-w-0 truncate"><span className="font-medium">{item.channel}</span>{item.country && <span className="text-ink-2"> {item.country}</span>}</span>
+              </li>
+            ))}
+          </ul>
+        </li>
+      ))}
     </ul>
   )
 }

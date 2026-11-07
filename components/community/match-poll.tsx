@@ -39,7 +39,7 @@ export function MatchPoll({
   }
 
   return (
-    <section aria-label={t.community.pollTitle} className="mb-3 rounded-xl border border-line p-3 text-sm">
+    <section aria-label={t.community.pollTitle} className="mb-3 rounded-xl border border-line bg-surface p-3.5 text-sm">
       <p className="text-xs font-semibold text-ink-2">{t.community.pollTitle}</p>
       <p className="mt-1 font-semibold text-ink">{poll.question}</p>
       {!showResults && locked ? <div className="mt-2">{prompt}</div> : <ul className="mt-2 space-y-1.5">
@@ -51,7 +51,7 @@ export function MatchPoll({
                 <Meter value={option.votes} max={Math.max(total, 1)} label={option.text} className="mt-1" />
               </div>
             ) : (
-              <button type="button" onClick={() => vote(index)} className="min-h-9 w-full rounded-lg border border-line px-3 py-1.5 text-left font-medium text-ink transition-colors hover:bg-surface-muted">{option.text}</button>
+              <button type="button" onClick={() => vote(index)} className="min-h-10 w-full rounded-lg border border-line px-3 py-1.5 text-left font-medium text-ink transition-colors hover:border-line-strong hover:bg-surface-muted">{option.text}</button>
             )}
           </li>
         ))}

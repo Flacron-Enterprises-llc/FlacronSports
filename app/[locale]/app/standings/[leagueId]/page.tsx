@@ -4,7 +4,8 @@ import { ArrowRight, ListOrdered } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
 import { MemberDataPending } from "@/components/dashboard/member-data-pending"
 import { AppPage, EmptyState, PageHeader } from "@/components/site/states"
-import { LocalTime } from "@/components/sports/parts"
+import { FormPills } from "@/components/sports/form-pills"
+import { LocalTime, SpoilerGuard } from "@/components/sports/parts"
 import { pageContext, titled } from "@/lib/page-context"
 import { CUP_COMPETITIONS } from "@/lib/sports/seasons"
 import { getStandings, type StandingRow } from "@/lib/sports/service"
@@ -20,19 +21,25 @@ const ZONE_TONES: Record<StandingZone["tone"], string> = { first: "bg-good", sec
 
 export default async function StandingsPage({ params }: Props) {
   const { leagueId } = await params
-  const { t, href } = await pageContext(params)
+  const { locale, t, href } = await pageContext(params)
   if (!/^\d{1,8}$/.test(leagueId)) notFound()
 
   const table = await getStandings(leagueId)
   if (table.state === "withheld") return <MemberDataPending />
   const copy = t.standings
 
+  const { calculated } = table
+  const [scoredFor, scoredAgainst] = calculated ? copy.scored[calculated.unit] : [copy.scoredFor, copy.scoredAgainst]
   const columns: [keyof StandingRow, string][] = [
-    ["played", copy.played], ["won", copy.won], ["drawn", copy.drawn], ["lost", copy.lost],
-    ["scoredFor", copy.scoredFor], ["scoredAgainst", copy.scoredAgainst], ["difference", copy.difference], ["points", copy.points],
+    ["played", copy.played], ["won", copy.won], ["drawn", copy.drawn], ["overtimeLosses", copy.overtimeLosses], ["lost", copy.lost], ["winPercent", copy.winPercent],
+    ["scoredFor", scoredFor], ["scoredAgainst", scoredAgainst], ["difference", copy.difference], ["points", copy.points],
   ]
   // A column the feed never fills is dropped. A single gap shows a dash, never zero.
-  const shown = columns.filter(([key]) => table.rows.some((row) => row[key] !== null))
+  const shown = columns.filter(([key]) => table.rows.some((row) => (row[key] ?? null) !== null))
+  const showForm = table.rows.some((row) => row.form)
+  const percent = new Intl.NumberFormat(locale, { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  const cell = (row: StandingRow, key: keyof StandingRow) => (key === "winPercent" && row.winPercent !== undefined ? percent.format(row.winPercent) : row[key] ?? "–")
+  const latestGame = calculated && new Intl.DateTimeFormat(locale, { dateStyle: "long", timeZone: "UTC" }).format(new Date(calculated.latestGame))
   const zones = standingZones(table.rows)
   const zoneOf = (row: StandingRow) => zones.find((zone) => zone.label === row.zone)
 
@@ -46,38 +53,49 @@ export default async function StandingsPage({ params }: Props) {
       {table.state === "unavailable" && <ErrorNotice>{copy.unavailable}</ErrorNotice>}
       {table.state === "empty" && <EmptyState icon={<ListOrdered aria-hidden />} title={copy.empty} body={copy.emptyBody} action={{ href: href("/app/scores"), label: copy.browse }} />}
 
+      {calculated && (
+        <section aria-label={copy.calculated} className="mb-4 rounded-xl border border-line bg-surface p-4 text-sm leading-6 text-ink-2">
+          <h2 className="font-semibold text-ink">{copy.calculated}</h2>
+          <p>{copy.calculatedBasis.replace("{games}", String(calculated.games)).replace("{date}", latestGame as string)}</p>
+          {calculated.unit === "runs" && <p>{copy.calculatedCricket}</p>}
+          {calculated.stale && <p>{copy.calculatedStale}</p>}
+        </section>
+      )}
+
       {table.state === "ok" && (
+        <SpoilerGuard label={t.spoiler.revealResult}>
         <div className="fs-rise overflow-x-auto rounded-xl border border-line bg-surface shadow-[var(--shadow-sm)]">
           <table className="w-full text-sm">
             <caption className="sr-only">{table.league ?? copy.title}</caption>
             <thead>
               <tr className="border-b border-line bg-surface-muted text-left text-xs text-ink-2">
-                <th scope="col" className="px-3 py-2.5 font-medium">{copy.rank}</th>
-                <th scope="col" className="px-3 py-2.5 font-medium">{copy.team}</th>
-                {shown.map(([key, label]) => <th key={key} scope="col" className="px-3 py-2.5 text-right font-medium">{label}</th>)}
-                <th scope="col" className="px-3 py-2.5 font-medium">{copy.form}</th>
+                <th scope="col" className="sticky left-0 z-[1] w-11 bg-inherit py-2.5 pl-3.5 pr-1 font-medium">{copy.rank}</th>
+                <th scope="col" className="sticky left-11 z-[1] bg-inherit px-2 py-2.5 font-medium">{copy.team}</th>
+                {shown.map(([key, label]) => <th key={key} scope="col" className="px-2.5 py-2.5 text-right font-medium">{label}</th>)}
+                {showForm && <th scope="col" className="px-3 py-2.5 font-medium">{copy.form}</th>}
               </tr>
             </thead>
             <tbody>
               {table.rows.map((row) => (
-                <tr key={`${row.rank}-${row.team}`} className="border-b border-line transition-colors last:border-0 hover:bg-surface-muted">
-                  <td className="tabular relative px-3 py-2.5 font-semibold text-ink-2">
-                    {zoneOf(row) && <span aria-hidden className={`absolute inset-y-0 left-0 w-1 ${ZONE_TONES[(zoneOf(row) as StandingZone).tone]}`} />}
+                <tr key={`${row.rank}-${row.team}`} className="border-b border-line bg-surface transition-colors last:border-0 hover:bg-surface-muted">
+                  <td className="tabular sticky left-0 z-[1] bg-inherit py-2.5 pl-3.5 pr-1 font-semibold text-ink-2">
+                    {zoneOf(row) && <span aria-hidden className={`absolute inset-y-1 left-0 w-1 rounded-r-full ${ZONE_TONES[(zoneOf(row) as StandingZone).tone]}`} />}
                     {row.rank ?? "–"}
                     {row.zone && <span className="sr-only"> ({row.zone})</span>}
                   </td>
-                  <th scope="row" className="whitespace-nowrap px-3 py-2.5 text-left font-medium text-ink">{row.team}</th>
-                  {shown.map(([key]) => <td key={key} className={`tabular px-3 py-2.5 text-right ${key === "points" ? "font-semibold text-ink" : "text-ink-2"}`}>{row[key] ?? "–"}</td>)}
-                  <td className="tabular whitespace-nowrap px-3 py-2.5 text-ink-2">{row.form ?? "–"}</td>
+                  <th scope="row" className="sticky left-11 z-[1] max-w-[9.5rem] truncate bg-inherit px-2 py-2.5 text-left font-medium text-ink sm:max-w-none">{row.team}</th>
+                  {shown.map(([key]) => <td key={key} className={`tabular px-2.5 py-2.5 text-right ${key === "points" ? "font-display font-bold text-ink" : "text-ink-2"}`}>{cell(row, key)}</td>)}
+                  {showForm && <td className="whitespace-nowrap px-3 py-2 text-ink-2">{row.form ? <FormPills form={row.form} t={t} /> : "–"}</td>}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        </SpoilerGuard>
       )}
 
       {table.state === "ok" && zones.length > 0 && (
-        <section aria-label={copy.zones} className="mt-4 rounded-xl border border-line bg-surface p-4 text-sm">
+        <section aria-label={copy.zones} className="mt-4 rounded-xl border border-line bg-surface p-4 text-sm shadow-[var(--shadow-sm)]">
           <h2 className="font-semibold text-ink">{copy.zones}</h2>
           <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
             {zones.map((zone) => (
@@ -91,7 +109,7 @@ export default async function StandingsPage({ params }: Props) {
         </section>
       )}
 
-      <div className="mt-4 space-y-1 text-xs leading-5 text-ink-3">
+      <div className="mt-4 space-y-1 text-xs leading-5 text-ink-2">
         {table.limited && table.state === "ok" && <p>{copy.limited}</p>}
         <p>
           {t.feed.updated}: <LocalTime iso={table.fetchedAt} mode="datetime" />

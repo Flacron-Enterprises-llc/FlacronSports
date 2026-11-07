@@ -57,8 +57,8 @@ export function MatchCalendar() {
             <h3 className="text-[13px] font-semibold capitalize text-ink">{label}</h3>
             <ul className="mt-1 divide-y divide-line">
               {list.map((event) => (
-                <li key={event.id} className="flex min-w-0 items-center gap-3 py-1.5 text-sm">
-                  <span className="w-12 shrink-0 text-xs text-ink-2">{event.dateOnly ? "–" : <LocalTime iso={event.scheduledStartUTC as string} />}</span>
+                <li key={event.id} className="flex min-h-12 min-w-0 items-center gap-3 py-1 text-sm">
+                  <span className="w-14 shrink-0 text-xs font-semibold text-ink">{event.dateOnly ? "–" : <LocalTime iso={event.scheduledStartUTC as string} />}</span>
                   <span className="min-w-0 flex-1">
                     <Link href={href(`/app/match/${event.id}`)} className="block truncate font-medium text-ink underline-offset-2 hover:underline">{eventTitle(event)}</Link>
                     <span className="block truncate text-xs text-ink-2">{event.competition.name}</span>

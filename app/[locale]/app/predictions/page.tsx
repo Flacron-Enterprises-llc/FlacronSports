@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Medal } from "lucide-react"
+import { Medal, ScrollText, Trophy } from "lucide-react"
 import { GroupsPanel } from "@/components/community/groups-panel"
 import { Leaderboard } from "@/components/community/leaderboard"
 import { MyBadges } from "@/components/community/my-badges"
@@ -18,17 +18,15 @@ export default async function PredictionsPage({ params }: LocaleParams) {
     <AppPage width="lg">
       <PageHeader title={t.community.predictionsTitle} lead={t.community.predictionsLead} icon={<Medal aria-hidden />} actions={enabled ? <Link href={href("/app/scores?status=upcoming")} className={btn("navy")}>{t.ui.findMatch}</Link> : undefined} />
       {enabled ? (
-        <div className="space-y-5">
+        <div className="space-y-4">
           <MyPredictions />
-          <div className="grid items-start gap-5 lg:grid-cols-2">
-            <Panel title={t.community.leaderboard}><Leaderboard /></Panel>
-            <Panel title={t.community.pointRules}><RuleList /></Panel>
+          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+            <Panel title={t.community.leaderboard} icon={<Trophy aria-hidden />}><Leaderboard /></Panel>
+            <MyBadges />
           </div>
           <GroupsPanel />
-          <div className="grid items-start gap-5 lg:grid-cols-2">
-            <MyBadges />
-            <ReferralPanel />
-          </div>
+          <Panel title={t.community.pointRules} icon={<ScrollText aria-hidden />}><RuleList wide /></Panel>
+          <ReferralPanel />
         </div>
       ) : (
         <EmptyState icon={<Medal aria-hidden />} title={t.community.offTitle} body={t.community.offBody} />

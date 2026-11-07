@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { CalendarClock, Star } from "lucide-react"
+import { CalendarClock, ChevronRight, Star } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
 import { btn, ListSkeleton, Notice, Panel } from "@/components/site/states"
 import { LocalTime } from "@/components/sports/parts"
@@ -58,17 +58,18 @@ export function UpcomingGames({ picked }: { picked: string[] }) {
       {data?.stale && <p className="mb-2 text-xs text-ink-2">{t.feed.stale}</p>}
       {games?.length === 0 && <p className="text-sm text-ink-2">{t.community.noUpcoming}</p>}
       {games && games.length > 0 && (
-        <ul className="divide-y divide-line text-sm">
+        <ul className="-mx-4 divide-y divide-line text-sm sm:-mx-5">
           {games.map((game) => (
             <li key={game.id}>
-              <Link href={href(`/app/match/${game.id}?tab=chat`)} data-testid="upcoming-game" className="block rounded-md py-2 hover:bg-surface-muted">
-                <GameLine game={game} />
+              <Link href={href(`/app/match/${game.id}?tab=chat`)} data-testid="upcoming-game" className="fs-row flex min-h-12 items-center gap-2 px-4 py-2 sm:px-5">
+                <span className="min-w-0 flex-1"><GameLine game={game} /></span>
+                <ChevronRight aria-hidden className="size-4 shrink-0 text-ink-3" />
               </Link>
             </li>
           ))}
         </ul>
       )}
-      <Link href={href("/app/scores?status=upcoming")} className={btn("ghost", "sm", "mt-3")}>{t.community.browseUpcoming}</Link>
+      <Link href={href("/app/scores?status=upcoming")} className={btn("outline", "sm", "mt-3 w-full")}>{t.community.browseUpcoming}</Link>
     </Panel>
   )
 }
@@ -109,7 +110,7 @@ export function GamePicker({ value, onChange, presetMatch }: { value: string | n
         <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto pr-1 text-sm">
           {games.map((game) => (
             <li key={game.id}>
-              <label className={cn("flex cursor-pointer items-start gap-2 rounded-lg border p-2", value === game.id ? "border-orange" : "border-line hover:bg-surface-muted")}>
+              <label className={cn("fs-choice flex min-h-12 cursor-pointer items-start gap-2 rounded-lg border p-2", value === game.id ? "border-orange" : "border-line hover:bg-surface-muted")}>
                 <input type="radio" name="room-game" data-testid="room-game" className="mt-1" checked={value === game.id} onChange={() => onChange(game.id)} />
                 <span className="min-w-0 flex-1"><GameLine game={game} /></span>
               </label>

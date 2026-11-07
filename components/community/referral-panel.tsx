@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { Gift } from "lucide-react"
-import { CopyButton, ErrorNotice } from "@/components/dashboard/controls"
+import { ErrorNotice, ShareLink } from "@/components/dashboard/controls"
 import { Panel, Skeleton } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import { useLocale } from "@/lib/use-locale"
@@ -41,16 +41,17 @@ export function ReferralPanel() {
       {!summary && !failed && <div role="status" aria-label={t.ui.loading} className="space-y-2"><Skeleton className="h-10 w-full" /><Skeleton className="h-4 w-2/3" /></div>}
       {summary && (
         <>
-          <label className="block text-sm font-medium text-ink">
-            {t.community.referralLink}
-            <input readOnly value={link} onFocus={(event) => event.target.select()} className="fs-input mt-1 h-10 px-3 text-sm" />
-          </label>
-          <div className="mt-2"><CopyButton value={link} label={t.community.copy} done={t.community.copied} /></div>
-          <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
-            <div><dt className="text-ink-2">{t.community.referralPoints}</dt><dd className="tabular font-semibold text-ink">{summary.points}</dd></div>
-            <div><dt className="text-ink-2">{t.community.referralAwarded}</dt><dd className="tabular font-semibold text-ink">{summary.awards} / {summary.cap}</dd></div>
-            <div><dt className="text-ink-2">{t.community.referralPending}</dt><dd className="tabular font-semibold text-ink">{summary.pending}</dd></div>
-          </dl>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-end">
+            <ShareLink value={link} label={t.community.referralLink} copy={t.community.copy} copied={t.community.copied} />
+            <dl className="grid grid-cols-3 gap-2 text-sm">
+              {([[t.community.referralPoints, summary.points], [t.community.referralAwarded, `${summary.awards} / ${summary.cap}`], [t.community.referralPending, summary.pending]] as const).map(([label, value]) => (
+                <div key={label} className="min-w-0 rounded-lg bg-surface-muted px-3 py-2">
+                  <dt className="truncate text-xs text-ink-2">{label}</dt>
+                  <dd className="tabular font-display text-lg font-semibold text-ink">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
           <p className="mt-3 text-[13px] leading-5 text-ink-2">{fill(t.community.referralRules)}</p>
         </>
       )}

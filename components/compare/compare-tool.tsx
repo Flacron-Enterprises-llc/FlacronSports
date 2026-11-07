@@ -25,16 +25,16 @@ interface SavedView {
   createdAt: string
 }
 
-const FORM_TONE = { W: "bg-good text-white", D: "bg-surface-muted text-ink-2", L: "bg-bad text-white" }
+const FORM_TONE = { W: "fs-form-win", D: "fs-form-draw", L: "fs-form-loss" }
 const average = (total: number, played: number) => (played ? (total / played).toFixed(1) : "–")
 
 function Form({ team }: { team: TeamProfile }) {
   const { t } = useLocale()
   if (team.form.length === 0) return <span className="text-ink-3">–</span>
   return (
-    <span className="inline-flex gap-1">
+    <span className="inline-flex flex-wrap gap-0.5">
       {team.form.map((result, index) => (
-        <span key={index} className={cn("inline-flex size-6 items-center justify-center rounded text-[11px] font-bold", FORM_TONE[result])} title={t.compare.results[result]}>
+        <span key={index} className={cn("inline-flex size-6 items-center justify-center rounded-md font-sans text-[11px] font-bold", FORM_TONE[result])} title={t.compare.results[result]}>
           {t.compare.letters[result]}
         </span>
       ))}
@@ -45,9 +45,9 @@ function Form({ team }: { team: TeamProfile }) {
 function Row({ label, first, second }: { label: string; first: React.ReactNode; second: React.ReactNode }) {
   return (
     <tr>
-      <th scope="row" className="py-2.5 pr-3 text-left text-sm font-medium text-ink-2">{label}</th>
-      <td className="tabular py-2.5 pr-3 text-sm font-semibold text-ink">{first}</td>
-      <td className="tabular py-2.5 text-sm font-semibold text-ink">{second}</td>
+      <td className="tabular py-2.5 pr-2 text-right font-display text-[15px] font-semibold text-ink">{first}</td>
+      <th scope="row" className="px-1 py-2.5 text-center text-[13px] font-medium text-ink-2">{label}</th>
+      <td className="tabular py-2.5 pl-2 text-left font-display text-[15px] font-semibold text-ink">{second}</td>
     </tr>
   )
 }
@@ -65,13 +65,13 @@ function Results({ data, asked }: { data: Comparison; asked: { first: string; se
         <SpoilerReveal label={t.compare.reveal} />
         <SpoilerGuard label={t.compare.reveal} quiet>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[420px]">
+            <table className="w-full min-w-[300px] table-fixed">
               <caption className="sr-only">{t.compare.title}</caption>
               <thead>
-                <tr className="border-b border-line text-left text-xs text-ink-3">
-                  <th scope="col" className="py-2 pr-3 font-semibold">{t.compare.measure}</th>
-                  <th scope="col" className="py-2 pr-3 font-semibold">{one.name}</th>
-                  <th scope="col" className="py-2 font-semibold">{two.name}</th>
+                <tr className="border-b border-line text-sm text-ink">
+                  <th scope="col" className="break-words py-2 pr-2 text-right font-semibold">{one.name}</th>
+                  <th scope="col" className="w-[38%] px-1 py-2 text-center text-xs font-medium text-ink-2">{t.compare.measure}</th>
+                  <th scope="col" className="break-words py-2 pl-2 text-left font-semibold">{two.name}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -97,11 +97,11 @@ function Results({ data, asked }: { data: Comparison; asked: { first: string; se
             <div className="mt-4 border-t border-line pt-4">
               <h3 className="text-sm font-semibold text-ink">{t.compare.headToHead}</h3>
               {data.headToHead.length === 0 && <p className="mt-1 text-sm text-ink-2">{t.compare.noHeadToHead}</p>}
-              <ul className="mt-1 space-y-1 text-sm text-ink-2">
+              <ul className="mt-1.5 divide-y divide-line text-sm text-ink-2">
                 {data.headToHead.map((game) => (
-                  <li key={game.id} className="flex justify-between gap-3">
+                  <li key={game.id} className="flex min-h-9 items-center justify-between gap-3 py-1">
                     <span className="min-w-0 truncate">{game.title}</span>
-                    <span className="tabular shrink-0 font-semibold text-ink">{game.home}-{game.away}</span>
+                    <span className="tabular shrink-0 font-display font-semibold text-ink">{game.home}-{game.away}</span>
                   </li>
                 ))}
               </ul>
@@ -131,7 +131,7 @@ function Results({ data, asked }: { data: Comparison; asked: { first: string; se
 function TeamField({ id, label, value, onChange, options }: { id: string; label: string; value: string; onChange: (value: string) => void; options: string[] }) {
   return (
     <div className="min-w-0 flex-1">
-      <label htmlFor={id} className="mb-1 block text-sm font-medium text-ink">{label}</label>
+      <label htmlFor={id} className="mb-1 block text-[13px] font-medium text-ink">{label}</label>
       <input id={id} list={`${id}-list`} value={value} onChange={(event) => onChange(event.target.value)} autoComplete="off" maxLength={120} className="fs-input h-10 w-full px-3 text-sm" />
       <datalist id={`${id}-list`}>{options.map((name) => <option key={name} value={name} />)}</datalist>
     </div>
@@ -196,6 +196,7 @@ function PlayerCompare() {
         >
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
             <TeamField id="compare-player-first" label={t.compare.playerOne} value={first} options={options} onChange={(value) => { setFirst(value); suggest(value) }} />
+            <GitCompareArrows aria-hidden className="mb-3 hidden size-4 shrink-0 text-ink-3 lg:block" />
             <TeamField id="compare-player-second" label={t.compare.playerTwo} value={second} options={options} onChange={(value) => { setSecond(value); suggest(value) }} />
             <button type="submit" disabled={busy || !first.trim() || !second.trim()} className={btn("navy", "md", "disabled:opacity-60")}>{t.compare.run}</button>
           </div>
@@ -206,13 +207,13 @@ function PlayerCompare() {
       {data && one && two && (
         <Panel title={`${one.profile.name} / ${two.profile.name}`} description={t.compare.playerBasis} icon={<GitCompareArrows aria-hidden />}>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[420px]">
+            <table className="w-full min-w-[300px] table-fixed">
               <caption className="sr-only">{t.compare.title}</caption>
               <thead>
-                <tr className="border-b border-line text-left text-xs text-ink-3">
-                  <th scope="col" className="py-2 pr-3 font-semibold">{t.compare.measure}</th>
-                  <th scope="col" className="py-2 pr-3 font-semibold">{one.profile.name}</th>
-                  <th scope="col" className="py-2 font-semibold">{two.profile.name}</th>
+                <tr className="border-b border-line text-sm text-ink">
+                  <th scope="col" className="break-words py-2 pr-2 text-right font-semibold">{one.profile.name}</th>
+                  <th scope="col" className="w-[38%] px-1 py-2 text-center text-xs font-medium text-ink-2">{t.compare.measure}</th>
+                  <th scope="col" className="break-words py-2 pl-2 text-left font-semibold">{two.profile.name}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -324,12 +325,13 @@ export function CompareTool({ sports }: { sports: { id: SportId; name: string }[
         >
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
             <div className="lg:w-44">
-              <label htmlFor="compare-sport" className="mb-1 block text-sm font-medium text-ink">{t.compare.sport}</label>
+              <label htmlFor="compare-sport" className="mb-1 block text-[13px] font-medium text-ink">{t.compare.sport}</label>
               <select id="compare-sport" value={sport} onChange={(event) => setSport(event.target.value as SportId)} className="fs-input h-10 w-full px-2 text-sm">
                 {sports.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
             </div>
             <TeamField id="compare-first" label={t.compare.teamOne} value={first} options={options} onChange={(value) => { setFirst(value); suggest(value) }} />
+            <GitCompareArrows aria-hidden className="mb-3 hidden size-4 shrink-0 text-ink-3 lg:block" />
             <TeamField id="compare-second" label={t.compare.teamTwo} value={second} options={options} onChange={(value) => { setSecond(value); suggest(value) }} />
             <button type="submit" disabled={busy || !first.trim() || !second.trim()} className={btn("navy", "md", "disabled:opacity-60")}>{t.compare.run}</button>
           </div>
@@ -346,7 +348,7 @@ export function CompareTool({ sports }: { sports: { id: SportId; name: string }[
             {views.map((view) => (
               <li key={view.id} className="flex items-center justify-between gap-3 py-2">
                 <button type="button" onClick={() => open(view)} className="min-w-0 truncate text-left text-sm font-medium text-ink underline-offset-2 hover:underline">{view.first} / {view.second}</button>
-                <button type="button" onClick={() => remove(view.id)} aria-label={`${t.compare.remove}: ${view.first} / ${view.second}`} className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-ink-3 hover:bg-surface-muted hover:text-ink"><Trash2 aria-hidden className="size-4" /></button>
+                <button type="button" onClick={() => remove(view.id)} aria-label={`${t.compare.remove}: ${view.first} / ${view.second}`} className="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-ink-3 hover:bg-surface-muted hover:text-ink sm:size-9"><Trash2 aria-hidden className="size-4" /></button>
               </li>
             ))}
           </ul>

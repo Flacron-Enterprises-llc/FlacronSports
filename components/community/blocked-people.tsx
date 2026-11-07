@@ -1,5 +1,6 @@
 "use client"
 
+import { ChevronRight } from "lucide-react"
 import { useState } from "react"
 import { authFetch } from "@/lib/auth-fetch"
 import { useLocale } from "@/lib/use-locale"
@@ -25,13 +26,13 @@ export function BlockedPeople({ onChange }: { onChange(): void }) {
 
   return (
     <details className="mt-3 text-sm" onToggle={(event) => event.currentTarget.open && load()}>
-      <summary className="cursor-pointer font-semibold text-ink-2 hover:text-ink">{t.community.blockedPeople}</summary>
+      <summary className="fs-summary inline-flex min-h-10 cursor-pointer items-center gap-1 font-semibold text-ink-2 hover:text-ink sm:min-h-8"><ChevronRight aria-hidden className="fs-chevron size-4" />{t.community.blockedPeople}</summary>
       {people?.length === 0 && <p className="mt-2 text-ink-2">{t.community.noBlocked}</p>}
       <ul className="mt-2 space-y-1">
         {people?.map((person) => (
-          <li key={person.ref} className="flex items-center justify-between gap-2 text-ink">
+          <li key={person.ref} className="flex min-h-10 items-center justify-between gap-2 text-ink">
             {person.displayName}
-            <button type="button" className="text-xs font-semibold text-ink-2 hover:text-ink" onClick={() => unblock(person.ref)}>{t.community.unblock}</button>
+            <button type="button" className="min-h-10 text-xs font-semibold text-ink-2 hover:text-ink sm:min-h-6" onClick={() => unblock(person.ref)}>{t.community.unblock}</button>
           </li>
         ))}
       </ul>

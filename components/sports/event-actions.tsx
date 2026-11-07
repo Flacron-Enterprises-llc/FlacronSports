@@ -10,7 +10,7 @@ import type { SportEvent } from "@/lib/sports/types"
 import { useLocale } from "@/lib/use-locale"
 import { cn } from "@/lib/utils"
 
-const ICON_BUTTON = "inline-flex size-8 shrink-0 items-center justify-center rounded-md text-ink-3 transition-colors hover:bg-surface-muted hover:text-ink"
+const ICON_BUTTON = "inline-flex size-10 shrink-0 items-center justify-center rounded-md text-ink-3 transition-colors hover:bg-surface-muted hover:text-ink sm:size-8"
 
 function useSaved() {
   const { t } = useLocale()

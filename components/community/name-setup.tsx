@@ -38,7 +38,7 @@ export function NameSetup({ user }: { user: User }) {
   }
 
   return (
-    <form onSubmit={save} data-testid="community-name" className="mb-3 rounded-xl border border-line p-3 text-sm">
+    <form onSubmit={save} data-testid="community-name" className="mb-3 rounded-xl bg-surface-muted p-3 text-sm">
       <label className="block font-medium text-ink">
         {t.community.nameLabel}
         <span className="mt-0.5 block font-normal text-ink-2">{t.community.nameBody}</span>

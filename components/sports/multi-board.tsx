@@ -58,7 +58,7 @@ export function MultiBoard() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Segmented<"pinned" | "favorites"> value={view} onChange={setView} label={copy.boardTitle} options={[{ value: "pinned", label: copy.pinned }, { value: "favorites", label: copy.favoritesView }]} />
         <div className="flex items-center gap-3">
-          {board && <span className="text-xs text-ink-3">{t.feed.updated}: <LocalTime iso={board.fetchedAt} /></span>}
+          {board && <span className="text-xs text-ink-2">{t.feed.updated}: <LocalTime iso={board.fetchedAt} /></span>}
           <button type="button" onClick={load} className={btn("outline", "sm")}><RefreshCw aria-hidden className="size-3.5" /> {copy.refresh}</button>
         </div>
       </div>
@@ -71,7 +71,7 @@ export function MultiBoard() {
 
       {!board && !failed && <div role="status" aria-label={t.ui.loading}><CardGridSkeleton count={3} /></div>}
       {events && events.length > 0 && (
-        <div className="fs-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="fs-settle grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {events.map((event) => <EventCard key={event.id} event={event} t={t} href={href} />)}
         </div>
       )}

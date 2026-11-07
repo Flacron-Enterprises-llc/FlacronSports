@@ -77,19 +77,19 @@ export function AccountPanel() {
   const rooms = PLANS[plan].privateRooms
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {dialog}
       {message && <Notice tone={message.tone} role="status">{message.text}</Notice>}
       {access?.state === "past_due" && <Notice tone="danger" role="alert" action={<button type="button" onClick={portal} className={btn("outline", "sm")}>{t.account.manage}</button>}>{t.account.pastDue}</Notice>}
       {loaded && !access && <ErrorNotice onRetry={reload}>{t.account.failed}</ErrorNotice>}
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Panel title={t.account.plan} icon={<CreditCard aria-hidden />} actions={access && access.plan !== "none" ? <StatusChip access={access} /> : undefined}>
-          {access ? <p className="font-display text-[1.75rem] font-semibold leading-none text-ink">{access.plan === "none" ? t.paywall.noPlan : PLANS[access.plan].name}</p> : !loaded ? <Skeleton className="h-8 w-32" /> : null}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel className="flex flex-col" title={t.account.plan} icon={<CreditCard aria-hidden />} actions={access && access.plan !== "none" ? <StatusChip access={access} /> : undefined}>
+          {access ? <p className="font-display text-[2rem] font-bold leading-none text-ink">{access.plan === "none" ? t.paywall.noPlan : PLANS[access.plan].name}</p> : !loaded ? <Skeleton className="h-8 w-32" /> : null}
           <p className="mt-2 truncate text-sm text-ink-2">{user?.email}</p>
           {paid && access.currentPeriodEnd && <p className="mt-1 text-sm text-ink-2">{access.cancelAtPeriodEnd ? t.account.ends : t.account.renews} {date(access.currentPeriodEnd)}</p>}
           {paid && access.interval && <p className="mt-1 text-sm text-ink-2">{t.pricing[access.interval]}</p>}
-          <div className="mt-5 flex flex-wrap gap-2">
+          <div className="mt-auto flex flex-wrap gap-2 pt-4">
             {paid ? (
               <>
                 <button type="button" disabled={busy} onClick={portal} className={btn("navy")}><ExternalLink aria-hidden className="size-4" />{t.account.manage}</button>
@@ -101,7 +101,7 @@ export function AccountPanel() {
           </div>
         </Panel>
 
-        <Panel title={t.ui.usage} description={t.ui.usageLead} icon={<Gauge aria-hidden />}>
+        <Panel className="h-full" title={t.ui.usage} description={t.ui.usageLead} icon={<Gauge aria-hidden />}>
           {balance ? (
             <dl className="space-y-4 text-sm">
               <div>

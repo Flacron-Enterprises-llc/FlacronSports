@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { CalendarPlus } from "lucide-react"
 import { toast } from "sonner"
 import { useAccount } from "@/components/dashboard/account-context"
-import { CopyButton, ErrorNotice, useConfirm } from "@/components/dashboard/controls"
+import { ShareLink, ErrorNotice, useConfirm } from "@/components/dashboard/controls"
 import { btn, Panel, Skeleton } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import { useLocale } from "@/lib/use-locale"
@@ -59,12 +59,8 @@ export function CalendarFeedPanel() {
       {!failed && active === null && <div role="status" aria-label={t.ui.loading}><Skeleton className="h-9 w-48" /></div>}
       {url && (
         <div className="mb-4 space-y-2">
-          <input readOnly aria-label={copy.feedTitle} value={url} onFocus={(event) => event.target.select()} className="fs-input h-10 w-full px-3 text-sm" />
-          <p className="text-[13px] leading-5 text-ink-2">{copy.feedSecret} {copy.feedOnce}</p>
-          <div className="flex flex-wrap gap-2">
-            <CopyButton value={url} label={copy.feedCopy} done={copy.feedCopied} />
-            <a href={url.replace(/^https?:/, "webcal:")} className={btn("outline", "sm")}>{copy.feedOpen}</a>
-          </div>
+          <ShareLink value={url} label={copy.feedTitle} copy={copy.feedCopy} copied={copy.feedCopied} note={`${copy.feedSecret} ${copy.feedOnce}`} />
+          <a href={url.replace(/^https?:/, "webcal:")} className={btn("outline", "sm")}>{copy.feedOpen}</a>
         </div>
       )}
       {active !== null && (

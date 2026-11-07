@@ -4,10 +4,10 @@ import type { SportEvent } from "@/lib/sports/types"
 import { cn } from "@/lib/utils"
 import { SpoilerGuard } from "./parts"
 
-function Cell({ cell, t, strong }: { cell: LineCell | undefined; t: Dictionary; strong?: boolean }) {
+function Cell({ cell, t, strong, compact, lead }: { cell: LineCell | undefined; t: Dictionary; strong?: boolean; compact?: boolean; lead?: boolean }) {
   const value = cell?.value ?? null
   return (
-    <td className={cn("tabular px-1.5 py-1 text-center", strong ? "font-semibold text-ink" : "text-ink-2")}>
+    <td className={cn("tabular text-center", compact ? "px-1 py-0.5" : "px-2 py-2.5", strong && !compact && "fs-foot font-display text-[15px] font-bold text-ink", strong && compact && "font-semibold text-ink", !strong && (lead ? "font-semibold text-ink" : "text-ink-2"))}>
       {value ?? <><span aria-hidden>–</span><span className="sr-only">{t.match.notAvailable}</span></>}
     </td>
   )
@@ -21,22 +21,28 @@ function Cell({ cell, t, strong }: { cell: LineCell | undefined; t: Dictionary; 
 export function PeriodScore({ event, t, compact }: { event: SportEvent; t: Dictionary; compact?: boolean }) {
   const table = lineScore(event, t, compact ? "short" : "long")
   if (!table) return null
+  const number = (cell: LineCell | undefined) => (typeof cell?.value === "number" ? cell.value : null)
+  const leads = (row: number, column: number) => {
+    const mine = number(table.rows[row]?.cells[column])
+    const theirs = number(table.rows[1 - row]?.cells[column])
+    return mine !== null && theirs !== null && mine > theirs
+  }
   return (
     <SpoilerGuard label={t.spoiler.revealResult} quiet={compact}>
       <div className={cn("overflow-x-auto", !compact && "rounded-lg border border-line")}>
-        <table className={cn("w-full", compact ? "text-xs" : "text-sm")}>
+        <table className={cn("w-full", compact ? "text-[11.5px]" : "text-sm")}>
           <caption className="sr-only">{table.caption}</caption>
           <thead>
             <tr className={cn("text-ink-2", compact ? "text-[11px]" : "bg-surface-muted text-xs")}>
-              <th scope="col" className={cn("text-left font-medium", compact ? "py-1 pr-2" : "px-3 py-2")}><span className="sr-only">{t.event.name}</span></th>
-              {table.columns.map((column) => <th key={column.key} scope="col" title={column.title} className="whitespace-nowrap px-1.5 py-1 text-center font-medium">{column.label}</th>)}
+              <th scope="col" className={cn("text-left font-medium", compact ? "py-0.5 pr-2" : "px-3 py-2")}><span className="sr-only">{t.event.name}</span></th>
+              {table.columns.map((column) => <th key={column.key} scope="col" title={column.title} className={cn("whitespace-nowrap text-center font-medium", compact ? "px-1 py-0.5" : "px-2 py-2")}>{column.label}</th>)}
             </tr>
           </thead>
           <tbody>
-            {table.rows.map((row) => (
+            {table.rows.map((row, rowIndex) => (
               <tr key={row.side} className={cn(!compact && "border-t border-line")}>
-                <th scope="row" className={cn("truncate text-left font-medium text-ink", compact ? "max-w-24 py-1 pr-2" : "max-w-40 px-3 py-2")}>{row.name}</th>
-                {table.columns.map((column, index) => <Cell key={column.key} cell={row.cells[index]} t={t} strong={column.total} />)}
+                <th scope="row" className={cn("truncate text-left font-medium text-ink", compact ? "max-w-24 py-0.5 pr-2" : "max-w-44 px-3 py-2.5")}>{row.name}</th>
+                {table.columns.map((column, index) => <Cell key={column.key} cell={row.cells[index]} t={t} strong={column.total} compact={compact} lead={leads(rowIndex, index)} />)}
               </tr>
             ))}
           </tbody>

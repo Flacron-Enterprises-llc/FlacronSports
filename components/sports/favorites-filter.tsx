@@ -47,7 +47,7 @@ export function FavoritesFilter() {
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex min-h-10 min-w-0 items-center gap-2">
       <Switch checked={applied} onChange={change} labelledBy={id} disabled={!followsSomeone && !applied} />
       <span id={id} className="text-[13px] font-medium text-ink-2">{t.scores.favoritesOnly}</span>
       {!followsSomeone && ready !== false && <span className="text-xs text-ink-3">{t.scores.favoritesNone}</span>}

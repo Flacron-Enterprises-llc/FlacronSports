@@ -24,7 +24,9 @@ export interface AnswerTable {
   leagueId: string
   league: string
   season: string | null
-  rows: { rank: number | null; team: string; played: number | null; points: number | null; asked: boolean }[]
+  /** Worked out from results, not the league's official table. */
+  calculated?: boolean
+  rows: { rank: number | null; team: string; played: number | null; points: number | null; record?: string | null; asked: boolean }[]
   /** How many teams the full table holds, when this shows only part of it. */
   total: number
 }
@@ -142,7 +144,8 @@ export function tableView(leagueId: string, standings: Standings, asked: (team: 
     league: standings.league ?? "",
     season: standings.season,
     total: standings.rows.length,
-    rows: [...top, ...extra].map(({ rank, team, played, points }) => ({ rank, team, played, points, asked: asked(team) })),
+    calculated: Boolean(standings.calculated),
+    rows: [...top, ...extra].map(({ rank, team, played, points, won, lost }) => ({ rank, team, played, points, record: won === null || lost === null ? null : `${won}-${lost}`, asked: asked(team) })),
   }
 }
 

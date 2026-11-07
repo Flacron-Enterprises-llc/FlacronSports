@@ -1,10 +1,10 @@
 import Link from "next/link"
 import { headers } from "next/headers"
-import { CalendarClock, Clapperboard, Film, PlayCircle, Radio, Search } from "lucide-react"
+import { ArrowRight, CalendarClock, Clapperboard, Film, PlayCircle, Radio, Search } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
 import { MemberDataPending } from "@/components/dashboard/member-data-pending"
 import { SportIcon } from "@/components/site/sport-icon"
-import { AppPage, btn, EmptyState, Notice, PageHeader, Panel } from "@/components/site/states"
+import { AppPage, btn, chipClass, EmptyState, Notice, PageHeader, Panel, SectionHeading } from "@/components/site/states"
 import { EventCard } from "@/components/sports/event-card"
 import { FilterSelect } from "@/components/sports/filter-select"
 import { LocalTime } from "@/components/sports/parts"
@@ -60,22 +60,25 @@ export default async function WatchPage({ params, searchParams }: LocaleParams &
     return href(query ? `/app/watch?${query}` : "/app/watch")
   }
   const optionName = (key: FacetKey, value: string) => (key === "session" && value === "Race" ? t.watch.facets.race : value)
-  const chip = (active: boolean) => cn("inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-[13px] font-medium transition-colors", active ? "border-navy bg-navy text-white dark:border-brand dark:bg-brand dark:text-brand-on" : "border-line bg-surface text-ink-2 hover:border-line-strong hover:text-ink")
+  const bySport = !sport ? sports.flatMap((item) => {
+    const items = feed.highlights.filter((highlight) => highlight.sportId === item.id)
+    return items.length > 0 ? [{ id: item.id, name: item.name[locale], items }] : []
+  }) : []
 
   return (
     <AppPage>
       <PageHeader title={t.watch.title} lead={t.watch.lead} icon={<PlayCircle aria-hidden />} />
 
-      <nav aria-label={t.watch.filter} className="fs-noscrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-        <Link href={link(undefined)} aria-current={!sport ? "page" : undefined} className={chip(!sport)}>{t.watch.allSports}</Link>
+      <nav aria-label={t.watch.filter} className="fs-noscrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
+        <Link href={link(undefined)} aria-current={!sport ? "page" : undefined} className={chipClass(!sport)}>{t.watch.allSports}</Link>
         {sports.map((item) => (
-          <Link key={item.id} href={link(item.id)} aria-current={sport === item.id ? "page" : undefined} className={chip(sport === item.id)}>
+          <Link key={item.id} href={link(item.id)} aria-current={sport === item.id ? "page" : undefined} className={chipClass(sport === item.id)}>
             <SportIcon id={item.id} className="size-4" /> {item.name[locale]}
           </Link>
         ))}
       </nav>
 
-      <form role="search" className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface p-3 shadow-[var(--shadow-sm)]">
+      <form role="search" className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface p-2.5 shadow-[var(--shadow-sm)]">
         {sport && <input type="hidden" name="sport" value={sport} />}
         <div className="relative min-w-52 flex-1">
           <label htmlFor="watch-search" className="sr-only">{t.watch.search}</label>
@@ -112,8 +115,19 @@ export default async function WatchPage({ params, searchParams }: LocaleParams &
           : <EmptyState className="mt-5" icon={<PlayCircle aria-hidden />} title={t.watch.empty} body={t.watch.emptyBody} action={{ href: href("/app/scores"), label: t.watch.cta }} />)}
 
       {(!failed || playable > 0) && !(nothing && sport) && <section aria-labelledby="watch-highlights" className="mt-6">
-        <h2 id="watch-highlights" className="flex items-center gap-2 text-[17px] font-semibold text-ink"><Clapperboard aria-hidden className="size-[18px] text-brand" /> {labels.highlights}</h2>
-        {feed.highlights.length > 0 ? <HighlightGrid highlights={feed.highlights} href={href} /> : (
+        <h2 id="watch-highlights" className={cn("flex items-center gap-2 text-[17px] font-semibold text-ink", bySport.length > 1 && "sr-only")}><Clapperboard aria-hidden className="size-[18px] text-brand" /> {labels.highlights}</h2>
+        {feed.highlights.length > 0 ? (
+          sport || bySport.length <= 1 ? <HighlightGrid highlights={feed.highlights} href={href} /> : (
+            <div className="space-y-7">
+              {bySport.map((group) => (
+                <section key={group.id} aria-label={group.name}>
+                  <SectionHeading title={group.name} icon={<SportIcon id={group.id} className="size-[18px]" />} action={<Link href={link(group.id)} className="inline-flex min-h-10 items-center gap-1 text-sm font-semibold text-hot-text hover:underline sm:min-h-8">{t.dash.viewAll}<ArrowRight aria-hidden className="size-3.5" /></Link>} />
+                  <HighlightGrid highlights={group.items} href={href} />
+                </section>
+              ))}
+            </div>
+          )
+        ) : (
           clips.length === 0 && (
             <div className="mt-2">
               <p className="text-sm text-ink-2">{sport ? named(t.watch.noSportHighlights) : t.watch.noHighlights}</p>
@@ -123,20 +137,22 @@ export default async function WatchPage({ params, searchParams }: LocaleParams &
         )}
       </section>}
 
-      {clips.length > 0 && <section aria-labelledby="watch-clips" className="mt-6">
+      {clips.length > 0 && <section aria-labelledby="watch-clips" className="mt-7">
         <h2 id="watch-clips" className="flex items-center gap-2 text-[17px] font-semibold text-ink"><Film aria-hidden className="size-[18px] text-brand" /> {t.watch.clips}</h2>
         <ClipGrid clips={clips} />
       </section>}
 
-      {!failed && !watchable && !(nothing && sport) && <div className="mt-7 grid gap-5 lg:grid-cols-2">
-        <Panel title={labels.live} icon={<Radio aria-hidden />} description={t.watch.liveNote}>
-          {feed.live.length === 0 ? <p className="text-sm text-ink-2">{sport ? named(t.watch.noSportLive) : t.watch.noLive}</p> : (
-            <div className="grid gap-3">{feed.live.map((event) => <EventCard key={event.id} event={event} t={t} href={href} />)}</div>
+      {!failed && !watchable && !(nothing && sport) && <div className="mt-7 space-y-7">
+        <Panel flush title={labels.live} icon={<Radio aria-hidden />} description={t.watch.liveNote}>
+          {feed.live.length === 0 ? <p className="px-4 py-3.5 text-sm text-ink-2 sm:px-5">{sport ? named(t.watch.noSportLive) : t.watch.noLive}</p> : (
+            <div className="fs-rows fs-rows-2 fs-settle">{feed.live.map((event) => <EventCard key={event.id} event={event} t={t} href={href} layout="row" showCompetition />)}</div>
           )}
         </Panel>
-        <Panel title={labels.listings} icon={<CalendarClock aria-hidden />} description={t.watch.listingsNote}>
+        <section aria-labelledby="watch-listings">
+          <h2 id="watch-listings" className="flex items-center gap-2 text-[17px] font-semibold text-ink"><CalendarClock aria-hidden className="size-[18px] text-brand" /> {labels.listings}</h2>
+          <p className="mb-3 mt-0.5 text-[13px] leading-5 text-ink-2">{t.watch.listingsNote}</p>
           {broadcasts.length === 0 ? <p className="text-sm text-ink-2">{sport ? named(t.watch.noSportListings) : t.watch.noListings}</p> : <ListingList broadcasts={broadcasts} href={href} />}
-        </Panel>
+        </section>
       </div>}
 
       <Notice className="mt-6" role="note">{t.watch.disclaimer}</Notice>

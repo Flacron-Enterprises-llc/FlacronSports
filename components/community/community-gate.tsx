@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react"
 import Link from "next/link"
+import { ShieldCheck } from "lucide-react"
 import { btn } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import { useLocale } from "@/lib/use-locale"
@@ -23,18 +24,25 @@ function GatePrompt({ onAccepted, onCancel }: { onAccepted(): void; onCancel?: (
   }
 
   return (
-    <form onSubmit={confirm} role="group" aria-label={t.community.gateTitle} data-testid="community-gate" className="fs-pop space-y-2 rounded-xl border border-line bg-surface-muted p-4 text-sm text-ink">
-      <p className="font-semibold">{t.community.gateTitle}</p>
-      <p className="text-ink-2">{t.community.gateBody}</p>
-      <label className="flex items-start gap-2"><input type="checkbox" required className="mt-1" checked={age} onChange={(e) => setAge(e.target.checked)} />{t.community.gateAge}</label>
-      <label className="flex items-start gap-2">
-        <input type="checkbox" required className="mt-1" checked={rules} onChange={(e) => setRules(e.target.checked)} />
-        <span>{t.community.gateRules} <Link href={href("/community-guidelines")} target="_blank" className="font-semibold text-hot-text underline">{t.community.guidelines}</Link></span>
-      </label>
-      {failed && <p role="status">{t.community.sendFailed}</p>}
-      <div className="flex gap-2 pt-1">
-        <button type="submit" className={btn("navy")}>{t.community.gateConfirm}</button>
-        {onCancel && <button type="button" onClick={onCancel} className={btn("outline")}>{t.community.gateCancel}</button>}
+    <form onSubmit={confirm} role="group" aria-label={t.community.gateTitle} data-testid="community-gate" className="fs-pop rounded-xl border border-line bg-surface p-4 text-sm text-ink shadow-[var(--shadow-md)]">
+      <div className="flex items-start gap-3">
+        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-brand"><ShieldCheck aria-hidden className="size-5" /></span>
+        <div className="min-w-0">
+          <p className="text-[15px] font-semibold leading-6">{t.community.gateTitle}</p>
+          <p className="text-[13px] leading-5 text-ink-2">{t.community.gateBody}</p>
+        </div>
+      </div>
+      <div className="mt-3 space-y-2">
+        <label className="fs-check-row flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-line px-3 py-2"><input type="checkbox" required className="size-4 shrink-0 accent-[var(--success)]" checked={age} onChange={(e) => setAge(e.target.checked)} />{t.community.gateAge}</label>
+        <label className="fs-check-row flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-line px-3 py-2">
+          <input type="checkbox" required className="size-4 shrink-0 accent-[var(--success)]" checked={rules} onChange={(e) => setRules(e.target.checked)} />
+          <span>{t.community.gateRules} <Link href={href("/community-guidelines")} target="_blank" className="font-semibold text-hot-text underline">{t.community.guidelines}</Link></span>
+        </label>
+      </div>
+      {failed && <p role="status" className="mt-2">{t.community.sendFailed}</p>}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button type="submit" className={btn("navy", "md", "flex-1 sm:flex-none")}>{t.community.gateConfirm}</button>
+        {onCancel && <button type="button" onClick={onCancel} className={btn("outline", "md", "flex-1 sm:flex-none")}>{t.community.gateCancel}</button>}
       </div>
     </form>
   )

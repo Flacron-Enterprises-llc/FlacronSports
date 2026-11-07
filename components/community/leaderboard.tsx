@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { ErrorNotice } from "@/components/dashboard/controls"
-import { Skeleton } from "@/components/site/states"
+import { RankBadge, Skeleton } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import type { Badge } from "@/lib/community/badges"
 import { useLocale } from "@/lib/use-locale"
@@ -36,12 +36,12 @@ export function Leaderboard() {
   if (entries.length === 0) return <p className="text-sm text-ink-2">{t.community.noPoints}</p>
 
   return (
-    <ol className="divide-y divide-line text-sm">
+    <ol className="-my-1 divide-y divide-line text-sm">
       {entries.map((entry, index) => (
-        <li key={index} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
-          <span className="tabular w-6 shrink-0 text-right font-semibold text-ink-2">{entry.rank}</span>
+        <li key={index} className="flex min-h-11 items-center gap-2.5 py-1">
+          <RankBadge rank={entry.rank} />
           <span className="min-w-0 flex-1 truncate font-medium text-ink">{entry.displayName} <BadgeList badges={entry.badges} /></span>
-          <span className="tabular shrink-0 font-semibold text-ink">{entry.points}</span>
+          <span className="tabular shrink-0 font-display font-semibold text-ink">{entry.points}</span>
         </li>
       ))}
     </ol>

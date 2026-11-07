@@ -1,8 +1,11 @@
 // One wording for a comparison, shared by the screen and the PDF so they cannot disagree.
 
 import type { Dictionary, Locale } from "@/lib/i18n"
+import { hockeyRecord } from "./adapters/ice-hockey"
 import type { Comparison, PlayerComparison, SplitRecord, TeamProfile } from "./compare"
-import { SPORTS } from "./types"
+import { SPORTS, type CricketFormat, type SportId } from "./types"
+
+const CRICKET_FORMATS: CricketFormat[] = ["test", "odi", "t20", "first-class", "hundred"]
 
 export type ComparisonRow = [label: string, first: string, second: string]
 
@@ -17,7 +20,6 @@ export interface ComparisonSheet {
 
 const BLANK = "–"
 
-export const recordLine = (record: SplitRecord) => (record.played ? `${record.wins}-${record.draws}-${record.losses}` : BLANK)
 export const perGame = (total: number, played: number) => (played ? (total / played).toFixed(1) : BLANK)
 
 export function formatBorn(born: string | null, locale: Locale): string | null {
@@ -56,29 +58,100 @@ export function playerSheet(data: PlayerComparison, t: Dictionary, locale: Local
   return { title: names.join(" / "), measure: t.compare.measure, names, rows: playerRows(data, t, locale), notes: [t.compare.playerBasis], footer: t.compare.pdfFooter }
 }
 
+const dropped = (rows: ComparisonRow[]) => rows.filter(([, first, second]) => first !== BLANK || second !== BLANK)
+
+/** The sport decides what a record reads like. A draw column only where the sport has draws. */
+export function recordFor(record: SplitRecord, sport: SportId | null): string {
+  if (!record.played) return BLANK
+  if (sport === "cricket") return `${record.wins}-${record.losses}-${record.ties}-${record.noResults}`
+  // American football writes a tie last: 5-3-1 is five wins, three losses and a tie.
+  // So does baseball, where KBO and NPB games can end tied: KT were 90-49-5 in 2026.
+  // A fighter's record is written the same way, 27-1-1.
+  if (sport === "american-football" || sport === "baseball" || sport === "combat-sports") return record.draws ? `${record.wins}-${record.losses}-${record.draws}` : `${record.wins}-${record.losses}`
+  if (sport === "ice-hockey" && !record.draws) return hockeyRecord(record.wins, record.losses - (record.overtimeLosses ?? 0), record.overtimeLosses ?? 0)
+  return record.draws || sport === "football" || sport === "rugby" ? `${record.wins}-${record.draws}-${record.losses}` : `${record.wins}-${record.losses}`
+}
+
+const perPlayed = (record: SplitRecord, total: number) => perGame(total, record.counted)
+
+const signed = (value: number) => (value > 0 ? `+${value}` : String(value))
+
 export function teamSheet(data: Comparison, t: Dictionary): ComparisonSheet {
   const copy = t.compare
   const [one, two] = data.teams
-  const both = (label: string, read: (team: TeamProfile) => string): ComparisonRow => [label, read(one), read(two)]
-  const extra = (label: string, read: (figures: NonNullable<TeamProfile["advanced"]>) => string | number | null | undefined) =>
-    both(label, (team) => String((team.advanced ? read(team.advanced) : null) ?? BLANK))
-  const rows: ComparisonRow[] = [
-    both(copy.form, (team) => team.form.map((result) => copy.letters[result]).join(" ") || BLANK),
-    both(copy.record, (team) => recordLine(team.record)),
-    both(copy.scoredAverage, (team) => perGame(team.record.scored, team.record.played)),
-    both(copy.concededAverage, (team) => perGame(team.record.conceded, team.record.played)),
-    ...(data.tier === "advanced"
-      ? [
-          extra(copy.homeRecord, (figures) => recordLine(figures.home)),
-          extra(copy.awayRecord, (figures) => recordLine(figures.away)),
-          extra(copy.cleanSheets, (figures) => figures.cleanSheets),
-          extra(copy.failedToScore, (figures) => figures.failedToScore),
-          extra(copy.position, (figures) => figures.standing?.rank),
-          extra(copy.points, (figures) => figures.standing?.points),
-          extra(copy.goalDifference, (figures) => figures.standing?.difference),
-        ]
-      : []),
-  ]
-  const notes = [copy.basis, ...(data.tier === "advanced" ? data.headToHead.map((game) => `${copy.headToHead}: ${game.title} ${game.home}-${game.away}`) : [])]
-  return { title: `${one.name} / ${two.name}`, measure: copy.measure, names: [one.name, two.name], rows, notes, footer: copy.pdfFooter }
+  const sport = data.sportId ?? "football"
+  const terms = copy.bySport[sport]
+  const both = (label: string, read: (team: TeamProfile) => string | number | null | undefined): ComparisonRow => {
+    const text = (team: TeamProfile) => String(read(team) ?? BLANK)
+    return [label, text(one), text(two)]
+  }
+  const extra = (label: string, read: (figures: NonNullable<TeamProfile["advanced"]>) => string | number | null | undefined) => both(label, (team) => (team.advanced ? read(team.advanced) : null))
+  // A level American football game is a tie, never a draw.
+  const letter = (result: TeamProfile["form"][number]) => copy.letters[sport === "american-football" && result === "D" ? "T" : result]
+  const form = both(copy.form, (team) => team.form.map(letter).join(" ") || BLANK)
+  const paired = (read: (team: TeamProfile) => number | null | undefined) => (team: TeamProfile) => read(team) ?? null
+
+  let rows: ComparisonRow[]
+  if (sport === "combat-sports") {
+    rows = [form, both(terms.record, (team) => recordFor(team.record, sport)), both(copy.koWins, paired((team) => team.combat?.ko)), both(copy.submissionWins, paired((team) => team.combat?.submission)), both(copy.decisionWins, paired((team) => team.combat?.decision))]
+  } else if (sport === "motorsport") {
+    const racing = (read: (figures: NonNullable<TeamProfile["racing"]>) => string | number | null) => (team: TeamProfile) => (team.racing?.races ? read(team.racing) : null)
+    rows = [
+      form,
+      both(terms.record, racing((figures) => `${figures.wins}/${figures.races}`)),
+      both(copy.podiums, racing((figures) => figures.podiums)),
+      both(copy.bestFinish, racing((figures) => figures.best)),
+      both(copy.averageFinish, racing((figures) => (figures.average === null ? null : figures.average.toFixed(1)))),
+      both(copy.racePoints, racing((figures) => figures.points)),
+      both(copy.retirements, racing((figures) => figures.retirements)),
+    ]
+  } else {
+    const sides = [
+      both(terms.record, (team) => recordFor(team.record, sport)),
+      both(terms.scored, (team) => perPlayed(team.record, team.record.scored)),
+      both(terms.conceded, (team) => perPlayed(team.record, team.record.conceded)),
+      both(terms.difference, (team) => (team.record.counted ? signed(team.record.scored - team.record.conceded) : null)),
+    ]
+    const shared = sport === "tennis" ? [both(copy.straightSets, (team) => team.tennis?.straightSets), both(copy.tiebreaks, (team) => team.tennis?.tiebreaks)] : []
+    const formats = sport === "cricket"
+      ? CRICKET_FORMATS.map((format) => extra(copy.formatRecord.replace("{format}", t.sportTerms.cricketFormats[format]), (figures) => {
+          const record = figures.cricket?.byFormat[format]
+          return record ? recordFor(record, sport) : null
+        }))
+      : []
+    const blanks = "blanks" in terms ? [extra(terms.blanks as string, (figures) => figures.cleanSheets)] : []
+    const silent = "silent" in terms ? [extra(terms.silent as string, (figures) => figures.failedToScore)] : []
+    const overtime = sport === "ice-hockey" || sport === "basketball" || sport === "american-football" ? [extra(copy.overtimeGames, (figures) => figures.overtimeGames)] : []
+    const table = [
+      extra(copy.position, (figures) => figures.standing?.rank),
+      ...(sport === "cricket" ? [] : [extra(copy.points, (figures) => figures.standing?.points)]),
+    ]
+    rows = [
+      form,
+      ...sides,
+      ...shared,
+      ...(data.tier === "advanced"
+        ? [
+            extra(copy.homeRecord, (figures) => recordFor(figures.home, sport)),
+            extra(copy.awayRecord, (figures) => recordFor(figures.away, sport)),
+            ...formats,
+            ...(sport === "cricket"
+              ? [
+                  extra(copy.highest, (figures) => figures.cricket?.highest),
+                  extra(copy.lowest, (figures) => figures.cricket?.lowest),
+                  extra(copy.winsByRuns, (figures) => figures.cricket?.winsByRuns),
+                  extra(copy.winsByWickets, (figures) => figures.cricket?.winsByWickets),
+                ]
+              : []),
+            ...blanks,
+            ...silent,
+            ...overtime,
+            ...table,
+          ]
+        : []),
+    ]
+  }
+  const basis = (copy.basisBySport as Partial<Record<SportId, string>>)[sport] ?? copy.basis
+  const notes = [basis, ...(data.tier === "advanced" ? data.headToHead.map((game) => `${copy.headToHead}: ${game.title} ${game.result}`) : [])]
+  return { title: `${one.name} / ${two.name}`, measure: copy.measure, names: [one.name, two.name], rows: dropped(rows), notes, footer: copy.pdfFooter }
 }

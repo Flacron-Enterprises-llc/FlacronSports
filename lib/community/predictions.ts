@@ -3,20 +3,18 @@
 
 import { ApiError } from "@/lib/api-auth"
 import type { DocDb } from "@/lib/doc-db"
+import { decidedSide, setsWinner } from "@/lib/sports/game-result"
 import { eventTitle, isDuel } from "@/lib/sports/presentation"
 import type { SportEvent, SportId } from "@/lib/sports/types"
 import { badgesFor } from "./badges"
 import { assertNotSanctioned, readSanction } from "./chat"
 import { requireAccepted } from "./gate"
+import { PODIUM_SIZE, POINTS, SCORE_RULES } from "./pick-rules"
+
+export { PODIUM_SIZE, POINTS }
 
 export const SCORING_VERSION = 1
-// Winner and podium values can never add up to `exact`: settlement counts exact
-// scores by comparing against it, so podium points stay even and winner stays 3.
-export const POINTS = { exact: 5, outcome: 2, winner: 3, podiumExact: 4, podiumPlaced: 2 } as const
-export const PODIUM_SIZE = 3
 
-const TEAM_SCORE_SPORTS = new Set<SportId>(["football", "basketball", "american-football", "baseball", "ice-hockey", "rugby", "volleyball"])
-const MAX_SCORE = 300
 const LEADERBOARD_SIZE = 50
 const DAY = 86_400_000
 // The published limits after which an event with no confirmed result is void.
@@ -26,7 +24,8 @@ const NOT_A_RACE = /\b(practice|qualifying|sprint|shootout|warm.?up)\b/i
 // The feed has one number per side for a test, so its result is never stated.
 const TEST_CRICKET = /\btest\b/i
 
-export type PredictionKind = "score" | "winner" | "podium"
+const PREDICTION_KINDS = ["score", "winner", "podium"] as const
+export type PredictionKind = (typeof PREDICTION_KINDS)[number]
 export type PredictionStatus = "open" | "locked" | "settled" | "void"
 
 /** The game as it read when the pick was made, so listing picks costs no provider calls. */
@@ -40,6 +39,8 @@ export interface Prediction {
   uid: string
   displayName: string
   matchId: string
+  /** Absent on entries made before picks were kept by sport, which count only overall. */
+  sportId?: SportId
   /** Absent on entries made before games were stored with the pick. */
   game?: PredictionGame
   /** Absent on entries made when only scores could be predicted. */
@@ -62,22 +63,32 @@ interface PointsDoc {
   displayName: string
   points: number
   exact: number
+  /** Points from picks that carry a sport. */
+  sports?: Partial<Record<SportId, number>>
 }
 
 const predictionPath = (matchId: string, uid: string) => `predictions/${matchId}_${uid}`
 const pointsPath = (uid: string) => `prediction_points/${uid}`
 
 export function supportsScorePrediction(event: SportEvent): boolean {
-  return event.participantType === "team" && event.participants.length === 2 && TEAM_SCORE_SPORTS.has(event.sportId)
+  return event.participantType === "team" && event.participants.length === 2 && Boolean(SCORE_RULES[event.sportId])
+}
+
+const isRace = ({ details }: SportEvent) => details?.kind === "motorsport" && details.session === "race"
+
+/** The published rule offers limited-overs cricket only. */
+function isLimitedOvers({ details, competition }: SportEvent): boolean {
+  const format = details?.kind === "cricket" ? details.format : null
+  return format !== "test" && format !== "first-class" && !TEST_CRICKET.test(competition.name)
 }
 
 /** Which pick an event takes, or null when the feed could not settle one. */
 export function predictionKind(event: SportEvent): PredictionKind | null {
   if (supportsScorePrediction(event)) return "score"
-  if (event.sportId === "motorsport") return event.eventType === "session" && event.eventName && !NOT_A_RACE.test(event.eventName) ? "podium" : null
+  if (event.sportId === "motorsport") return event.eventType === "session" && isRace(event) && event.eventName && !NOT_A_RACE.test(event.eventName) ? "podium" : null
   if (event.participants.length !== 2 || event.participants.some((participant) => participant.name === "TBD")) return null
-  if (event.sportId === "tennis" || event.sportId === "combat-sports") return "winner"
-  return event.sportId === "cricket" && !TEST_CRICKET.test(event.competition.name) ? "winner" : null
+  if (event.sportId === "tennis" || event.sportId === "combat-sports" || event.sportId === "basketball") return "winner"
+  return event.sportId === "cricket" && isLimitedOvers(event) ? "winner" : null
 }
 
 /** A race lists nobody until it is over, so the field comes from the competition's last classified session. */
@@ -99,8 +110,8 @@ export function gameOf(event: SportEvent): PredictionGame {
   return { title: eventTitle(event), home, away }
 }
 
-function validScore(value: unknown): value is number {
-  return Number.isInteger(value) && (value as number) >= 0 && (value as number) <= MAX_SCORE
+function validScore(value: unknown, max: number): value is number {
+  return Number.isInteger(value) && (value as number) >= 0 && (value as number) <= max
 }
 
 export interface PickInput {
@@ -114,7 +125,10 @@ export interface PickInput {
 
 function readPick(kind: PredictionKind, event: SportEvent, input: PickInput): Pick<Prediction, "home" | "away" | "winner" | "podium"> {
   if (kind === "score") {
-    if (!validScore(input.home) || !validScore(input.away)) throw new ApiError(400, "invalid_score", "Enter a valid score")
+    const rule = SCORE_RULES[event.sportId]
+    if (!rule) throw new ApiError(422, "not_supported", "Predictions are not available for this event")
+    if (!validScore(input.home, rule.max) || !validScore(input.away, rule.max)) throw new ApiError(400, "invalid_score", "Enter a valid score")
+    if (input.home === input.away && !rule.canEndLevel) throw new ApiError(400, "invalid_score", "This game cannot end level")
     return { home: input.home, away: input.away }
   }
   if (kind === "winner") {
@@ -153,7 +167,7 @@ export async function submitPrediction(
     if (existing) throw new ApiError(409, "duplicate_prediction", "You already predicted this match")
 
     const prediction: Prediction = {
-      uid, displayName, matchId: event.id, game: gameOf(event), kind, ...pick,
+      uid, displayName, matchId: event.id, sportId: event.sportId, game: gameOf(event), kind, ...pick,
       createdAtUTC: now.toISOString(),
       lockedAtUTC: new Date(kickoff).toISOString(),
       scoringVersion: SCORING_VERSION,
@@ -192,14 +206,18 @@ type Settlement = { voided: boolean; points(prediction: Prediction): number; key
 /** A retirement decides a tennis match: the player left standing is the winner. */
 function winnerOf(event: SportEvent): string | null {
   const { score } = event
-  if (score.kind === "combat" || score.kind === "innings") return score.winner
-  if (score.kind !== "sets") return null
-  return score.winner ?? (score.retired ? event.participants.find((participant) => participant.name !== score.retired)?.name ?? null : null)
+  if (score.kind === "combat") return score.winner
+  if (score.kind === "sets") return setsWinner(score)
+  const side = decidedSide(event)?.winner
+  return side === 0 || side === 1 ? event.participants[side]?.name ?? null : null
 }
 
-function resultSettlement(event: SportEvent, kind: PredictionKind | null): Settlement | null {
+/** Level after kicks the source left out: nobody can name the winner, but the score stands. */
+const endedOnKicks = ({ conclusion }: SportEvent) => conclusion === "penalties" || conclusion === "shootout"
+
+function resultSettlement(event: SportEvent, kind: PredictionKind): Settlement | null {
   const version = `v${SCORING_VERSION}`
-  if (kind === "score" && event.score.kind === "team") {
+  if (kind === "score" && event.score.kind === "team" && (decidedSide(event) || endedOnKicks(event))) {
     const result = { home: event.score.home, away: event.score.away }
     return { voided: false, points: ({ home, away }) => (home === undefined || away === undefined ? 0 : scorePrediction({ home, away }, result)), key: `${version}:${result.home}-${result.away}` }
   }
@@ -218,47 +236,55 @@ function resultSettlement(event: SportEvent, kind: PredictionKind | null): Settl
  * Only a confirmed result or a published void rule settles anything. A void can still
  * be overturned, because a corrected result changes the key.
  */
-function settlementFor(event: SportEvent, now = new Date()): Settlement | null {
+function settlementFor(event: SportEvent, kind: PredictionKind, now = new Date()): Settlement | null {
   const voided: Settlement = { voided: true, points: () => 0, key: `v${SCORING_VERSION}:void` }
   if (event.status === "canceled" || event.status === "abandoned") return voided
 
   const start = event.scheduledStartUTC ? Date.parse(event.scheduledStartUTC) : Number.NaN
   const overdue = (days: number) => now.getTime() - start > days * DAY
   if (event.status === "postponed") return overdue(POSTPONED_VOID_DAYS) ? voided : null
-  if (event.status !== "finished") return null
+  // Many feeds never mark an event finished, so an unconfirmed one reaches the limit too.
+  if (event.status !== "finished" && event.status !== "unknown") return null
 
-  const settled = resultSettlement(event, predictionKind(event))
-  if (settled) return settled
-  // A tied or drawn cricket match has both totals and no winner.
-  if (event.score.kind === "innings") return voided
+  if (event.status === "finished") {
+    const settled = resultSettlement(event, kind)
+    if (settled) return settled
+    // A stated tie or draw, as opposed to totals that merely leave the result open.
+    if (event.score.kind === "innings" && decidedSide(event)?.winner === null) return voided
+  }
   return overdue(NO_RESULT_VOID_DAYS) ? voided : null
 }
 
 /**
  * Safe to run repeatedly. Each prediction stores the result it was scored against,
  * so a rerun changes nothing and a corrected score adjusts totals by the difference.
+ * Each entry settles by the kind stored on it: a sport's pick can change, and entries
+ * made under the old kind still score as what they are.
  */
 export async function settleMatch(db: DocDb, event: SportEvent): Promise<{ settled: number }> {
-  const settlement = settlementFor(event)
-  if (!settlement) return { settled: 0 }
+  if (!PREDICTION_KINDS.some((kind) => settlementFor(event, kind))) return { settled: 0 }
 
   const rows = await db.query<Prediction>("predictions", { where: [["matchId", event.id]] })
   let settled = 0
   for (const row of rows) {
     const changed = await db.transaction(async (tx) => {
       const current = await tx.get<Prediction>(predictionPath(event.id, row.uid))
-      if (!current || current.settledKey === settlement.key) return false
+      const settlement = current && settlementFor(event, current.kind ?? "score")
+      if (!current || !settlement || current.settledKey === settlement.key) return false
       const totals = await tx.get<PointsDoc>(pointsPath(row.uid))
 
       const points = settlement.points(current)
       const wasExact = current.settled && current.points === POINTS.exact
       const isExact = points === POINTS.exact
+      const sports = { ...totals?.sports }
+      if (current.sportId) sports[current.sportId] = (sports[current.sportId] ?? 0) + points - current.points
       tx.set(predictionPath(event.id, row.uid), { settled: true, settledKey: settlement.key, voided: settlement.voided, points }, { merge: true })
       tx.set(pointsPath(row.uid), {
         uid: row.uid,
         displayName: current.displayName,
         points: (totals?.points ?? 0) + points - current.points,
         exact: (totals?.exact ?? 0) + Number(isExact) - Number(wasExact),
+        sports,
       })
       return true
     })
@@ -278,10 +304,13 @@ export function sharedRanks<T extends { points: number }>(rows: T[]): (T & { ran
   })
 }
 
-export async function getLeaderboard(db: Pick<DocDb, "query" | "get">) {
-  const rows = await db.query<PointsDoc>("prediction_points", { orderBy: { field: "points", direction: "desc" }, limit: LEADERBOARD_SIZE })
+/** With a sport, only that sport's points count, so entries from before sports were kept drop out. */
+export async function getLeaderboard(db: Pick<DocDb, "query" | "get">, sportId?: SportId) {
+  const field = sportId ? `sports.${sportId}` : "points"
+  const rows = await db.query<PointsDoc>("prediction_points", { orderBy: { field, direction: "desc" }, limit: LEADERBOARD_SIZE })
   const badges = await badgesFor(db, rows.map((row) => row.uid))
-  return sharedRanks(rows).map(({ rank, uid, displayName, points, exact }) => ({ rank, displayName, points, exact, badges: badges.get(uid) ?? [] }))
+  const ranked = sharedRanks(rows.map((row) => ({ ...row, points: sportId ? row.sports?.[sportId] ?? 0 : row.points })))
+  return ranked.map(({ rank, uid, displayName, points, exact }) => ({ rank, displayName, points, ...(sportId ? {} : { exact }), badges: badges.get(uid) ?? [] }))
 }
 
 // Far above the entries open at any one time, so the started ones are never cut off.

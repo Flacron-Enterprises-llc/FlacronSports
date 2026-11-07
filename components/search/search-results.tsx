@@ -12,6 +12,7 @@ import { FollowLeagueButton, FollowPlayerButton } from "@/components/sports/even
 import { FavoriteStar, LocalTime } from "@/components/sports/parts"
 import { authFetch } from "@/lib/auth-fetch"
 import type { SearchResults as Results } from "@/lib/search/global"
+import { canHaveTable } from "@/lib/sports/calculated"
 import type { CompetitionHit } from "@/lib/search/match"
 import { playerPath, TEAM_SPORTS } from "@/lib/sports/player"
 import { useLocale } from "@/lib/use-locale"
@@ -26,7 +27,7 @@ function Competitions({ items, standings }: { items: CompetitionHit[]; standings
         <li key={item.id} className={row}>
           <SportIcon id={item.sportId} className="size-4 shrink-0 text-brand" />
           <span className="min-w-0 flex-1">
-            <Link href={href(standings ? `/app/standings/${item.id}` : `/app/scores?q=${encodeURIComponent(item.name)}`)} className="block truncate text-sm font-medium text-ink underline-offset-2 hover:underline">{item.name}</Link>
+            <Link href={href(standings && (item.sportId === "football" || canHaveTable(item.sportId, item.name)) ? `/app/standings/${item.id}` : `/app/scores?q=${encodeURIComponent(item.name)}`)} className="block truncate text-sm font-medium text-ink underline-offset-2 hover:underline">{item.name}</Link>
             {item.today > 0 && <span className="text-xs text-ink-2">{t.discover.gamesToday.replace("{count}", String(item.today))}</span>}
           </span>
           <FollowLeagueButton league={{ id: item.id, name: item.name, sportId: item.sportId }} />

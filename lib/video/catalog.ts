@@ -6,8 +6,8 @@ import { getEvent, storedBroadcasts, storedDayAge, storedEvents, storedGameDates
 import { byImportance, isMajorCompetition } from "@/lib/sports/priority"
 import type { FeedState, SportEvent, SportId } from "@/lib/sports/types"
 import { buildFacets, clipFacets, competitionKey, eventFacets, matchesWatch, SPORT_FACETS, type FacetChoice, type FacetKey, type FacetValues, type WatchFacet, type WatchItem } from "./facets"
-import { newestFirst, storedClips, type Clip } from "./scorebat"
-import { evaluateViewing, type ViewingResult, type VideoSource } from "./viewing"
+import { clipVideos, newestFirst, pageVideo, storedClips, streamOpen, type Clip, type ClipVideo, type StoredClip, type StoredVideo } from "./scorebat"
+import { evaluateViewing, type ViewingResult, type VideoSource, type VideoType } from "./viewing"
 
 /**
  * Official league, tour and rights-holder channels. A feed listing a video is not
@@ -78,7 +78,9 @@ const HIGHLIGHT_DAYS = 4
 const SPORT_HIGHLIGHT_DAYS = 7
 const COLLECTED_HIGHLIGHT_DAYS = 21
 const HIGHLIGHT_LIMIT = 24
-const CLIP_LIMIT = 24
+// The feed holds about sixty games. One sport shows them all; the mixed page shows the newest.
+const CLIP_LIMIT = 60
+const MIXED_CLIP_LIMIT = 12
 const BROADCAST_LIMIT = 40
 // A big game lists dozens of channels and would push every later game off the list.
 const CHANNELS_PER_GAME = 4
@@ -90,6 +92,8 @@ const CHECK_LIMIT = 96
 // The backend reply has 20 seconds. Whatever is unchecked by then waits for the next visit.
 const CHECK_BUDGET_MS = 8000
 const BROADCAST_GRACE_MS = 3 * 3_600_000
+// A one-day international runs about eight hours, so three would drop it while it is on air.
+const LONG_GAME_GRACE_MS: Partial<Record<SportId, number>> = { cricket: 10 * 3_600_000 }
 // The job refreshes today every fifteen minutes, so this means it has missed several runs.
 const STALE_MS = 90 * 60_000
 
@@ -121,7 +125,17 @@ export interface WatchFeed {
   highlights: Highlight[]
   /** Football only. */
   clips: Clip[]
+  /** Football only: streams the video feed lists for a game that is on now. */
+  streams?: LiveStream[]
   broadcasts: Broadcast[]
+}
+
+export interface LiveStream {
+  id: string
+  title: string
+  competition: string
+  matchId: string | null
+  thumbnailUrl: string | null
 }
 
 export interface NextGame {
@@ -184,18 +198,28 @@ export async function videoFor(event: SportEvent, fresh = false): Promise<Verifi
 }
 
 /** Clips are football only. Their competition names come from the video feed, so each has its own switch. */
-export async function allowedClips<T extends { competition: string }>(clips: T[]): Promise<T[]> {
+export async function allowedClips<T extends { competition: string; game?: { competition: string } }>(clips: T[]): Promise<T[]> {
   if (!featureOn("FEATURE_VIDEO")) return []
   const rules = await coverageRules()
-  return clips.filter((clip) => videoAllowed(rules, "football", clip.competition))
+  return clips.filter((clip) => videoAllowed(rules, "football", clip.competition) && (!clip.game || videoAllowed(rules, "football", clip.game.competition)))
 }
 
-function sourceFor(event: SportEvent, now: Date): VideoSource {
+/** The player address, issued only here and checked again each time, because a stream closes. */
+export async function clipPlayer(id: string, now: Date = new Date()): Promise<string | null> {
+  for (const clip of await allowedClips(await storedClips())) {
+    const video = clipVideos(clip).find((item) => item.id === id)
+    if (!video) continue
+    if (video.kind !== "live") return video.embedUrl
+    const event = clip.matchId ? await getEvent(clip.matchId).catch(() => null) : null
+    return streamOpen(clip.dateUTC, event?.status, now.getTime()) ? video.embedUrl : null
+  }
+  return null
+}
+
+function sourceFor(event: SportEvent, now: Date, video: { id: string; provider: string; type: VideoType } = { id: `youtube-${youtubeId(event.videoUrl)}`, provider: "YouTube", type: "highlight" }): VideoSource {
   return {
-    id: `youtube-${youtubeId(event.videoUrl)}`,
+    ...video,
     matchId: event.id,
-    provider: "YouTube",
-    type: "highlight",
     territories: [],
     providerEnforcesTerritory: true,
     validFromUTC: event.scheduledStartUTC ?? new Date(now.getTime() - DAY_MS).toISOString(),
@@ -208,8 +232,24 @@ function sourceFor(event: SportEvent, now: Date): VideoSource {
   }
 }
 
+const clipSourceId = (video: StoredVideo) => `clip-${video.id}`
+
+/** A stream may open before kick-off. Its own window is checked by streamOpen. */
+const clipSource = (event: SportEvent, video: StoredVideo, now: Date): VideoSource => ({
+  ...sourceFor(event, now, { id: clipSourceId(video), provider: "Football clips", type: video.kind === "live" ? "live" : "highlight" }),
+  validFromUTC: new Date(now.getTime() - DAY_MS).toISOString(),
+})
+
+async function clipsForGame(matchId: string): Promise<StoredClip | null> {
+  const clips = await storedClips().then(allowedClips).catch(() => [])
+  return clips.find((clip) => clip.matchId === matchId) ?? null
+}
+
 export interface MatchViewing extends ViewingResult {
   video: VerifiedVideo | null
+  /** Football only. Absent on a reply from a backend older than this field. */
+  clips?: ClipVideo[]
+  clipThumbnail?: string | null
   broadcasts: Broadcast[]
   /** Set by the route, from the network and never from a profile preference. */
   viewerCountry?: string | null
@@ -220,11 +260,21 @@ export async function viewingFor(matchId: string, country: string | null, fresh 
   const now = new Date()
   const event = await getEvent(matchId).catch(() => null)
   const video = event ? await videoFor(event, fresh) : null
-  const result = evaluateViewing(event && video ? [sourceFor(event, now)] : [], { country, platform: "web", entitled: false, now, status: event?.status ?? "unknown" })
+  const stored = event?.sportId === "football" ? await clipsForGame(matchId) : null
+  const offered = stored ? clipVideos(stored).filter((item) => item.kind !== "live" || streamOpen(stored.dateUTC, event?.status, now.getTime())) : []
+  const clipSources = event ? offered.filter((item) => item.kind !== "match").map((item) => clipSource(event, item, now)) : []
+  const youtube = event && video ? sourceFor(event, now) : null
+  const result = evaluateViewing([...clipSources, ...(youtube ? [youtube] : [])], { country, platform: "web", entitled: false, now, status: event?.status ?? "unknown" })
   const days = [0, 1].map((offset) => utcDate(new Date(now.getTime() + offset * DAY_MS)))
   const listings = await Promise.all(days.map((date) => storedBroadcasts(date, event?.sportId)))
-  const playable = result.options.some((option) => option.action === "watch_highlights")
-  return { ...result, video: playable ? video : null, broadcasts: listings.flat().filter((broadcast) => broadcast.matchId === matchId) }
+  const cleared = new Set(result.options.map((option) => option.sourceId))
+  return {
+    ...result,
+    video: youtube && cleared.has(youtube.id) ? video : null,
+    clips: offered.filter((item) => item.kind === "match" || cleared.has(clipSourceId(item))).map(pageVideo),
+    clipThumbnail: stored?.thumbnailUrl ?? null,
+    broadcasts: listings.flat().filter((broadcast) => broadcast.matchId === matchId),
+  }
 }
 
 const byNewest = (a: SportEvent, b: SportEvent) => Number(isMajorCompetition(b.competition.name)) - Number(isMajorCompetition(a.competition.name)) || (b.scheduledStartUTC ?? "").localeCompare(a.scheduledStartUTC ?? "")
@@ -307,10 +357,13 @@ export async function getWatchFeed(sport?: SportId, now: Date = new Date(), filt
     return video ? [{ value: toHighlight(event, video), facets: eventFacets(event), text: eventText(event) }] : []
   })
 
-  const earliest = now.getTime() - BROADCAST_GRACE_MS
+  const stillOn = (item: Broadcast) => {
+    const grace = LONG_GAME_GRACE_MS[item.sportId] ?? BROADCAST_GRACE_MS
+    return item.startUTC !== null && (Date.parse(item.startUTC) >= now.getTime() - grace || (item.matchId !== null && byId.get(item.matchId)?.status === "live"))
+  }
   const shown = new Set<string>()
   const listingItems: WatchItem<Broadcast>[] = listings.flat()
-    .filter((item) => item.startUTC !== null && Date.parse(item.startUTC) >= earliest)
+    .filter(stillOn)
     .filter((item) => listingShown(item, item.matchId ? byId.get(item.matchId) : undefined))
     .filter((item) => !shown.has(item.id) && shown.add(item.id))
     .map((item) => {
@@ -319,25 +372,39 @@ export async function getWatchFeed(sport?: SportId, now: Date = new Date(), filt
     })
 
   const stored = clipsCover(sport) ? await storedClips(now.getTime()).then(allowedClips).catch(() => null) : []
-  const clipItems: WatchItem<Clip>[] = newestFirst(stored ?? []).map(({ id, title, competition, thumbnailUrl, dateUTC }) => ({
-    value: { id, title, competition, thumbnailUrl, dateUTC },
-    facets: clipFacets(title, competition),
-    text: [title, competition],
-  }))
+  const newest = newestFirst(stored ?? [])
+  const clipText = (clip: StoredClip) => [clip.title, clip.competition, clip.game?.competition, ...(clip.game?.teams ?? [])]
+  const clipItems: WatchItem<Clip>[] = newest.flatMap((clip) => {
+    const { id, title, competition, thumbnailUrl, dateUTC, matchId } = clip
+    const videos = clipVideos(clip)
+    if (!videos.some((item) => item.id === id && item.kind !== "live")) return []
+    const shown = videos.filter((item) => item.kind === "highlight" || item.kind === "goal").map(pageVideo)
+    return [{ value: { id, title, competition: clip.game?.competition ?? competition, thumbnailUrl, dateUTC, matchId: matchId ?? null, videos: shown }, facets: clipFacets(title, competition, clip.game), text: clipText(clip) }]
+  })
+  const streamItems: WatchItem<LiveStream>[] = newest.flatMap((clip) => {
+    const status = clip.matchId ? byId.get(clip.matchId)?.status : undefined
+    if (!streamOpen(clip.dateUTC, status, now.getTime())) return []
+    return clipVideos(clip).filter((item) => item.kind === "live").slice(0, 1).map((item) => ({
+      value: { id: item.id, title: clip.title, competition: clip.game?.competition ?? clip.competition, matchId: clip.matchId ?? null, thumbnailUrl: clip.thumbnailUrl },
+      facets: clipFacets(clip.title, clip.competition, clip.game),
+      text: clipText(clip),
+    }))
+  })
 
   const liveItems = events.filter((event) => event.status === "live").map(eventItem)
   const watchable = filters.watchable === true
-  const pool: WatchItem<unknown>[] = [...highlightItems, ...clipItems, ...(watchable ? [] : [...liveItems, ...listingItems])]
+  const pool: WatchItem<unknown>[] = [...highlightItems, ...clipItems, ...streamItems, ...(watchable ? [] : [...liveItems, ...listingItems])]
   const keys: FacetKey[] = sport ? SPORT_FACETS[sport] : ["competition"]
   const facets = buildFacets(keys, pool, choice, query)
   const pick = <T,>(items: WatchItem<T>[]) => items.filter((item) => matchesWatch(item, choice, query))
 
   const highlights = pick(highlightItems).slice(0, HIGHLIGHT_LIMIT).map((item) => item.value)
-  const clips = pick(clipItems).slice(0, CLIP_LIMIT).map((item) => item.value)
+  const clips = pick(clipItems).slice(0, sport ? CLIP_LIMIT : MIXED_CLIP_LIMIT).map((item) => item.value)
+  const streams = pick(streamItems).map((item) => item.value)
   const live = watchable ? [] : pick(liveItems).map((item) => item.value).sort(byImportance).slice(0, LIVE_LIMIT)
   const broadcasts = watchable ? [] : perGame(pick(listingItems).sort((a, b) => (a.value.startUTC ?? "").localeCompare(b.value.startUTC ?? ""))).slice(0, BROADCAST_LIMIT).map((item) => item.value)
 
-  const noVideo = highlightItems.length + clipItems.length === 0
+  const noVideo = highlightItems.length + clipItems.length + streamItems.length === 0
   const { oldest, complete } = storedDayAge(dayOf(0), sport)
   const fresh = oldest !== null && complete && stored !== null && now.getTime() - oldest < STALE_MS
   return {
@@ -349,6 +416,7 @@ export async function getWatchFeed(sport?: SportId, now: Date = new Date(), filt
     live,
     highlights,
     clips,
+    streams,
     broadcasts,
   }
 }

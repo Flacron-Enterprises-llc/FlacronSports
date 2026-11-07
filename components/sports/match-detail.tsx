@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Activity, ArrowLeftRight, CircleDot, Flag, ListChecks, ShieldAlert, Square, Users } from "lucide-react"
 import { usePreferences } from "@/components/account/prefs-provider"
 import { ErrorNotice } from "@/components/dashboard/controls"
-import { Panel, Skeleton } from "@/components/site/states"
+import { Notice, Panel, Skeleton } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import { labelStats, labelTimeline, type LineupPlayer, type MatchDetail, type StatRow, type TimelineItem } from "@/lib/sports/detail"
 import { lineScore } from "@/lib/sports/adapters/line-score"
@@ -194,13 +194,14 @@ export function LiveUpdatesTab({ extra, sportId }: { extra?: React.ReactNode; sp
   if (!extra && failed && !detail) return <ErrorNotice onRetry={load}>{t.match.detailFailed}</ErrorNotice>
   if (!extra && !detail) return <Waiting />
   if (!extra && detail?.state === "unavailable") return <ErrorNotice onRetry={load}>{t.match.detailFailed}</ErrorNotice>
-  const timeline = labelTimeline(detail?.timeline ?? [], t.match.timelineKinds, locale, { infractions: t.match.infractions, situations: t.match.goalSituations })
+  const timeline = labelTimeline(detail?.timeline ?? [], t.match.timelineKinds, locale, { infractions: t.match.infractions, situations: t.match.goalSituations, reviews: t.match.reviews, cardReasons: t.match.cardReasons, replaced: t.match.replaced, assist: t.match.assist })
   if (timeline.length === 0 && !extra) return <Empty title={t.match.liveUpdates} icon={<ListChecks aria-hidden />}>{(sportId && t.match.sportNotes[sportId]?.updates) || t.match.noUpdates}</Empty>
   return (
     <div className="space-y-4">
       <SpoilerReveal label={t.match.revealDetails} />
       <SpoilerGuard label={t.match.revealDetails} quiet>
         <div className="space-y-4">
+          {timeline.length > 0 && detail?.timelinePartial && sportId === "ice-hockey" && <Notice tone="warning" role="status">{t.match.hockeyPartial}</Notice>}
           {timeline.length > 0 && <Panel title={t.match.liveUpdates} icon={<ListChecks aria-hidden />}><Timeline items={timeline} /></Panel>}
           {extra}
         </div>

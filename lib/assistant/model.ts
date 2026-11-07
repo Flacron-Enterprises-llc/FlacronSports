@@ -9,7 +9,7 @@ import type { MatchDetail } from "@/lib/sports/detail"
 import type { Standings } from "@/lib/sports/service"
 import { SPORTS, type EventFeed, type SportEvent, type SportId } from "@/lib/sports/types"
 import { ModelFailure, type ModelBlock, type ModelClient, type ModelMessage, type ModelRequest } from "./anthropic-client"
-import { asksForResult, nameMatches, normalize, tableView, toItem, topicOf, type AnswerKind, type AssistantAnswer, type AssistantSources } from "./engine"
+import { asksForResult, nameMatches, namesEntry, normalize, sportOf, tableView, toItem, topicOf, type AnswerKind, type AssistantAnswer, type AssistantSources } from "./engine"
 import { REFERENCE, REFERENCE_REVIEWED_UTC, type ReferenceEntry } from "./reference"
 
 export interface ModelSources extends Omit<AssistantSources, "getTeamFixtures"> {
@@ -18,7 +18,7 @@ export interface ModelSources extends Omit<AssistantSources, "getTeamFixtures"> 
     sport?: SportId,
   ): Promise<{ team: { name: string; league?: { id: string; name: string } | null } | null; recent: SportEvent[]; upcoming?: SportEvent[]; feed: Omit<EventFeed, "events"> }>
   getMatchDetail(event: SportEvent): Promise<MatchDetail>
-  searchTeams(text: string): Promise<{ name: string; sportId: SportId }[]>
+  searchTeams(text: string, sport?: SportId): Promise<{ name: string; sportId: SportId }[]>
 }
 
 export const DEFAULT_MODEL = "claude-opus-5-5"
@@ -54,8 +54,11 @@ How to answer
 - Give the time the data was last updated, from as_of_utc or updated_utc, written as a UTC time.
 - A feed marked "stale" may be out of date, so say so. A match with status "unconfirmed" was last reported live on an out-of-date feed: never call it live. A feed marked "limited" holds only part of the data.
 - Read scores in the form the sport uses. A score has a kind: "team" is one number per side, "sets" lists games per set, "innings" has runs, wickets and overs, "combat" has a winner and method, and "classification" is a finishing order. "breakdown" holds periods, quarters, innings or sets where the source gives them. Do not flatten these into a single number.
-- Use a team's name as written when you call get_team_fixtures. If it finds nothing, try search_teams to get the exact name, then try again.
+- Use a team's name as written when you call get_team_fixtures, and pass the sport when the member names one. If it finds nothing, try search_teams to get the exact name, then try again.
+- Tennis players, fighters and drivers have no team record, so get_team_fixtures finds nothing for them. Use search_teams with their sport to get the exact name, then get_events with their sport and name as the filter, one date at a time.
 - get_events covers one date at a time. Today is the date given below. To find a competition's table, first get its league ref from an event or a team, then call get_standings.
+- Racing has no league table. The championship is in score.standings on the latest classified event, so look back through recent dates for that series and answer with kind "result", citing that event.
+- A table marked "calculated" was worked out from results. Say so, and never call it the official table. It holds no league points, conferences or tiebreakers.
 
 Forecasts
 - Facts go in "answer". If the member asks what might happen, a forecast may go in "forecast", and only there. Base it on the facts you looked up, say what it rests on, and word it as a possibility. Never guarantee an outcome, never give a predicted scoreline, and never present a forecast as a fact. Leave "forecast" null otherwise.
@@ -94,11 +97,11 @@ const TOOLS = [
     sport: sportEnum,
     filter: { ...nullable("string"), description: "Team, competition or event name to narrow the list." },
   }),
-  tool("get_team_fixtures", "A team's or athlete's upcoming games and recent results, by exact name.", { team: { type: "string" }, sport: sportEnum }),
+  tool("get_team_fixtures", "A team's upcoming games and recent results, by exact name. Teams only: for a tennis player, fighter or driver use get_events with the name as the filter.", { team: { type: "string" }, sport: sportEnum }),
   tool("get_standings", "The league table for a league ref returned by another lookup.", { league_ref: { type: "string" } }),
   tool("get_match_detail", "Timeline, statistics and lineups for a match ref returned by another lookup.", { match_ref: { type: "string" } }),
-  tool("search_teams", "Exact team and athlete names matching some text.", { text: { type: "string" } }),
-  tool("get_rule_reference", "The reviewed rule note on a topic, such as offside, red card, shot clock or overtime.", { topic: { type: "string" } }),
+  tool("search_teams", "Exact team names matching some text. With tennis, combat-sports or motorsport as the sport, it gives the names of athletes from recent events instead.", { text: { type: "string" }, sport: sportEnum }),
+  tool("get_rule_reference", "The reviewed rule note on a topic, such as offside, red card, shot clock or overtime. Give the sport when the member names one: a note for another sport does not apply.", { topic: { type: "string" }, sport: sportEnum }),
   tool("give_answer", "Deliver the final answer to the member. Call this alone, after every lookup has finished.", {
     kind: { type: "string", enum: [...ANSWER_KINDS] },
     answer: { type: "string", description: "The facts, in plain sentences, in the requested language." },
@@ -113,8 +116,8 @@ const eventsInput = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nul
 const teamInput = z.object({ team: z.string().min(1).max(100), sport: sportInput })
 const leagueInput = z.object({ league_ref: z.string() })
 const matchInput = z.object({ match_ref: z.string() })
-const searchInput = z.object({ text: z.string().min(2).max(100) })
-const ruleInput = z.object({ topic: z.string().min(1).max(100) })
+const searchInput = z.object({ text: z.string().min(2).max(100), sport: sportInput.optional() })
+const ruleInput = z.object({ topic: z.string().min(1).max(100), sport: sportInput.optional() })
 const finalInput = z.object({
   kind: z.enum(ANSWER_KINDS),
   answer: z.string().min(1),
@@ -210,7 +213,8 @@ function createLookups(sources: ModelSources, locale: Locale, now: Date, hideRes
     limited: standings.limited,
     as_of_utc: standings.sourceUpdatedAt ?? standings.fetchedAt,
     teams_in_table: standings.rows.length,
-    rows: standings.rows.slice(0, MAX_TABLE_ROWS).map(({ rank, team, played, won, drawn, lost, difference, points, form }) => ({ rank, team, played, won, drawn, lost, difference, points, form })),
+    ...(standings.calculated ? { calculated: true, unit: standings.calculated.unit, games_counted: standings.calculated.games, latest_game: standings.calculated.latestGame, may_be_out_of_date: standings.calculated.stale } : {}),
+    rows: standings.rows.slice(0, MAX_TABLE_ROWS).map(({ rank, team, played, won, drawn, lost, difference, points, form, winPercent, overtimeLosses }) => ({ rank, team, played, won, drawn, lost, difference, points, form, win_percent: winPercent, overtime_losses: overtimeLosses })),
   })
 
   const compactDetail = (detail: MatchDetail) => ({
@@ -286,15 +290,18 @@ function createLookups(sources: ModelSources, locale: Locale, now: Date, hideRes
       return compactDetail(detail)
     },
     async search_teams(input) {
-      const { text } = searchInput.parse(input)
-      const teams = await sources.searchTeams(text)
+      const { text, sport } = searchInput.parse(input)
+      const teams = await sources.searchTeams(text, sport ?? undefined)
       stats.reachedData = true
       return { teams: teams.map(({ name, sportId }) => ({ name, sport: sportId })) }
     },
     async get_rule_reference(input) {
-      const { topic } = ruleInput.parse(input)
-      const padded = ` ${normalize(topic)} `
-      const found = REFERENCE.filter((entry) => entry.id === normalize(topic) || entry.terms.some((term) => padded.includes(` ${term} `)))
+      const { topic, sport } = ruleInput.parse(input)
+      const text = normalize(topic)
+      const wanted = sport ?? sportOf(text)
+      // Some terms exist only as a phrase with their sport, such as "overtime in hockey".
+      const phrased = sport ? `${text} in ${SPORTS.find((item) => item.id === sport)?.name.en.toLowerCase()}` : text
+      const found = REFERENCE.filter((entry) => (entry.id === text || namesEntry(entry, phrased)) && (!wanted || entry.sport === wanted))
       stats.reachedData = true
       if (found.length === 0) return { found: false, topics_covered: REFERENCE.map((entry) => entry.id) }
       found.forEach((entry) => rules.add(entry))

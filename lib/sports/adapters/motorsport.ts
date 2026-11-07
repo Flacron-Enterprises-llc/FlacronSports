@@ -57,7 +57,9 @@ function grandPrixRow(row: string): Read | null {
 
 /** Tab or slash marked: position, name, team, time. British GT puts the car first and lists its drivers. */
 function tableRow(row: string): Read | null {
-  const cells = cellsOf(row)
+  const listed = cellsOf(row)
+  // Moto3 at Mugello added third place's points after the gap, and no other row's.
+  const cells = listed.length === 5 && /^\d{1,2}$/.test(listed[4]) && timing(listed[3]) && !/^\d/.test(listed[1]) ? listed.slice(0, 4) : listed
   if (cells.length < 2 || !(POSITION.test(cells[0]) || OUT.test(cells[0]))) return null
   if (cells.length > 5) return null
   if (/^\d{1,3}$/.test(cells[1]) && cells.length >= 4) {
@@ -78,29 +80,78 @@ function listRow(row: string): Read | null {
   return { position: match[1], note: null, entry: { name: match[2].trim(), team: car?.[2] ?? match[3] ?? null, time: timing(match[5]), ...(match[4] ? { laps: Number(match[4]) } : {}), ...(car ? { number: Number(car[1]) } : {}) } }
 }
 
+/**
+ * IMSA's overall order with each car's class and class place:
+ * "2 GTP Laurin Heinrich/Kaylen Frederick - JDC-Miller MotorSports - Porsche 963 - 151 - +1.960".
+ */
+function classedRow(row: string): Read | null {
+  const match = row.match(/^(\d{1,3})\s+(GTP|LMP2|LMP3|GTD PRO|GTD)(?:-\d+)?\s+(.+?)\s+-\s+(.+?)\s+-\s+.+?\s+-\s+(\d+)(?:\s+laps)?(?:\s+-\s+(\S+))?(?:\s+\(([^)]+)\))?$/i)
+  if (!match) return null
+  return { position: match[1], note: match[7] ?? null, entry: { name: match[3].trim(), team: match[4].trim(), time: timing(match[6]), laps: Number(match[5]), category: match[2].toUpperCase().replace("PRO", "Pro") } }
+}
+
 /** "1 #100 Name/Name - TEAM (Honda) - 66 laps, 1'29.842". */
 function carRow(row: string): Read | null {
   const match = row.match(/^(\d{1,3})\s+#(\d+)\s+(.+?)\s+-\s+(.+?)\s+-\s+(\d+)(?:\s+laps)?,\s+(\S+)/)
   return match ? { position: match[1], note: null, entry: { name: match[3].trim(), team: match[4].trim(), time: timing(match[6]), laps: Number(match[5]), number: Number(match[2]) } } : null
 }
 
-const readRow = (row: string) => (/^\d{1,3}\s+#/.test(row) ? carRow(row) : /^\d{1,3}\.\s/.test(row) ? listRow(row) : grandPrixRow(row) ?? tableRow(row))
+const readRow = (row: string) => (/^\d{1,3}\s+#/.test(row) ? carRow(row) : /^\d{1,3}\.\s/.test(row) ? listRow(row) : grandPrixRow(row) ?? classedRow(row) ?? tableRow(row))
 
-/** "Pos | Car # | Team | Best Lap | Gap", where the row after the header sets the columns. */
-function pipeRows(rows: string[]): Read[] {
-  const at = rows.findIndex((row) => /^Pos\s*\|/i.test(row.trim()))
+/**
+ * A header row names the columns: WEC's "Pos | Car # | Team | Best Lap | Gap" and Super GT's
+ * "Pos /Number /Team /Drivers /Laps /Diff.", whose crews are written "Name--Name".
+ */
+function headedRows(rows: string[]): Read[] {
+  const at = rows.findIndex((row) => /^Pos\s*[|/]/i.test(row.trim()))
   if (at === -1) return []
-  const columns = rows[at].split("|").map((cell) => cell.trim().toLowerCase())
+  const mark = /^Pos\s*\|/i.test(rows[at].trim()) ? "|" : "/"
+  const columns = rows[at].split(mark).map((cell) => cell.trim().toLowerCase())
+  // A championship table has the same look and is read as standings instead.
+  if (!columns.some((title) => /gap|diff|time|best|lap/.test(title))) return []
   const column = (cells: string[], name: RegExp) => cells[columns.findIndex((title) => name.test(title))]
-  return rows.slice(at + 1).flatMap((row) => {
-    const cells = row.split("|").map((cell) => cell.trim())
+  const body = rows.slice(at + 1).filter((row) => row.trim())
+  // A slash header over tabbed rows is another layout, read row by row instead.
+  const fits = (row: string) => row.split(mark).length === columns.length
+  const end = body.findIndex((row) => !fits(row))
+  if (mark === "/" && end === 0) return []
+  return (mark === "/" && end !== -1 ? body.slice(0, end) : body).flatMap((row) => {
+    const cells = row.split(mark).map((cell) => cell.trim())
     if (cells.length !== columns.length || !POSITION.test(cells[0])) return []
-    const number = Number(column(cells, /car/)?.replace("#", ""))
-    const gap = column(cells, /gap/)
+    const number = Number(column(cells, /car|number|^no\b/)?.replace("#", ""))
+    const gap = column(cells, /gap|diff/)
     const best = column(cells, /best|time/)
-    const name = column(cells, /driver/) ?? column(cells, /team/)
-    return name ? [{ position: cells[0], note: null, entry: { name, team: column(cells, /team/) ?? null, time: timing(cells[0] === "1" ? best : gap) ?? timing(best), ...(Number.isFinite(number) ? { number } : {}) } }] : []
+    const laps = Number(column(cells, /^laps?$/))
+    const name = (column(cells, /driver/) ?? column(cells, /team/))?.replace(/\s*--\s*/g, " / ")
+    return name ? [{ position: cells[0], note: null, entry: { name, team: column(cells, /team/) ?? null, time: timing(cells[0] === "1" ? best : gap) ?? timing(best), ...(Number.isInteger(laps) && laps > 0 ? { laps } : {}), ...(Number.isFinite(number) ? { number } : {}) } }] : []
   })
+}
+
+// An entry that ends a sentence: "10 Anthony Alfredo. DNFs: ...". "A. da Costa" is a name, not an end.
+const sentenceEnd = (text: string) => text.split(/(?<=[a-z]{2})\.\s/)[0].replace(/\.$/, "").trim()
+
+/**
+ * Places written inline in prose: "Top 10: 1 Corey Day, 2 Carson Kvapil", "Top finishers: 1. Chandler
+ * Smith; 2. Layne Riggs" and Formula E's "Group A: 1 A. da Costa 1:15.157, 2 M. Evans +0.105".
+ * Read only when no table is found, and the run stops at the first place that is not the next one.
+ */
+function inlineLists(text: string): { groups: { name: string | null; reads: Read[] }[]; out: ClassifiedOut[] } {
+  const groups: { name: string | null; reads: Read[] }[] = []
+  for (const found of text.matchAll(/\b(Top \d+|Top finishers|Group [A-Z])(?:\s*\([^)]*\))?:\s*([^\r\n]+)/g)) {
+    const reads: Read[] = []
+    for (const item of found[2].split(/[;,]\s*/)) {
+      const place = item.match(/^(\d{1,2})\.?\s+(.+)$/)
+      if (!place || Number(place[1]) !== reads.length + 1) break
+      const body = sentenceEnd(place[2])
+      const timed = body.match(/^(.+?)\s+(\+?\d[\d:.]*)$/)
+      reads.push({ position: place[1], note: null, entry: { name: (timed?.[1] ?? body).trim(), team: null, time: timing(timed?.[2]) } })
+      if (body !== place[2].replace(/\.$/, "").trim()) break
+    }
+    groups.push({ name: found[1].startsWith("Group") ? found[1] : null, reads })
+  }
+  const stopped = text.match(/\bDNFs?:\s*([^\r\n]+)/)
+  const out = stopped ? sentenceEnd(stopped[1]).split(/,\s*|\s+and\s+/).filter(Boolean).map((name): ClassifiedOut => ({ name: name.trim(), team: null, status: "DNF", note: null })) : []
+  return { groups: groups.filter((group) => group.reads.length > 0), out }
 }
 
 const STANDINGS = /standings/i
@@ -139,7 +190,7 @@ export function parseRace(text: string | null | undefined, heat: number | null =
   let pole: string | null = null
   let fastest: RaceResult["fastestLap"] = null
 
-  const piped = pipeRows(rows)
+  const piped = headedRows(rows)
   if (piped.length > 0) groups[0].reads = piped
 
   for (const line of rows) {
@@ -156,6 +207,9 @@ export function parseRace(text: string | null | undefined, heat: number | null =
     }
     const poleRow = row.match(/^Pole Position\s*-\s*(.+)$/i)
     if (poleRow) { pole = poleRow[1].trim(); continue }
+    // Formula E's qualifying ends in a duel, and its winner takes pole: "Final: Mortara (1:12.341) bt da Costa".
+    const duel = row.match(/^Final:\s*(.+?)\s*\([^)]*\).*?\s(?:bt|def\.)\s/)
+    if (duel) { pole = duel[1].trim(); continue }
     const lap = row.match(/^Fastest Lap\s*-\s*(.+?)\s*\(([\d:.]+)\)/i)
     if (lap) { fastest = { name: lap[1].trim(), time: timing(lap[2]) }; continue }
     if (piped.length > 0) continue
@@ -168,6 +222,12 @@ export function parseRace(text: string | null | undefined, heat: number | null =
     if (!read) continue
     if (block === "out" || OUT.test(read.position)) out.push({ name: read.entry.name, team: read.entry.team, status: OUT.test(read.position) ? read.position.toUpperCase() : null, note: read.note, ...(typeof read.entry.laps === "number" ? { laps: read.entry.laps } : {}) })
     else groups.at(-1)?.reads.push(read)
+  }
+
+  if (piped.length === 0 && groups.every((group) => group.reads.length === 0)) {
+    const inline = inlineLists(text)
+    if (inline.groups.length > 0) groups.splice(0, groups.length, ...inline.groups)
+    out.push(...inline.out)
   }
 
   // One record can hold a whole weekend's races, and it belongs to one of them.
@@ -207,37 +267,81 @@ export function raceFromRows(rows: RawResult[] | null | undefined): RaceResult |
   const stopped = (detail: string) => /^(?:RET|DNF|DNS|DSQ|DQ|NC|WD)$/i.test(detail)
   const running = listed.filter((row) => !stopped(row.detail))
   const reads: Read[] = running.map((row) => ({ position: String(row.position), note: null, entry: { name: row.name, team: null, time: timing(row.detail) ?? (/^\d+ laps?$/i.test(row.detail) ? row.detail : null), ...(row.playerId ? { playerId: row.playerId } : {}) } }))
-  const entries = unbroken(reads)
-  if (!entries) return null
-  const placed = new Set(entries.map((entry) => entry.name))
-  const out = listed.filter((row) => !placed.has(row.name)).map((row): ClassifiedOut => ({ name: row.name, team: null, status: stopped(row.detail) ? row.detail.toUpperCase() : null, note: stopped(row.detail) ? null : row.detail || null }))
+  // Each row states its own place, so a driver missing from the source's player list leaves a
+  // visible gap (Xfinity at Las Vegas has no 18th) instead of pushing everyone after into "out".
+  if (reads.length < 3 || reads[0].position !== "1" || new Set(reads.map((read) => read.position)).size !== reads.length) return null
+  const entries = reads.map((read) => ({ position: Number(read.position), ...read.entry }))
+  const out = listed.filter((row) => stopped(row.detail)).map((row): ClassifiedOut => ({ name: row.name, team: null, status: row.detail.toUpperCase(), note: null }))
   return { entries, ...(out.length > 0 ? { out } : {}) }
 }
 
 /** A pasted table has the teams and the results endpoint has the player records, so each fills the other. */
 function linked(race: RaceResult, rows: RawResult[] | null | undefined): RaceResult {
-  const ids = new Map((rows ?? []).flatMap((row) => (row.strPlayer && row.idPlayer ? [[fold(row.strPlayer), row.idPlayer] as const] : [])))
-  return { ...race, entries: race.entries.map((entry) => ({ ...entry, ...(ids.get(fold(entry.name)) ? { playerId: ids.get(fold(entry.name)) } : {}) })) }
+  const records = (rows ?? []).flatMap((row) => (row.strPlayer && row.idPlayer ? [{ name: row.strPlayer.trim(), id: row.idPlayer, words: fold(row.strPlayer).split(/\s+/) }] : []))
+  // A pasted "Kimi Antonelli" is the record "Andrea Kimi Antonelli": the same surname, and every
+  // word of the shorter name in the longer. The record's spelling is kept, so practice, qualifying
+  // and race name the driver the same way.
+  const recordOf = (name: string) => {
+    const words = fold(name).split(/\s+/)
+    const exact = records.find((record) => record.words.join(" ") === words.join(" "))
+    if (exact) return exact
+    const close = records.filter((record) => record.words.at(-1) === words.at(-1) && (words.every((word) => record.words.includes(word)) || record.words.every((word) => words.includes(word))))
+    return close.length === 1 ? close[0] : null
+  }
+  return {
+    ...race,
+    entries: race.entries.map((entry) => {
+      const record = entry.name.includes("/") ? null : recordOf(entry.name)
+      return record ? { ...entry, name: record.name, playerId: record.id } : entry
+    }),
+  }
 }
 
-const CLASS_IN_TITLE = /\s+[-–]\s+((?:Hypercar|LMGT3|LMP2)(?:\s*&\s*(?:Hypercar|LMGT3|LMP2))?)$/i
+// WEC writes "Qualifying - Hypercar" and also "Hyperpole LMGT3"; IMSA's classes are GTP, LMP2, GTD Pro and GTD.
+/**
+ * A pasted "Top 10" over a 22-car session loses twelve places the results endpoint holds. The
+ * longer order wins, and keeps the pasted teams, laps and grid, its pole, fastest lap and table.
+ * A pasted multi-class table always stays: the endpoint has one order for every class.
+ */
+function fuller(pasted: RaceResult, listed: RaceResult | null): RaceResult {
+  if (!listed || pasted.classes || pasted.className || listed.entries.length <= pasted.entries.length) return pasted
+  const byName = new Map(pasted.entries.map((entry) => [fold(entry.name), entry]))
+  const entries = listed.entries.map((entry) => {
+    const known = byName.get(fold(entry.name))
+    return known && known.position === entry.position ? { ...known, ...entry, team: known.team, time: known.time ?? entry.time } : entry
+  })
+  return { ...pasted, entries, ...(listed.out || pasted.out ? { out: listed.out ?? pasted.out } : {}) }
+}
 
+const CLASS_IN_TITLE = /\s+(?:[-–]\s+)?((?:Hypercar|LMGT3|LMP2|GTP|GTD Pro|GTD)(?:\s*&\s*(?:Hypercar|LMGT3|LMP2|GTP|GTD Pro|GTD))?)$/i
+// Supercars name each qualifying after the race it sets the grid for: "Qualifying Race 33".
+const FOR_RACE = /\s+Race\s+\d+$/i
+
+/**
+ * Every title layout in the 2026 seasons of the major series. Rally stages ("SS12"), warm-ups,
+ * pre-season running ("Valencia Test", "Roar Before The Rolex 24") and SBK's Superpole Race
+ * each have a title of their own, and none of them is the weekend's race.
+ */
 export function sessionOf(title: string): { session: MotorsportSession; number: number | null; weekend: string; className: string | null } {
   const className = title.match(CLASS_IN_TITLE)?.[1] ?? null
-  const name = title.replace(CLASS_IN_TITLE, "").trim()
-  const found: [RegExp, MotorsportSession][] = [
-    [/\s*\b(?:Free Practice|Practice|FP)\s*(\d)?$/i, "practice"],
-    [/\s*\bTesting\s*\d?\s*(?:Day\s*(\d))?$/i, "testing"],
-    [/\s*\bSprint Qualifying\s*(\d)?$/i, "sprint-qualifying"],
-    [/\s*\b(?:Qualifying|Qualifing|Hyperpole|Shootout|Superpole)\s*(\d)?$/i, "qualifying"],
-    [/\s*\bSprint(?: Race)?\s*(\d)?$/i, "sprint"],
+  const name = title.replace(CLASS_IN_TITLE, "").replace(/\s+/g, " ").trim()
+  if (/^Roar Before\b|\bPrologue\b/i.test(name)) return { session: "testing", number: null, weekend: name.replace(/\s+(?:Morning|Afternoon|Night)?\s*Session$/i, ""), className }
+  const qualifying = name.replace(FOR_RACE, "")
+  const found: [string, RegExp, MotorsportSession][] = [
+    [name, /\s*\b(?:(?:High Line and )?Final\s+)?(?:Free Practice|Practice|FP|Warm[- ]?Up|Shakedown)\s*(\d)?$/i, "practice"],
+    [name, /\s*\bTest(?:ing)?\s*\d?\s*(?:Day\s*(\d))?$/i, "testing"],
+    [name, /\s*\bSS\s?(\d{1,2})$|\s*\bPower Stage$/i, "stage"],
+    [name, /\s*\bSprint Qualifying\s*(\d)?$/i, "sprint-qualifying"],
+    [qualifying, /\s*\b(?:Hyperpole\s+)?(?:Top 10 Shootout|Qualifying|Qualifing|Hyperpole|Shootout|Superpole)\s*Q?(\d)?$/i, "qualifying"],
+    [name, /\s*\b(?:Sprint(?: Race)?|Superpole Race)\s*(\d)?$/i, "sprint"],
   ]
-  for (const [pattern, session] of found) {
-    const match = name.match(pattern)
-    if (match) return { session, number: match[1] ? Number(match[1]) : null, weekend: name.slice(0, match.index).trim() || name, className }
+  for (const [text, pattern, session] of found) {
+    const match = text.match(pattern)
+    if (match) return { session, number: match[1] ? Number(match[1]) : null, weekend: text.slice(0, match.index).trim() || text, className }
   }
-  const heat = name.match(/\s*\bRace\s*(\d+)$/i)
-  return { session: "race", number: heat ? Number(heat[1]) : null, weekend: heat ? name.slice(0, heat.index).trim() || name : name, className }
+  // "Race 2", F2's "Feature Race" and MotoGP's "Thailand GP" end in words the other sessions lack.
+  const heat = name.match(/\s+(?:Feature\s+)?Race\s*(\d+)$|\s+Feature Race$|\s+GP$/i)
+  return { session: "race", number: heat?.[1] ? Number(heat[1]) : null, weekend: heat ? name.slice(0, heat.index).trim() || name : name, className }
 }
 
 const hidesResult = (status: EventStatus) => status === "scheduled" || status === "postponed" || status === "canceled"
@@ -265,7 +369,7 @@ function detailsOf(raw: RawEvent, title: string | null): MotorsportDetails {
 export function motorsportFields(raw: RawEvent, infer: (settled: boolean) => EventStatus): Pick<SportEvent, "eventType" | "participantType" | "participants" | "eventName" | "status" | "score" | "details"> {
   const title = raw.strEvent?.trim() || null
   const pasted = parseRace(raw.strResult, sessionOf(title ?? "").number)
-  const race = pasted ? linked(pasted, raw.resultRows) : raceFromRows(raw.resultRows)
+  const race = pasted ? fuller(linked(pasted, raw.resultRows), raceFromRows(raw.resultRows)) : raceFromRows(raw.resultRows)
   const status = infer(Boolean(race))
   const shown = race && !hidesResult(status) ? race : null
   return {

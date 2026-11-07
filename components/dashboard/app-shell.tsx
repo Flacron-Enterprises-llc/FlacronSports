@@ -1,5 +1,6 @@
 "use client"
 
+import { TimeZoneCookie } from "@/components/dashboard/time-zone-cookie"
 import { HouseAd } from "./house-ad"
 import { ChoosePlan, PlanCheckFailed, useShellState } from "./paywall"
 import { Suspense, useEffect, useId, useMemo, useRef, useState } from "react"
@@ -396,6 +397,7 @@ function PlanFrame({ path, children }: { path: string; children: React.ReactNode
     <div className="flex min-h-dvh flex-col bg-bg">
       <NavProgress />
       <RevealObserver />
+      <TimeZoneCookie />
       <header className="border-b border-line bg-surface print:hidden">
         <div className="mx-auto flex min-h-16 w-full max-w-7xl flex-wrap items-center justify-between gap-2 px-4 sm:px-6">
           <Logo href={href("/")} />

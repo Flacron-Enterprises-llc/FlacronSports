@@ -45,7 +45,7 @@ export function TeamWatchPanel({ sport, team, recent, feed, t, href }: { sport: 
         {clips.length > 0 && (
           <div>
             <h3 className="text-sm font-semibold text-ink">{t.watch.clips}</h3>
-            <ClipGrid clips={clips} />
+            <ClipGrid clips={clips} href={href} />
           </div>
         )}
         {listings.length > 0 && (

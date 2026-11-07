@@ -12,10 +12,10 @@ const CONTINENTAL = /^(?:UEFA|CAF|AFC|FIFA|CONCACAF|CONMEBOL|OFC)\b/
 export function CompetitionGroupSection({ group, total, t, href }: { group: CompetitionGroup; total: number; t: Dictionary; href: (path: string) => string }) {
   const { competition, events } = group
   const first = events[0]
-  const standings = competition.id && first.participantType === "team" && /^\d{1,8}$/.test(competition.id) ? `/app/standings/${competition.id}` : null
-  const league = leaguePath(first)
-  const other = league && league !== standings ? league : null
-  const main = standings ?? other
+  // One link, and only to a page this competition can fill: leaguePath knows which those are.
+  const main = leaguePath(first)
+  const standings = main?.startsWith("/app/standings/") ? main : null
+  const other = standings ? null : main
   return (
     <section aria-label={competition.name} className="min-w-0 overflow-hidden rounded-xl border border-line bg-surface shadow-[var(--shadow-sm)]">
       <header className="fs-foot flex min-h-11 items-center gap-2 border-b border-line px-3 py-1 sm:px-4">

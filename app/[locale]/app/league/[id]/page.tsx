@@ -1,10 +1,12 @@
+import Link from "next/link"
 import { notFound } from "next/navigation"
 import { Trophy } from "lucide-react"
 import { ErrorNotice } from "@/components/dashboard/controls"
 import { MemberDataPending } from "@/components/dashboard/member-data-pending"
-import { AppPage, EmptyState, Notice, PageHeader, SectionHeading } from "@/components/site/states"
+import { AppPage, btn, EmptyState, Notice, PageHeader, SectionHeading } from "@/components/site/states"
 import { EventCard } from "@/components/sports/event-card"
 import { pageContext, titled } from "@/lib/page-context"
+import { canHaveTable } from "@/lib/sports/calculated"
 import { getLeagueEvents } from "@/lib/sports/service"
 import type { SportEvent } from "@/lib/sports/types"
 
@@ -31,7 +33,11 @@ export default async function LeaguePage({ params }: Props) {
 
   return (
     <AppPage>
-      <PageHeader title={league.competition ?? t.scores.competition} icon={<Trophy aria-hidden />} />
+      <PageHeader
+        title={league.competition ?? t.scores.competition}
+        icon={<Trophy aria-hidden />}
+        actions={league.sportId && league.competition && canHaveTable(league.sportId, league.competition) ? <Link href={href(`/app/standings/${id}`)} className={btn("outline", "md")}>{t.discover.fullTable}</Link> : undefined}
+      />
       {league.state === "unavailable" && <ErrorNotice>{t.feed.unavailable}</ErrorNotice>}
       {league.state === "stale" && <Notice tone="warning" role="status">{t.feed.stale}</Notice>}
       {league.state === "empty" && <EmptyState icon={<Trophy aria-hidden />} title={t.scores.empty} body={t.ui.scoresEmptyBody} />}

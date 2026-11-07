@@ -142,9 +142,21 @@ function isTeamTie(raw: RawEvent): boolean {
   return Boolean(raw.strGroup) || /^united cup|davis cup|fed cup|hopman/i.test(raw.strLeague ?? "")
 }
 
-function tieScore(text: string, names: [string, string]): EventScore {
-  const match = lines(text)[0].match(/^(.+?)\s+def\.?\s+(.+?)\s+(\d)-(\d)$/)
-  if (!match) return { kind: "none" }
+/** A header with no count leaves it to the rubbers. The draw lines say which code is which side, first side first. */
+function tieFromRubbers(raw: RawEvent, names: [string, string]): EventScore {
+  const sides = lines(raw.strDescriptionEN ?? "").map((row) => row.match(/\(([A-Z]{3})\)\s+vs\.?\s+.*\(([A-Z]{3})\)/)).find(Boolean)
+  const rows = lines(raw.strResult ?? "")
+  const wins = rows.flatMap((row) => row.match(/\(([A-Z]{3})\)\s+def\b/)?.[1] ?? [])
+  if (!sides || wins.length === 0) return { kind: "none" }
+  const [home, away] = [sides[1], sides[2]].map((code) => wins.filter((win) => win === code).length)
+  const stated = rows[0].match(/^(.+?)\s+def\.?\s+.+$/)?.[1].trim()
+  const leader = home > away ? names[0] : names[1]
+  return home + away === wins.length && home !== away && (!stated || stated === leader) ? { kind: "team", home, away } : { kind: "none" }
+}
+
+function tieScore(raw: RawEvent, names: [string, string]): EventScore {
+  const match = lines(raw.strResult ?? "")[0].match(/^(.+?)\s+def\.?\s+(.+?)\s+(\d)-(\d)$/)
+  if (!match) return tieFromRubbers(raw, names)
   const winnerFirst = match[1].trim() === names[0]
   if (!winnerFirst && match[1].trim() !== names[1]) return { kind: "none" }
   const [won, lost] = [Number(match[3]), Number(match[4])]
@@ -156,7 +168,7 @@ const hidesResult = (status: EventStatus) => status === "scheduled" || status ==
 
 function genderOf(raw: RawEvent, tournament: string | null): TennisDetails["gender"] {
   if (/^wta/i.test(raw.strLeague ?? "") || /^womens/i.test(tournament ?? "")) return "women"
-  if (/^atp/i.test(raw.strLeague ?? "") || /^mens/i.test(tournament ?? "")) return "men"
+  if (/^(?:atp|laver cup)/i.test(raw.strLeague ?? "") || /^mens/i.test(tournament ?? "")) return "men"
   return /^mixed/i.test(tournament ?? "") ? "mixed" : null
 }
 
@@ -169,7 +181,7 @@ export function tennisFields(raw: RawEvent, infer: (settled: boolean) => EventSt
   if (split && isTeamTie(raw)) {
     const text = raw.strResult ?? ""
     const rubbers = parseRubbers(text)
-    const score = tieScore(text, split.names)
+    const score = tieScore(raw, split.names)
     const status = infer(rubbers.length > 0)
     return {
       eventType: "match", participantType: "entrant", participants: split.names.map(competitor), eventName: null, status,
@@ -181,7 +193,9 @@ export function tennisFields(raw: RawEvent, infer: (settled: boolean) => EventSt
   const stated = parseTennisResult(raw.strResult)
   const names = draw?.names ?? split?.names ?? null
   const result = stated ?? (names ? proseResult(`${raw.strResult ?? ""}\n${raw.strDescriptionEN ?? ""}`, names) ?? resultFromRows(raw.resultRows, names) : null)
-  const at = (name: string) => title?.indexOf(name) ?? -1
+  // Past the tournament's name, which can hold a short surname: "Ma" in "Margaret Fund".
+  const players = title?.slice(split?.tournament?.length ?? 0) ?? ""
+  const at = (name: string) => players.indexOf(name)
   // Draw order, not result order: the source lists the winner first.
   const ordered = result ? result.lines.map((line) => line.name).sort((a, b) => at(a) - at(b)) : names ?? []
   const status = infer(Boolean(result && (result.winner || result.retired)))

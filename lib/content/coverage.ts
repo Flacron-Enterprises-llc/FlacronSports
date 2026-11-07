@@ -72,11 +72,16 @@ function recapMoments(detail: MatchDetail): TimelineItem[] {
   return detail.timeline.filter((item) => (["goal", "penalty", "own-goal", "red"] as TimelineItem["kind"][]).includes(item.kind) && item.player)
 }
 
+const SHOOTOUT_PERIOD = "PT"
+
 /** A timeline that does not add up to the final score is held for a person, however close it is. */
 function timelineAgrees(event: SportEvent, moments: TimelineItem[]): boolean {
-  if (event.sportId !== "football" || event.score.kind !== "team") return true
-  const goals = moments.filter((item) => item.kind !== "red").length
-  return goals === event.score.home + event.score.away
+  const hockey = event.sportId === "ice-hockey"
+  if ((event.sportId !== "football" && !hockey) || event.score.kind !== "team") return true
+  const goals = moments.filter((item) => item.kind !== "red" && item.period !== SHOOTOUT_PERIOD).length
+  // A hockey shootout adds one goal to the winner's final score that no timeline row shows.
+  const credited = hockey && event.conclusion === "shootout" ? 1 : 0
+  return goals === event.score.home + event.score.away - credited
 }
 
 function momentLine(item: TimelineItem, event: SportEvent, locale: Locale): string {

@@ -4,7 +4,7 @@
 
 import type { Dictionary } from "@/lib/i18n"
 import { inningsLine } from "./presentation"
-import type { CombatBout, CombatDetails, CricketDetails, EventScore, MotorsportDetails, SportEvent, TennisDetails } from "./types"
+import type { AmericanFootballDetails, BasketballDetails, CombatBout, CombatDetails, CricketDetails, EventScore, FootballDetails, MotorsportDetails, RugbyDetails, SportEvent, TennisDetails, VolleyballDetails } from "./types"
 
 export interface Fact {
   label: string
@@ -25,6 +25,8 @@ function cricketFacts(details: CricketDetails, t: Dictionary): Fact[] {
     [copy.format, details.format && copy.cricketFormats[details.format]],
     [copy.match, details.matchLabel],
     [copy.stage, details.stage && copy.cricketStages[details.stage]],
+    [copy.group, details.group],
+    [copy.phase, details.phase],
     [copy.round, details.round],
     [copy.season, details.season],
     [copy.scheduled, details.scheduledDays && fill(copy.days, { days: details.scheduledDays })],
@@ -32,6 +34,7 @@ function cricketFacts(details: CricketDetails, t: Dictionary): Fact[] {
     [copy.place, place(details.city, details.country)],
     [copy.category, details.women && copy.gender.women],
     [copy.toss, details.toss && fill(copy.tossChoice[details.toss.choice], { name: details.toss.side })],
+    [copy.umpires, details.umpires],
     [copy.spectators, details.spectators],
   ])
 }
@@ -99,8 +102,81 @@ function combatFacts(details: CombatDetails, t: Dictionary): Fact[] {
   ])
 }
 
+function basketballFacts(details: BasketballDetails, t: Dictionary): Fact[] {
+  const copy = t.sportTerms
+  return facts([
+    [copy.stage, details.stage && copy.basketballStages[details.stage]],
+    [copy.round, details.round],
+    [copy.group, details.group],
+    [copy.season, details.season],
+    [copy.place, place(details.city, details.country)],
+    [copy.spectators, details.spectators],
+  ])
+}
+
+function rugbyFacts(details: RugbyDetails, t: Dictionary): Fact[] {
+  const copy = t.sportTerms
+  return facts([
+    [copy.discipline, details.code && copy.rugbyCodes[details.code]],
+    [copy.stage, details.stage && copy.rugbyStages[details.stage]],
+    [copy.round, details.round],
+    [copy.group, details.group],
+    [copy.season, details.season],
+    [copy.place, place(details.city, details.country)],
+    [copy.spectators, details.spectators],
+  ])
+}
+
+/** "Week 9" in the regular season, the round's own name after it. */
+export function americanFootballWhen(details: AmericanFootballDetails, t: Dictionary): string | null {
+  const copy = t.sportTerms
+  return details.stage ? copy.americanFootballStages[details.stage] : details.week ? fill(copy.weekNumber, { n: details.week }) : null
+}
+
+function americanFootballFacts(details: AmericanFootballDetails, t: Dictionary): Fact[] {
+  const copy = t.sportTerms
+  return facts([
+    [details.stage ? copy.stage : copy.week, americanFootballWhen(details, t)],
+    [copy.season, details.season],
+    [copy.place, place(details.city, details.country)],
+    [copy.spectators, details.spectators],
+  ])
+}
+
+function footballFacts(details: FootballDetails, t: Dictionary): Fact[] {
+  const copy = t.sportTerms
+  return facts([
+    [copy.stage, details.stage && t.cups.rounds[details.stage]],
+    [copy.round, details.round],
+    [copy.group, details.group],
+    [copy.season, details.season],
+    [copy.place, place(details.city, details.country)],
+  ])
+}
+
+function volleyballFacts(details: VolleyballDetails, t: Dictionary): Fact[] {
+  const copy = t.sportTerms
+  return facts([
+    [copy.stage, details.stage && copy.volleyballStages[details.stage]],
+    [copy.round, details.round],
+    [copy.group, details.group],
+    [copy.format, details.goldenSet && copy.goldenSet],
+    [copy.season, details.season],
+    [copy.place, place(details.city, details.country)],
+  ])
+}
+
+/** The golden set leads: its score is points, not sets, and the card must say so first. */
+const volleyballChip = (details: VolleyballDetails, t: Dictionary) =>
+  [details.goldenSet && t.sportTerms.goldenSet, details.stage && t.sportTerms.volleyballStages[details.stage], details.round && fill(t.sportTerms.roundNumber, { n: details.round }), details.group && `${t.sportTerms.group} ${details.group}`].filter(Boolean).join(" · ") || null
+
 export function sportFacts(event: Pick<SportEvent, "details">, t: Dictionary): Fact[] {
   const { details } = event
+  if (details?.kind === "football") return footballFacts(details, t)
+  if (details?.kind === "basketball") return basketballFacts(details, t)
+  if (details?.kind === "american-football") return americanFootballFacts(details, t)
+  if (details?.kind === "rugby") return rugbyFacts(details, t)
+  if (details?.kind === "volleyball") return volleyballFacts(details, t)
   if (details?.kind === "cricket") return cricketFacts(details, t)
   if (details?.kind === "tennis") return tennisFacts(details, t)
   if (details?.kind === "motorsport") return motorsportFacts(details, t)
@@ -111,7 +187,11 @@ export function sportFacts(event: Pick<SportEvent, "details">, t: Dictionary): F
 export function sportChip(event: Pick<SportEvent, "details">, t: Dictionary): string | null {
   const { details } = event
   const copy = t.sportTerms
-  if (details?.kind === "cricket") return [details.format && copy.cricketFormats[details.format], details.matchLabel, details.stage && copy.cricketStages[details.stage]].filter(Boolean).join(" · ") || null
+  if (details?.kind === "american-football") return americanFootballWhen(details, t)
+  if (details?.kind === "rugby") return [details.stage && copy.rugbyStages[details.stage], details.round && fill(copy.roundNumber, { n: details.round }), details.group && `${copy.group} ${details.group}`].filter(Boolean).join(" · ") || null
+  if (details?.kind === "volleyball") return volleyballChip(details, t)
+  if (details?.kind === "basketball") return [details.stage && copy.basketballStages[details.stage], details.round && fill(copy.roundNumber, { n: details.round }), details.group && `${copy.group} ${details.group}`].filter(Boolean).join(" · ") || null
+  if (details?.kind === "cricket") return [details.format && copy.cricketFormats[details.format], details.matchLabel, details.stage && copy.cricketStages[details.stage], details.matchDay && details.scheduledDays ? fill(copy.dayOf, { day: details.matchDay, days: details.scheduledDays }) : null].filter(Boolean).join(" · ") || null
   if (details?.kind === "tennis") return [tennisRoundText(details.round, t), details.gender && copy.gender[details.gender], details.format === "doubles" ? copy.tennisFormats.doubles : null].filter(Boolean).join(" · ") || null
   if (details?.kind === "motorsport") return [sessionText(details, t), details.className].filter(Boolean).join(" · ")
   if (details?.kind === "combat") return [details.discipline && copy.disciplines[details.discipline], details.bouts.length > 1 ? fill(copy.boutCount, { count: details.bouts.length }) : details.weightClass && weightClassText(details.weightClass, t)].filter(Boolean).join(" · ") || null

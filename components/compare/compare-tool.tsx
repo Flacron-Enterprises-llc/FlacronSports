@@ -11,8 +11,9 @@ import { ExportButton } from "@/components/sports/export-button"
 import { LocalTime, SpoilerGuard, SpoilerReveal, SpoilerScope } from "@/components/sports/parts"
 import { authFetch } from "@/lib/auth-fetch"
 import { hasPlusFeatures } from "@/lib/billing/plans"
-import type { Comparison, PlayerComparison, SplitRecord, TeamProfile } from "@/lib/sports/compare"
-import { playerRows } from "@/lib/sports/compare-rows"
+import type { Comparison, PlayerComparison, TeamProfile } from "@/lib/sports/compare"
+import { playerRows, teamSheet } from "@/lib/sports/compare-rows"
+import { INDIVIDUAL_SPORTS } from "@/lib/sports/entrants"
 import type { SportId } from "@/lib/sports/types"
 import { useLocale } from "@/lib/use-locale"
 import { cn } from "@/lib/utils"
@@ -25,8 +26,7 @@ interface SavedView {
   createdAt: string
 }
 
-const FORM_TONE = { W: "fs-form-win", D: "fs-form-draw", L: "fs-form-loss" }
-const average = (total: number, played: number) => (played ? (total / played).toFixed(1) : "–")
+const FORM_TONE = { W: "fs-form-win", D: "fs-form-draw", L: "fs-form-loss", T: "fs-form-draw", N: "fs-form-draw" }
 
 function Form({ team }: { team: TeamProfile }) {
   const { t } = useLocale()
@@ -55,12 +55,11 @@ function Row({ label, first, second }: { label: string; first: React.ReactNode; 
 function Results({ data, asked }: { data: Comparison; asked: { first: string; second: string; sport: SportId | null } }) {
   const { locale, t } = useLocale()
   const [one, two] = data.teams
-  const line = (record: SplitRecord) => (record.played ? `${record.wins}-${record.draws}-${record.losses}` : "–")
-  const both = (read: (team: TeamProfile) => React.ReactNode) => ({ first: read(one), second: read(two) })
-  const advanced = (read: (figures: NonNullable<TeamProfile["advanced"]>) => React.ReactNode) => both((team) => (team.advanced ? read(team.advanced) : "–"))
+  // The screen and the PDF read the same rows, so a sport's terms hold in both.
+  const sheet = teamSheet(data, t)
 
   return (
-    <Panel title={`${one.name} / ${two.name}`} description={t.compare.basis} icon={<GitCompareArrows aria-hidden />}>
+    <Panel title={`${one.name} / ${two.name}`} description={sheet.notes[0]} icon={<GitCompareArrows aria-hidden />}>
       <SpoilerScope>
         <SpoilerReveal label={t.compare.reveal} />
         <SpoilerGuard label={t.compare.reveal} quiet>
@@ -75,21 +74,8 @@ function Results({ data, asked }: { data: Comparison; asked: { first: string; se
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                <Row label={t.compare.form} {...both((team) => <Form team={team} />)} />
-                <Row label={t.compare.record} {...both((team) => line(team.record))} />
-                <Row label={t.compare.scoredAverage} {...both((team) => average(team.record.scored, team.record.played))} />
-                <Row label={t.compare.concededAverage} {...both((team) => average(team.record.conceded, team.record.played))} />
-                {data.tier === "advanced" && (
-                  <>
-                    <Row label={t.compare.homeRecord} {...advanced((figures) => line(figures.home))} />
-                    <Row label={t.compare.awayRecord} {...advanced((figures) => line(figures.away))} />
-                    <Row label={t.compare.cleanSheets} {...advanced((figures) => figures.cleanSheets)} />
-                    <Row label={t.compare.failedToScore} {...advanced((figures) => figures.failedToScore)} />
-                    <Row label={t.compare.position} {...advanced((figures) => figures.standing?.rank ?? "–")} />
-                    <Row label={t.compare.points} {...advanced((figures) => figures.standing?.points ?? "–")} />
-                    <Row label={t.compare.goalDifference} {...advanced((figures) => figures.standing?.difference ?? "–")} />
-                  </>
-                )}
+                <Row label={t.compare.form} first={<Form team={one} />} second={<Form team={two} />} />
+                {sheet.rows.slice(1).map(([label, first, second]) => <Row key={label} label={label} first={first} second={second} />)}
               </tbody>
             </table>
           </div>
@@ -101,7 +87,7 @@ function Results({ data, asked }: { data: Comparison; asked: { first: string; se
                 {data.headToHead.map((game) => (
                   <li key={game.id} className="flex min-h-9 items-center justify-between gap-3 py-1">
                     <span className="min-w-0 truncate">{game.title}</span>
-                    <span className="tabular shrink-0 font-display font-semibold text-ink">{game.home}-{game.away}</span>
+                    <span className="tabular shrink-0 font-display font-semibold text-ink">{game.result}</span>
                   </li>
                 ))}
               </ul>
@@ -260,7 +246,7 @@ export function CompareTool({ sports }: { sports: { id: SportId; name: string }[
     if (timer.current) clearTimeout(timer.current)
     if (text.trim().length < 2) return
     timer.current = setTimeout(async () => {
-      const response = await authFetch(`/api/teams/search?q=${encodeURIComponent(text.trim())}`).catch(() => null)
+      const response = await authFetch(`/api/teams/search?${new URLSearchParams({ q: text.trim(), sport })}`).catch(() => null)
       if (response?.ok) setSuggestions(((await response.json()) as { teams: { name: string }[] }).teams.map((team) => team.name))
     }, 350)
   }
@@ -310,7 +296,8 @@ export function CompareTool({ sports }: { sports: { id: SportId; name: string }[
     )
   }
 
-  const options = [...new Set([...suggestions, ...prefs.favorites])]
+  const options = [...new Set(suggestions)]
+  const entrant = INDIVIDUAL_SPORTS.has(sport) ? (sport as "tennis" | "combat-sports" | "motorsport") : null
   const modes = <Segmented<"teams" | "players"> label={t.compare.mode} value={mode} onChange={setMode} options={[{ value: "teams", label: t.compare.teams }, { value: "players", label: t.compare.players }]} />
   if (mode === "players") return <div className="space-y-4">{modes}<PlayerCompare /></div>
   return (
@@ -326,13 +313,26 @@ export function CompareTool({ sports }: { sports: { id: SportId; name: string }[
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
             <div className="lg:w-44">
               <label htmlFor="compare-sport" className="mb-1 block text-[13px] font-medium text-ink">{t.compare.sport}</label>
-              <select id="compare-sport" value={sport} onChange={(event) => setSport(event.target.value as SportId)} className="fs-input h-10 w-full px-2 text-sm">
+              <select
+                id="compare-sport"
+                value={sport}
+                onChange={(event) => {
+                  // A name belongs to its sport, so changing sport starts the two fields again.
+                  setSport(event.target.value as SportId)
+                  setFirst("")
+                  setSecond("")
+                  setSuggestions([])
+                  setData(null)
+                  setError(null)
+                }}
+                className="fs-input h-10 w-full px-2 text-sm"
+              >
                 {sports.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
             </div>
-            <TeamField id="compare-first" label={t.compare.teamOne} value={first} options={options} onChange={(value) => { setFirst(value); suggest(value) }} />
+            <TeamField id="compare-first" label={entrant ? t.compare.entrantOne[entrant] : t.compare.teamOne} value={first} options={options} onChange={(value) => { setFirst(value); suggest(value) }} />
             <GitCompareArrows aria-hidden className="mb-3 hidden size-4 shrink-0 text-ink-3 lg:block" />
-            <TeamField id="compare-second" label={t.compare.teamTwo} value={second} options={options} onChange={(value) => { setSecond(value); suggest(value) }} />
+            <TeamField id="compare-second" label={entrant ? t.compare.entrantTwo[entrant] : t.compare.teamTwo} value={second} options={options} onChange={(value) => { setSecond(value); suggest(value) }} />
             <button type="submit" disabled={busy || !first.trim() || !second.trim()} className={btn("navy", "md", "disabled:opacity-60")}>{t.compare.run}</button>
           </div>
         </form>

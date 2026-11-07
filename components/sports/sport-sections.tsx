@@ -77,6 +77,7 @@ function RaceTable({ entries, t }: { entries: ClassificationEntry[]; t: Dictiona
           <tr className="bg-surface-muted text-left text-xs text-ink-2">
             <th scope="col" className="px-3 py-2 font-medium">{copy.position}</th>
             {has("number") && <th scope="col" className="px-2 py-2 font-medium">{copy.number}</th>}
+            {has("category") && <th scope="col" className="px-2 py-2 font-medium">{copy.class}</th>}
             <th scope="col" className="px-2 py-2 font-medium">{t.event.name}</th>
             {has("team") && <th scope="col" className="px-2 py-2 font-medium">{copy.team}</th>}
             {has("laps") && <th scope="col" className="px-2 py-2 text-right font-medium">{copy.laps}</th>}
@@ -90,6 +91,7 @@ function RaceTable({ entries, t }: { entries: ClassificationEntry[]; t: Dictiona
             <tr key={entry.position} className="fs-row border-t border-line">
               <td className="tabular px-3 py-1.5 font-bold text-ink">{entry.position}</td>
               {has("number") && <td className="tabular px-2 py-1.5 text-ink-2">{entry.number ?? ""}</td>}
+              {has("category") && <td className="whitespace-nowrap px-2 py-1.5 text-ink-2">{entry.category ?? ""}</td>}
               <th scope="row" className="min-w-32 px-2 py-1.5 text-left font-medium text-ink">{entry.name}</th>
               {has("team") && <td className="min-w-32 px-2 py-1.5 text-ink-2">{entry.team}</td>}
               {has("laps") && <td className="tabular px-2 py-1.5 text-right text-ink-2">{entry.laps ?? ""}</td>}
@@ -148,7 +150,8 @@ function BoutTable({ details, t }: { details: CombatDetails; t: Dictionary }) {
 
 function BoutRow({ bout, t }: { bout: CombatBout; t: Dictionary }) {
   const how = [bout.method && t.event.methods[bout.method], bout.round ? t.event.round.replace("{round}", String(bout.round)) : null, bout.time].filter(Boolean).join(" · ")
-  const about = [bout.section && t.sportTerms.cardSections[bout.section], bout.weightClass && weightClassText(bout.weightClass, t), boutRounds(bout, t)].filter(Boolean).join(" · ")
+  const about = boutAbout(bout, t)
+  const ended = !bout.winner && bout.outcome ? [t.sportTerms.boutOutcomes[bout.outcome], how, bout.scorecards].filter(Boolean).join(" · ") : null
   return (
     <li className="py-2.5 first:pt-0 last:pb-0">
       {about && <p className="text-xs text-ink-2">{about}</p>}
@@ -161,8 +164,16 @@ function BoutRow({ bout, t }: { bout: CombatBout; t: Dictionary }) {
         ))}
       </ul>
       {bout.winner && <p className="mt-0.5 text-xs text-ink-2">{[t.event.won.replace("{name}", bout.winner), how, bout.scorecards].filter(Boolean).join(" · ")}</p>}
+      {ended && <p className="mt-0.5 text-xs text-ink-2">{ended}</p>}
+      {bout.note && <p className="mt-0.5 text-xs text-ink-2">{bout.note}</p>}
     </li>
   )
+}
+
+/** Card section, weight class, scheduled rounds and the belt at stake. */
+function boutAbout(bout: CombatBout, t: Dictionary): string {
+  const title = bout.title ?? (bout.titleFight ? t.sportTerms.titleFight : null)
+  return [bout.section && t.sportTerms.cardSections[bout.section], bout.weightClass && weightClassText(bout.weightClass, t), boutRounds(bout, t), title].filter(Boolean).join(" · ")
 }
 
 export function hasSportStatistics(event: SportEvent): boolean {
@@ -219,7 +230,7 @@ export function CardParticipants({ details, t }: { details: CombatDetails; t: Di
       <ol className="grid gap-2.5 text-sm sm:grid-cols-2">
         {details.bouts.map((bout, index) => (
           <li key={index} className="min-w-0 rounded-lg border border-line px-3 py-2">
-            {(bout.weightClass || bout.scheduledRounds) && <p className="text-xs text-ink-2">{[bout.weightClass && weightClassText(bout.weightClass, t), boutRounds(bout, t)].filter(Boolean).join(" · ")}</p>}
+            {boutAbout(bout, t) && <p className="text-xs text-ink-2">{boutAbout(bout, t)}</p>}
             <p className="flex flex-wrap items-center gap-x-3 font-medium text-ink">
               {bout.names.map((name) => <span key={name} className="inline-flex min-w-0 items-center gap-1">{name}<FavoriteStar team={name} /></span>)}
             </p>

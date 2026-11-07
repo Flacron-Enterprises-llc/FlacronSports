@@ -1,6 +1,6 @@
 "use client"
 
-import { byImportance, byStatusThenTime } from "@/lib/sports/priority"
+import { byImportance, byStatusThenTime, interleave } from "@/lib/sports/priority"
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { ArrowRight, CalendarDays, Check, LayoutGrid, MessageCircleQuestion, Newspaper, PlayCircle, Radio, Star, TrendingUp, Trophy, X } from "lucide-react"
@@ -210,7 +210,8 @@ export function DashboardHome({ feed, reports }: { feed: EventFeed; reports: Rep
   const mine = feed.events
     .filter((event) => isFollowed(prefs, event))
     .sort((a, b) => followPriority(prefs, a) - followPriority(prefs, b) || byStatusThenTime(a, b))
-  const others = feed.events.filter((event) => !mine.includes(event)).sort(byImportance)
+  // Every sport gets a turn, or football's many fixtures would fill each six-card section.
+  const others = interleave(feed.events.filter((event) => !mine.includes(event)).sort(byImportance), (event) => event.sportId)
   const live = others.filter((event) => event.status === "live").slice(0, 6)
   const liveTotal = feed.events.filter((event) => event.status === "live").length
   const upcoming = others

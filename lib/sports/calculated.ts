@@ -3,17 +3,17 @@
 // hockey, American football, baseball, rugby, volleyball and cricket. These are not
 // official tables, so nothing here guesses at league points, conferences or tiebreakers.
 
-import { cricketFormat } from "./adapters/cricket"
+import { decidedSide } from "./game-result"
 import type { StandingRow } from "./service"
 import { normalizeEvent, type RawEvent } from "./thesportsdb"
 import type { SportEvent, SportId } from "./types"
 
-export type CalculatedUnit = "points" | "goals" | "sets" | "runs"
+export type CalculatedUnit = "points" | "goals" | "sets" | "runs" | "baseball-runs"
 
 const UNITS: Partial<Record<SportId, CalculatedUnit>> = {
   basketball: "points",
   "american-football": "points",
-  baseball: "points",
+  baseball: "baseball-runs",
   "ice-hockey": "goals",
   volleyball: "sets",
   rugby: "points",
@@ -93,26 +93,6 @@ interface Game {
 }
 
 const VOLLEYBALL_MOST_SETS = 3
-/** A side this low with no result text is a game rained off, not a collapse. */
-const LOWEST_CRICKET_TOTAL = 30
-
-function cricketWinner(event: SportEvent, raw: RawEvent): { winner: 0 | 1 | null } | null {
-  const { score } = event
-  if (score.kind !== "innings") return null
-  if (score.outcome === "drawn" || score.outcome === "tied") return { winner: null }
-  if (score.outcome === "won") {
-    const at = event.participants.findIndex((side) => side.name === score.winner)
-    return at === 0 || at === 1 ? { winner: at } : null
-  }
-  // Most games carry no result text, so a one-innings game goes to the higher total, which a
-  // revised target can overturn: the page says so. Across two innings a higher total can still
-  // be a draw, and an equal one may have gone to a super over.
-  const format = cricketFormat(raw.strLeague)
-  if (format === "test" || format === "first-class" || !score.home || !score.away || score.home.runs === score.away.runs) return null
-  if (Math.min(score.home.runs, score.away.runs) < LOWEST_CRICKET_TOTAL) return null
-  return { winner: score.home.runs > score.away.runs ? 0 : 1 }
-}
-
 /** Null for anything but a finished game with a result this sport can really have. */
 function readGame(raw: RawEvent, sportId: SportId, now: Date): Game | null {
   const [home, away] = [raw.strHomeTeam?.trim(), raw.strAwayTeam?.trim()]
@@ -124,7 +104,7 @@ function readGame(raw: RawEvent, sportId: SportId, now: Date): Game | null {
   const sides: Game["sides"] = [{ key: sideOf(raw.idHomeTeam, home), name: home }, { key: sideOf(raw.idAwayTeam, away), name: away }]
 
   if (event.score.kind === "innings") {
-    const decided = cricketWinner(event, raw)
+    const decided = decidedSide(event, { guessCricket: true })
     if (!decided) return null
     const { home: first, away: second } = event.score
     return { sides, scores: first && second ? [first.runs, second.runs] : null, winner: decided.winner, extended: false, date }
@@ -184,6 +164,8 @@ interface Tally {
 }
 
 const ratio = ({ won, drawn, played }: Tally) => (won + drawn / 2) / played
+/** KBO, NPB and CPBL leave a tie out of the percentage: KT's 90-49-5 in 2026 is .647. */
+const baseballPercent = ({ won, lost }: Tally) => (won + lost ? won / (won + lost) : 0)
 
 /** Null when the season has too few games or is not a league: the page then says so. */
 export function calculateTable(rows: RawEvent[], sportId: SportId, leagueId: string, league: string, now: Date = new Date()): CalculatedTable | null {
@@ -216,12 +198,14 @@ export function calculateTable(rows: RawEvent[], sportId: SportId, leagueId: str
   const splitLosses = sportId === "ice-hockey" && games.filter((game) => game.extended).length >= games.length * LOWEST_EXTENDED_SHARE
   const showDraws = DRAW_COLUMN.has(sportId) || teams.some((team) => team.drawn > 0)
   const difference = (team: Tally) => (totals ? team.scoredFor - team.scoredAgainst : 0)
-  teams.sort((a, b) => ratio(b) - ratio(a) || difference(b) - difference(a) || b.scoredFor - a.scoredFor || a.name.localeCompare(b.name))
+  // Every hockey league gives a point for a loss after regulation, so it ranks above one in regulation.
+  const standing = (team: Tally) => (splitLosses ? (team.won + (team.drawn + team.extendedLosses) / 2) / team.played : sportId === "baseball" ? baseballPercent(team) : ratio(team))
+  teams.sort((a, b) => standing(b) - standing(a) || difference(b) - difference(a) || b.scoredFor - a.scoredFor || a.name.localeCompare(b.name))
 
   const ranked: StandingRow[] = []
   teams.forEach((team, index) => {
     const before = teams[index - 1]
-    const level = before && ratio(before) === ratio(team) && difference(before) === difference(team)
+    const level = before && standing(before) === standing(team) && difference(before) === difference(team)
     ranked.push({
       rank: level ? (ranked[index - 1].rank as number) : index + 1,
       team: team.name,
@@ -231,11 +215,11 @@ export function calculateTable(rows: RawEvent[], sportId: SportId, leagueId: str
       lost: splitLosses ? team.lost : team.lost + team.extendedLosses,
       scoredFor: totals ? team.scoredFor : null,
       scoredAgainst: totals ? team.scoredAgainst : null,
-      difference: totals && WIN_PERCENT.has(sportId) ? difference(team) : null,
+      difference: totals && (WIN_PERCENT.has(sportId) || sportId === "rugby") ? difference(team) : null,
       points: null,
       form: null,
       zone: null,
-      ...(WIN_PERCENT.has(sportId) ? { winPercent: Math.round(ratio(team) * 1000) / 1000 } : {}),
+      ...(WIN_PERCENT.has(sportId) ? { winPercent: Math.round((sportId === "baseball" ? baseballPercent(team) : ratio(team)) * 1000) / 1000 } : {}),
       ...(splitLosses ? { overtimeLosses: team.extendedLosses } : {}),
     })
   })

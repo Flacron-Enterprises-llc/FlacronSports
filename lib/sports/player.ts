@@ -85,7 +85,8 @@ export function normalizePlayer(raw: RawPlayer, sportOf: (providerKey: string | 
     position: text(raw.strPosition),
     nationality: text(raw.strNationality),
     born: born && /^\d{4}-\d{2}-\d{2}$/.test(born) && !born.startsWith("0000") ? born : null,
-    number: text(raw.strNumber),
+    // For tennis this field holds a ranking the source no longer keeps current.
+    number: sportId === "tennis" ? null : text(raw.strNumber),
     height: text(raw.strHeight),
     weight: text(raw.strWeight),
   }

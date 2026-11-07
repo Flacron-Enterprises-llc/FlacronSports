@@ -2,6 +2,7 @@
 // reports, the digest, the assistant and exports so they cannot disagree.
 
 import type { Dictionary } from "@/lib/i18n"
+import { footballShowsPhase } from "./adapters/football"
 import { currentPeriod } from "./thesportsdb"
 import type { EventScore, Innings, SportEvent, SportId } from "./types"
 
@@ -10,12 +11,13 @@ const fill = (template: string, values: Record<string, string | number>) =>
 
 const SPORT_PHASES = new Set<SportId>(["basketball", "ice-hockey", "american-football", "baseball", "rugby", "volleyball"])
 
-/** Bare minutes read as minutes. Anything else the feed writes is already a clock. */
-export const clockText = (clock: string) => (/^\d+$/.test(clock) ? `${clock}′` : clock)
+/** Bare minutes read as minutes, and so does football's "90+5". Anything else is already a clock. */
+export const clockText = (clock: string) => (/^\d+(?:\+\d+)?$/.test(clock) ? `${clock}′` : clock)
 
 /** The sport's own word for where a live game is: Q2, P3, Inning 7, Set 3 or overtime. */
-export function livePhase(event: Pick<SportEvent, "status" | "sportId" | "providerStatus" | "competition">, t: Dictionary): string | null {
-  if (event.status !== "live" || !SPORT_PHASES.has(event.sportId)) return null
+export function livePhase(event: Pick<SportEvent, "status" | "sportId" | "providerStatus" | "competition" | "clock">, t: Dictionary): string | null {
+  if (event.status !== "live") return null
+  if (event.sportId === "football" ? !footballShowsPhase(event.providerStatus, Boolean(event.clock)) : !SPORT_PHASES.has(event.sportId)) return null
   const phase = currentPeriod(event.providerStatus, event.sportId, event.competition.name)
   return phase ? t.match.periodsShort[phase.key].replace("{n}", String(phase.number ?? "")) : null
 }

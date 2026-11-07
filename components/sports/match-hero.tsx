@@ -171,6 +171,11 @@ export function MatchHero({ event, t, locale, title, duel, updated }: { event: S
             <p className="tabular mt-3 text-center text-sm font-semibold text-white/90">{t.match.shootoutScore.replace("{home}", String(event.shootout.home)).replace("{away}", String(event.shootout.away))}</p>
           </SpoilerGuard>
         )}
+        {event.aggregate && (
+          <SpoilerGuard label={t.spoiler.revealResult} quiet>
+            <p className="tabular mt-3 text-center text-sm font-semibold text-white/90">{t.match.aggregateScore.replace("{home}", String(event.aggregate.home)).replace("{away}", String(event.aggregate.away))}</p>
+          </SpoilerGuard>
+        )}
         <div className="[&_button]:bg-white/10 [&_button]:text-white"><Podium event={event} t={t} /></div>
         {updated && <p className="mt-4 text-center text-xs text-white/65 sm:text-right [&_time]:font-normal">{updated}</p>}
       </div>

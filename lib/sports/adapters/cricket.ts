@@ -15,7 +15,7 @@ const FORMATS: [RegExp, CricketFormat][] = [
   [/county championship|sheffield shield|ranji/i, "first-class"],
   [/\bhundred\b/i, "hundred"],
   [/one day|\bodi\b|cricket world cup|champions trophy/i, "odi"],
-  [/t20|twenty20|big bash|blast|premier league|super league|super smash|sa20|major league cricket|shpageeza/i, "t20"],
+  [/t20|twenty20|big bash|blast|premier league|super league|super smash|sa20|major league cricket|shpageeza|commonwealth games/i, "t20"],
 ]
 
 export function cricketFormat(league: string | null | undefined): CricketFormat | null {
@@ -25,10 +25,19 @@ export function cricketFormat(league: string | null | undefined): CricketFormat 
   return FORMATS.find(([pattern]) => pattern.test(name))?.[1] ?? null
 }
 
+/** How many days a league's matches are scheduled for, or null for a one-day format. */
+export const multiDayLength = (league: string | null | undefined): number | null => {
+  const format = cricketFormat(league)
+  return format ? SCHEDULED_DAYS[format] ?? null : null
+}
+
 const twoInnings = (format: CricketFormat | null) => format === "test" || format === "first-class"
 const SCHEDULED_DAYS: Partial<Record<CricketFormat, number>> = { test: 5, "first-class": 4 }
 
 const plainName = (name: string) => name.replace(/\b(?:cricket|women|t20)\b/gi, "").replace(/\s+/g, " ").trim()
+
+// A side that plays one competition under another name: "Warwickshire won by 5 wickets" is the Birmingham Bears.
+const ALSO_KNOWN_AS: Record<string, string> = { "birmingham bears": "warwickshire" }
 
 const inOrder = (short: string, full: string) => {
   let at = 0
@@ -49,6 +58,7 @@ export function matchSide(said: string, sides: string[]): number | null {
   const words = wanted.split(/\s+/).filter((word) => word.length >= 4)
   const ranks: ((name: string) => boolean)[] = [
     (name) => name === wanted,
+    (name) => ALSO_KNOWN_AS[name] === wanted,
     (name) => ` ${name} `.includes(` ${wanted} `),
     (name) => /^[A-Z]{2,6}$/.test(short) && name.split(" ").map((word) => word[0]).join("") === wanted,
     (name) => /^[A-Z]{2,6}$/.test(short) && name.startsWith(wanted[0]) && inOrder(wanted, name.replace(/\s/g, "")),
@@ -109,9 +119,9 @@ export function readCricketText(text: string, sides: string[]): CricketReading {
     else if (rows.some((row) => /^(?:match )?tied\b/i.test(row))) reading.outcome = "tied"
     else if (rows.some((row) => /^no result\b/i.test(row) || /\babandoned\b/i.test(row))) reading.outcome = "no-result"
   }
-  const toss = text.match(/^\s*(.+?)\s+won (?:the )?toss(?:,| and)\s+(?:chose|elected) to (bat|field|bowl)/im) ?? text.match(/[;.]\s*([^;.]+?)\s+won (?:the )?toss,\s+(?:chose|elected) to (bat|field|bowl)/i)
+  const toss = text.match(/^\s*(.+?)\s+won (?:the )?toss(?:,| and)\s+(?:chose|elected|electing|opted) to (bat|field|bowl)/im) ?? text.match(/[;.]\s*([^;.]+?)\s+won (?:the )?toss,\s+(?:chose|elected) to (bat|field|bowl)/i)
   const tossSide = toss ? matchSide(toss[1], sides) : null
-  const player = text.match(/player of the match:\s*([^(\r\n.]+)/i)?.[1].trim()
+  const player = (text.match(/(?:player of the match|potm):\s*([^(\r\n.]+)/i) ?? text.match(/\b([A-Z][\w'-]+(?: [A-Z][\w'-]+)+) was named Player of the Match/))?.[1].trim()
   return {
     ...reading,
     ballsLeft: Number(text.match(/\((?:with\s+)?(\d+) balls? (?:remaining|left)\)/i)?.[1]) || null,
@@ -148,7 +158,21 @@ export function readInningsLines(text: string, sides: string[], runs: (number | 
     const wickets = match[5] ? 10 : parseWickets(match[3] ?? match[4])
     found[side] = { runs: total, wickets, overs: match[6] ?? null }
   }
+  fillFromFigures(found, text, runs)
   return found
+}
+
+const FIGURES = /\b(\d{1,3})(?:\/|\s+for\s+)(\d{1,2})\b(?:\s+in\s+(\d{1,3}(?:\.\d)?)\s+overs?)?/g
+
+/** "a score of 251/7" or "reached 118/5 in 7.4 overs" name no side, but only one side made those runs. */
+function fillFromFigures(found: (Innings | null)[], text: string, runs: (number | null)[]) {
+  for (const match of text.matchAll(FIGURES)) {
+    const total = Number(match[1])
+    const side = runs.indexOf(total)
+    const wickets = parseWickets(match[2])
+    if (side === -1 || runs.lastIndexOf(total) !== side || found[side] || wickets === null) continue
+    found[side] = { runs: total, wickets, overs: match[3] ?? null }
+  }
 }
 
 const SPELL = /^(\d{1,3})(?:\/(\d{1,2}))?\s*(d)?\s*(f\/o)?$/i
@@ -184,6 +208,8 @@ function stageOf(raw: RawEvent): CricketStage | null {
 
 const ROUND_LIMIT = 99
 
+const ofText = (text: string, pattern: RegExp) => text.match(pattern)?.[1].trim() || null
+
 function detailsOf(raw: RawEvent, format: CricketFormat | null, reading: CricketReading): CricketDetails {
   const text = `${raw.strDescriptionEN ?? ""}\n${raw.strResult ?? ""}`
   const round = Number(raw.intRound)
@@ -195,6 +221,9 @@ function detailsOf(raw: RawEvent, format: CricketFormat | null, reading: Cricket
     matchLabel: text.match(/\b(\d{1,2}(?:st|nd|rd|th)) (Test|ODI|T20I)\b/)?.slice(1, 3).join(" ") ?? null,
     round: Number.isInteger(round) && round > 0 && round <= ROUND_LIMIT ? round : null,
     season: raw.strSeason?.trim() || null,
+    group: raw.strGroup?.trim() || null,
+    phase: ofText(raw.strDescriptionEN ?? "", /^\s*(Phase \d+\b[^\r\n]*)/im),
+    umpires: ofText(raw.strDescriptionEN ?? "", /^\s*Umpires?:\s*([^\r\n]+)/im),
     dayNight: /\bnight match\b/i.test(raw.strDescriptionEN ?? ""),
     city: raw.strCity?.trim() || null,
     country: raw.strCountry?.trim() || null,
@@ -220,15 +249,58 @@ function resultFacts(reading: CricketReading): Partial<InningsScore> {
 
 const hidesResult = (status: EventStatus) => status === "scheduled" || status === "postponed" || status === "canceled"
 
+/** No side ends on nil, so a nil is a total nobody entered: four rained-off World Cup games, and a county side. */
+const parseTotal = (value: string | number | null | undefined) => parseRuns(value) || null
+
+const DAY_MS = 86_400_000
+
+
+type Figure = string | number | null | undefined
+
+interface Sides {
+  totals: (number | null)[]
+  wickets: Figure[]
+}
+
+const reversed = <T,>([home, away]: T[]): T[] => [away, home]
+
+/**
+ * The feed has filed totals and wickets under the wrong side: Sri Lanka 146, England 95 beside
+ * "England won by 51 runs". The stated margin settles it where it fits only one way. On a
+ * revised target the winner can have the lower total, so a DLS game is not turned round.
+ * A win by N wickets also states the winner's own wickets, which outrank a figure that disagrees.
+ */
+function settleSides({ totals, wickets }: Sides, sides: string[], reading: CricketReading): Sides {
+  const winner = reading.winner ? sides.indexOf(reading.winner) : -1
+  const margin = reading.margin
+  if (winner === -1 || !margin) return { totals, wickets }
+  const [won, lost] = [totals[winner], totals[1 - winner]]
+  const swapped = !reading.method && won !== null && lost !== null && (margin.unit === "runs" ? lost - won === margin.value : won < lost)
+  const settled = swapped ? { totals: reversed(totals), wickets: reversed(wickets) } : { totals, wickets }
+  if (margin.unit !== "wickets") return settled
+
+  const down = 10 - margin.value
+  const [own, other] = [settled.wickets[winner], settled.wickets[1 - winner]]
+  if (parseWickets(own) === down) return settled
+  const figures: Figure[] = []
+  figures[winner] = down
+  figures[1 - winner] = parseWickets(other) === down ? own : other
+  return { totals: settled.totals, wickets: figures }
+}
+
 export function cricketFields(raw: RawEvent, sides: string[], infer: (settled: boolean) => EventStatus): Pick<SportEvent, "status" | "score" | "details"> {
   const format = cricketFormat(raw.strLeague)
   const text = [raw.strResult, raw.strDescriptionEN].filter(Boolean).join("\n")
   const reading = readCricketText(text, sides)
-  const stated = infer(Boolean(reading.outcome))
+  const entered = [parseTotal(raw.intHomeScore), parseTotal(raw.intAwayScore)]
+  // Two totals and a passed date do not settle a game: a feed that stopped mid-chase looks the
+  // same, and would name the wrong winner. Such a game keeps its score as unconfirmed.
+  const inferred = infer(Boolean(reading.outcome))
+  // The postponed flag stays on a game played later, and FT is the newer word.
+  const stated = inferred === "postponed" && raw.strStatus?.trim().toUpperCase() === "FT" ? "finished" : inferred
   const status: EventStatus = reading.outcome === "no-result" && stated === "finished" ? "abandoned" : stated
   const details = detailsOf(raw, format, reading)
-
-  const totals = [parseRuns(raw.intHomeScore), parseRuns(raw.intAwayScore)]
+  const { totals, wickets } = twoInnings(format) ? { totals: entered, wickets: [] } : settleSides({ totals: entered, wickets: [raw.intHomeScoreExtra, raw.intAwayScoreExtra] }, sides, reading)
   const facts = { winner: reading.winner, margin: reading.margin, ...resultFacts(reading) }
   let score: EventScore = { kind: "none" }
   if (!hidesResult(status)) {
@@ -240,8 +312,8 @@ export function cricketFields(raw: RawEvent, sides: string[], infer: (settled: b
         const runs = totals[index] ?? line?.runs ?? null
         return runs === null ? null : { runs, wickets: parseWickets(extra) ?? line?.wickets ?? null, overs: line?.overs ?? null }
       }
-      const home = side(0, raw.intHomeScoreExtra)
-      const away = side(1, raw.intAwayScoreExtra)
+      const home = side(0, wickets[0])
+      const away = side(1, wickets[1])
       if (home || away || (reading.outcome && reading.outcome !== "no-result")) score = { kind: "innings", home, away, ...facts }
     }
   }

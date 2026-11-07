@@ -144,7 +144,7 @@ describe("GET /api/predictions/mine", () => {
 
   it("keeps a race, which has no sides, free of undefined values", async () => {
     const { db, docs } = fakeDb({ acceptEveryone: true })
-    const race = game({ sportId: "motorsport", participantType: "individual", participants: [], eventType: "session", eventName: "Grand Prix" } as Partial<SportEvent>)
+    const race = game({ sportId: "motorsport", participantType: "individual", participants: [], eventType: "session", eventName: "Grand Prix", details: { kind: "motorsport", session: "race" } } as unknown as Partial<SportEvent>)
     const entrants = ["Ana", "Bo", "Cy"]
     await submitPrediction(db, { uid: "plus", displayName: "P", event: race, podium: entrants, entrants }, now)
     expect(docs.get("predictions/tsdb-7_plus")?.game).toEqual({ title: "Grand Prix", home: null, away: null })

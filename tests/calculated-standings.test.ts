@@ -111,7 +111,7 @@ describe("calculated tables by sport", () => {
 
   it("rugby: won, drawn, lost, with the draw column even when nobody drew", () => {
     const table = calculateTable(roundRobin(LADDER, higherWins(10)), "rugby", LEAGUE, "Harbor League", now)
-    expect(row(table, "Alpha")).toMatchObject({ won: 3, drawn: 0, lost: 0, scoredFor: 90, scoredAgainst: 30, difference: null })
+    expect(row(table, "Alpha")).toMatchObject({ won: 3, drawn: 0, lost: 0, scoredFor: 90, scoredAgainst: 30, difference: 60 })
     expect(row(table, "Alpha")?.winPercent).toBeUndefined()
   })
 

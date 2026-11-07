@@ -125,8 +125,12 @@ function OverviewLink({ event, t, href, className }: { event: SportEvent; t: Dic
   )
 }
 
-const startText = (event: SportEvent, t: Dictionary, mode: "time" | "datetime") =>
-  event.scheduledStartUTC && !event.dateOnly ? <LocalTime iso={event.scheduledStartUTC} mode={mode} /> : <span>{t.match.tbd}</span>
+// A game with a date and no time is only "to be confirmed" while it is still to come.
+const startText = (event: SportEvent, t: Dictionary, mode: "time" | "datetime") => {
+  if (!event.scheduledStartUTC) return <span>{t.match.tbd}</span>
+  if (!event.dateOnly) return <LocalTime iso={event.scheduledStartUTC} mode={mode} />
+  return event.status === "scheduled" ? <span>{t.match.tbd}</span> : <LocalTime iso={event.scheduledStartUTC} mode="date" />
+}
 
 /**
  * `row` is the dense form used inside a competition group: time on the left, the sides in

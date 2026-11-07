@@ -1,6 +1,8 @@
 // Curated rule summaries for the assistant. Short, neutral and general: competitions
 // can vary these rules, which every answer says. Owner review is still required.
 
+import type { SportId } from "@/lib/sports/types"
+
 export const REFERENCE_REVIEWED_UTC = "2026-11-07T00:00:00.000Z"
 
 export interface ReferenceSource {
@@ -21,11 +23,18 @@ const FIVB: ReferenceSource = { label: "FIVB Official Volleyball Rules", url: "h
 const ABC: ReferenceSource = { label: "Unified Rules of Mixed Martial Arts", url: "https://www.abcboxing.com/" }
 const FIA: ReferenceSource = { label: "FIA Formula 1 Regulations", url: "https://www.fia.com/regulation/category/110" }
 
+/** Each rulebook covers one sport, which is how a question naming another sport is turned away. */
+const SOURCE_SPORTS = new Map<ReferenceSource, SportId>([
+  [IFAB, "football"], [FIBA, "basketball"], [MCC, "cricket"], [ICC, "cricket"], [NFL, "american-football"], [MLB, "baseball"],
+  [NHL, "ice-hockey"], [ITF, "tennis"], [WORLD_RUGBY, "rugby"], [FIVB, "volleyball"], [ABC, "combat-sports"], [FIA, "motorsport"],
+])
+
 export interface ReferenceEntry {
   id: string
   /** Accent-free lowercase phrases, English and French. */
   terms: string[]
   source: ReferenceSource
+  sport: SportId
   en: string
   fr: string
 }
@@ -51,7 +60,8 @@ const sport = (words: string[], [english, french]: string[][]) => inSport(words,
 
 // A question gets the first entry with a matching term, so an entry whose words sit inside
 // another's comes first: "penalty box" before "penalty", "safety car" before "a safety".
-const ENTRIES: ReferenceEntry[] = [
+// That order only settles a question naming no sport: one that names a sport keeps to its entries.
+const ENTRIES: Omit<ReferenceEntry, "sport">[] = [
   {
     id: "hockey-offside",
     terms: sport(["offside", "hors-jeu", "hors jeu"], HOCKEY),
@@ -201,7 +211,7 @@ const ENTRIES: ReferenceEntry[] = [
   },
   {
     id: "extra-time",
-    terms: ["extra time", "prolongation", "prolongations", "penalty shootout", "tirs au but", "tab"],
+    terms: ["extra time", "prolongation", "prolongations", "penalty shootout", "tirs au but", "tab", ...inSport(["overtime", "shootout"], ["football", "soccer"], [])],
     source: IFAB,
     en: "In football, a knockout match that is level after regular time may go to two extra periods of up to 15 minutes each, then kicks from the penalty mark if it is still level. The competition's rules decide which of these apply.",
     fr: "Au football, un match à élimination directe à égalité à la fin du temps réglementaire peut se prolonger par deux périodes d'au plus 15 minutes, puis par des tirs au but si l'égalité persiste. Le règlement de la compétition détermine ce qui s'applique.",
@@ -491,4 +501,4 @@ const ENTRIES: ReferenceEntry[] = [
 // "c'est quoi l'icing" reaches the lookup as one word, since an apostrophe does not split it.
 const elided = (term: string) => (/^[aeiouy]/.test(term) ? [term, `l'${term}`] : [term])
 
-export const REFERENCE: ReferenceEntry[] = ENTRIES.map((entry) => ({ ...entry, terms: entry.terms.flatMap(elided) }))
+export const REFERENCE: ReferenceEntry[] = ENTRIES.map((entry) => ({ ...entry, sport: SOURCE_SPORTS.get(entry.source) as SportId, terms: entry.terms.flatMap(elided) }))

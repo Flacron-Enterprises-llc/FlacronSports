@@ -115,7 +115,7 @@ export default async function TeamPage({ params, searchParams }: Props) {
                             <th scope="col" className="py-1.5 pr-2 font-medium">{t.standings.rank}</th>
                             <th scope="col" className="py-1.5 pr-2 font-medium">{t.standings.team}</th>
                             <th scope="col" className="py-1.5 pl-2 text-right font-medium">{t.standings.played}</th>
-                            <th scope="col" className="py-1.5 pl-2 text-right font-medium">{standings?.calculated ? t.standings.record : t.standings.points}</th>
+                            <th scope="col" className="py-1.5 pl-2 text-right font-medium">{standings?.calculated ? (rows.some((row) => row.overtimeLosses !== undefined) ? t.standings.recordHockey : t.standings.record) : t.standings.points}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -126,7 +126,7 @@ export default async function TeamPage({ params, searchParams }: Props) {
                                 <td className="tabular py-2 pr-2 text-ink-2">{row.rank ?? "–"}</td>
                                 <th scope="row" className={cn("min-w-0 py-2 pr-2 text-left text-ink", own ? "font-semibold" : "font-medium")}>{row.team}</th>
                                 <td className="tabular py-2 pl-2 text-right text-ink-2">{row.played ?? "–"}</td>
-                                <td className="tabular py-2 pl-2 text-right font-semibold text-ink">{standings?.calculated ? `${row.won ?? "–"}-${row.lost ?? "–"}` : row.points ?? "–"}</td>
+                                <td className="tabular py-2 pl-2 text-right font-semibold text-ink">{standings?.calculated ? [row.won ?? "–", ...(row.drawn ? [row.drawn] : []), row.lost ?? "–", ...(row.overtimeLosses !== undefined ? [row.overtimeLosses] : [])].join("-") : row.points ?? "–"}</td>
                               </tr>
                             )
                           })}

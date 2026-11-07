@@ -3,6 +3,7 @@
 
 import type { DocDb } from "@/lib/doc-db"
 import { BADGES } from "./badge-names"
+import { PERFECT_PODIUM, POINTS } from "./pick-rules"
 
 export { BADGES }
 export type Badge = (typeof BADGES)[number]
@@ -18,15 +19,17 @@ interface Activity {
   clubs: number
   predictions: number
   exact: number
+  /** Correct winners and perfect podiums, so sports without a score pick can earn Sharp too. */
+  correct: number
 }
 
-export function earnedBadges({ favorites, clubs, predictions, exact }: Activity): Badge[] {
+export function earnedBadges({ favorites, clubs, predictions, exact, correct }: Activity): Badge[] {
   return BADGES.filter((badge) => {
     if (badge === "supporter") return favorites > 0
     if (badge === "club_member") return clubs > 0
     if (badge === "predictor") return predictions >= PREDICTOR_AT
     if (badge === "veteran") return predictions >= VETERAN_AT
-    return exact >= SHARP_AT
+    return exact + correct >= SHARP_AT
   })
 }
 
@@ -34,18 +37,23 @@ type BadgeDb = Pick<DocDb, "get" | "query" | "count" | "set">
 
 /** Recomputed from the source records, so a repeat or a retry can never inflate anything. */
 export async function refreshBadges(db: BadgeDb, uid: string, now: Date): Promise<Badge[]> {
-  const [prefs, points, memberships, predictions, stored] = await Promise.all([
+  // No other pick lands on these two values.
+  const correctAt = (value: number) => db.count("predictions", { where: [["uid", uid], ["points", value]] })
+  const [prefs, points, memberships, predictions, stored, winners, podiums] = await Promise.all([
     db.get<{ favorites?: string[] }>(`user_preferences/${uid}`),
     db.get<{ exact?: number }>(`prediction_points/${uid}`),
     db.query<{ kind?: string }>("room_members", { where: [["uid", uid], ["status", "active"]] }),
     db.count("predictions", { where: [["uid", uid]] }),
     db.get<{ badges: Badge[] }>(badgePath(uid)),
+    correctAt(POINTS.winner),
+    correctAt(PERFECT_PODIUM),
   ])
   const badges = earnedBadges({
     favorites: prefs?.favorites?.length ?? 0,
     clubs: memberships.filter((member) => member.kind === "club").length,
     predictions,
     exact: points?.exact ?? 0,
+    correct: winners + podiums,
   })
   if (stored?.badges.join() !== badges.join()) await db.set(badgePath(uid), { uid, badges, updatedAtUTC: now.toISOString() })
   return badges

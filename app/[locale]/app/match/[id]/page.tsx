@@ -9,6 +9,7 @@ import { MemberDataPending } from "@/components/dashboard/member-data-pending"
 import { AppPage, Notice, Panel } from "@/components/site/states"
 import { EventResult } from "@/components/sports/event-result"
 import { EventActions } from "@/components/sports/event-actions"
+import { FootballSummary } from "@/components/sports/football-summary"
 import { ExportButton } from "@/components/sports/export-button"
 import { ShareCardButton } from "@/components/sports/share-card-button"
 import { EntrantsTab, LineupsTab, LiveUpdatesTab, MatchDetailProvider, StatisticsTab } from "@/components/sports/match-detail"
@@ -31,6 +32,11 @@ import { sportSteps } from "@/lib/sports/sport-terms"
 import type { SportEvent, SportId } from "@/lib/sports/types"
 
 export const dynamic = "force-dynamic"
+
+// The field inventory's sports with no timeline or team statistics from the source. Their own
+// sections still appear when an event has them, such as a race classification.
+const NO_TIMELINE = new Set<SportId>(["basketball", "american-football", "baseball", "rugby", "volleyball", "cricket", "tennis", "combat-sports", "motorsport"])
+const NO_STATISTICS = new Set<SportId>(["ice-hockey", "american-football", "baseball", "rugby", "volleyball", "cricket", "tennis", "combat-sports", "motorsport"])
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 
@@ -112,6 +118,7 @@ export default async function MatchPage({ params }: Props) {
       <div className="min-w-0 space-y-4">
         {hasResultPanel && <Panel><EventResult event={event} t={t} /></Panel>}
         {lineTable && <Panel title={lineTable.caption} icon={<Table2 aria-hidden />}><PeriodScore event={event} t={t} /></Panel>}
+        {locale === "en" && details?.kind === "football" && details.summary && <FootballSummary text={details.summary} t={t} />}
         {teamDuel && <Suspense fallback={<MatchFormSkeleton />}><MatchForm event={event} t={t} /></Suspense>}
         <ViewingPanel />
         {!duel && event.score.kind === "none" && <p className="text-sm text-ink-2">{t.event.noParticipants}</p>}
@@ -147,12 +154,13 @@ export default async function MatchPage({ params }: Props) {
         <MatchDetailProvider matchId={event.id} live={event.status === "live"}>
           <MatchTabs
             overview={overview}
-            updates={<LiveUpdatesTab sportId={event.sportId} extra={sportSteps(event, t).length > 0 ? <SportUpdates event={event} t={t} /> : undefined} />}
-            statistics={<StatisticsTab {...sideNames} event={event} extra={hasSportStatistics(event) ? <SportStatistics event={event} t={t} /> : undefined} />}
+            updates={!NO_TIMELINE.has(event.sportId) || sportSteps(event, t).length > 0 ? <LiveUpdatesTab sportId={event.sportId} extra={sportSteps(event, t).length > 0 ? <SportUpdates event={event} t={t} /> : undefined} /> : undefined}
+            statistics={!NO_STATISTICS.has(event.sportId) || hasSportStatistics(event) ? <StatisticsTab {...sideNames} event={event} extra={hasSportStatistics(event) ? <SportStatistics event={event} t={t} /> : undefined} /> : undefined}
             participants={teamDuel ? <LineupsTab {...sideNames} sportId={event.sportId} /> : roster ?? <EntrantsTab event={{ participants: event.participants, score: event.score }} />}
             chat={community ? (
               <MatchCommunity
                 matchId={event.id}
+                sportId={event.sportId}
                 predictable={Boolean(pickKind) && predictionOpen(event, new Date())}
                 kind={pickKind}
                 combat={event.sportId === "combat-sports"}

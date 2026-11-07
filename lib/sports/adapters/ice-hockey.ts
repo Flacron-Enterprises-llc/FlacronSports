@@ -2,7 +2,8 @@
 // games), so a game's periods can only come from its timeline. Only NHL games have one:
 // goals and penalties, each with a period code and the minute within that period.
 
-import type { EventConclusion, EventScore, ScoreBreakdown, ScoreSegment } from "../types"
+import type { RawEvent } from "../thesportsdb"
+import type { EventConclusion, EventScore, ScoreBreakdown, ScoreSegment, SportEvent } from "../types"
 import { numbered, type Phase } from "./shared"
 
 export interface HockeyTimelineRow {
@@ -47,14 +48,25 @@ export function hockeyPeriods(rows: HockeyTimelineRow[] | null | undefined, scor
   return reached ? { segments } : null
 }
 
-export type GoalSituation = "power-play" | "shorthanded"
-
-export function goalSituation(detail: string | null | undefined): GoalSituation | null {
-  const text = (detail ?? "").trim().toLowerCase()
-  return text === "power-play" ? "power-play" : text === "shorthanded" ? "shorthanded" : null
+/**
+ * The provider fills a game's rows late and sometimes only in part: of 55 NHL games checked,
+ * 42 had none and 6 fell short of the final score. A shootout's winning goal is never a row.
+ */
+export function hockeyTimelineShort(rows: HockeyTimelineRow[] | null | undefined, score: EventScore, conclusion?: EventConclusion): boolean {
+  if (score.kind !== "team" || !rows?.length) return false
+  const goals = rows.filter((row) => (row.strTimeline ?? "").trim().toLowerCase() === "goal").length
+  return goals < score.home + score.away - (conclusion === "shootout" ? 1 : 0)
 }
 
-const INFRACTIONS = new Set(["cross-checking", "hooking", "holding", "tripping", "high sticking", "fighting", "interference", "slashing", "roughing", "boarding", "elbowing", "charging", "delay of game", "too many men", "unsportsmanlike conduct"])
+export type GoalSituation = "power-play" | "shorthanded" | "empty-net"
+
+const SITUATIONS: Record<string, GoalSituation> = { "power-play": "power-play", shorthanded: "shorthanded", "empty net": "empty-net" }
+
+export function goalSituation(detail: string | null | undefined): GoalSituation | null {
+  return SITUATIONS[(detail ?? "").trim().toLowerCase()] ?? null
+}
+
+const INFRACTIONS = new Set(["cross-checking", "hooking", "holding", "tripping", "high sticking", "fighting", "interference", "slashing", "roughing", "boarding", "elbowing", "charging", "delay of game", "too many men", "unsportsmanlike conduct", "holding the stick", "instigator penalty", "diving"])
 
 /** The infraction's dictionary key, or null for wording the French dictionary has no term for. */
 export const infractionKey = (detail: string | null | undefined): string | null => {
@@ -64,7 +76,49 @@ export const infractionKey = (detail: string | null | undefined): string | null 
 
 export function hockeyPhase(code: string): Phase | null {
   if (code === "BT") return { key: "break" }
-  if (code === "OT") return { key: "overtime" }
-  if (code === "PT") return { key: "shootout" }
+  if (code === "OT" || /^P[4-9]$/.test(code)) return { key: "overtime" }
+  if (code === "PT" || code === "P" || code === "SO") return { key: "shootout" }
   return numbered(code, /^P([1-3])$/, "period")
 }
+
+const SCHEDULE_HORIZON_MS = 30 * 86_400_000
+
+/**
+ * The source marks the end of a season "CANC" before its times are set: every NHL game from
+ * 2 April 2027 and every AHL game from 5 April 2027 read so in November 2026, while the NHL
+ * schedule lists them. A cancellation that far ahead is not one.
+ */
+export function hockeyCancelUnconfirmed(startUTC: string | null, now: Date): boolean {
+  return startUTC !== null && Date.parse(startUTC) - now.getTime() > SCHEDULE_HORIZON_MS
+}
+
+/** Only NHL games have goal and penalty rows, so only they are worth a lookup for a card. */
+const TIMELINE_LEAGUES = new Set(["4380"])
+
+export function hockeyCardTimeline(event: Pick<SportEvent, "sportId" | "status" | "competition" | "score">): boolean {
+  return event.sportId === "ice-hockey" && event.status === "finished" && event.score.kind === "team" && TIMELINE_LEAGUES.has(event.competition.id ?? "")
+}
+
+const spaced = (text: string | null | undefined) => (text ?? "").replace(/\s+/g, " ").trim()
+
+/**
+ * Some rows title a game "away vs home", and then the scores follow the title, not the team
+ * fields: Detroit beat Buffalo 3-2 in overtime on 24 September 2026 (2591468) and Tampa Bay
+ * beat Florida 3-2 on 30 September 2025 (2286691), yet both rows give the home field's side 3.
+ * As in basketball the team fields stay and the scores turn, so the winner is right.
+ */
+export function hockeyRow(raw: RawEvent): RawEvent {
+  const [home, away] = [spaced(raw.strHomeTeam), spaced(raw.strAwayTeam)]
+  const reversed = Boolean(home && away) && home !== away && spaced(raw.strEvent) === `${away} vs ${home}`
+  return reversed && !raw.fromLive ? { ...raw, intHomeScore: raw.intAwayScore, intAwayScore: raw.intHomeScore } : raw
+}
+
+const NO_CLOCK = new Set(["BT", "PT", "P", "SO"])
+
+/** Nothing runs in an intermission or a shootout, whatever minute the feed still sends. */
+export function hockeyClock(status: string | null | undefined, progress: string | null | undefined): string | null {
+  return progress && !NO_CLOCK.has((status ?? "").trim().toUpperCase()) ? progress : null
+}
+
+/** Won, lost, then lost after regulation, the order every hockey table reads in. */
+export const hockeyRecord = (won: number, lost: number, overtimeLosses: number) => `${won}-${lost}-${overtimeLosses}`

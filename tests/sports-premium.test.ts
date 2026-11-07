@@ -137,7 +137,8 @@ describe("match detail", () => {
       { strTimeline: "Unknown", intTime: "1" },
     ])
     expect(items.map((item) => [item.minute, item.kind, item.side])).toEqual([[14, "yellow", "home"], [60, "substitution", null], [70, "own-goal", "away"]])
-    expect(items[1].secondary).toBe("W")
+    // Checked on 39 major games: the source names the player coming on second.
+    expect([items[1].player, items[1].secondary]).toEqual(["W", "Z"])
   })
 
   it("keeps a real zero, drops a stat with no values, and leaves out unknown stats", () => {

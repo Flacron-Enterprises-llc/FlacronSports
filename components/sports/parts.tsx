@@ -10,14 +10,14 @@ import { useLocale } from "@/lib/use-locale"
 import { cn } from "@/lib/utils"
 
 /** UTC is stored; the visitor's own time zone is only applied in the browser. */
-export function LocalTime({ iso, mode = "time" }: { iso: string; mode?: "time" | "datetime" }) {
+export function LocalTime({ iso, mode = "time" }: { iso: string; mode?: "time" | "datetime" | "date" }) {
   const { locale } = useLocale()
   const { prefs, signedIn } = usePreferences()
   const [text, setText] = useState<string | null>(null)
 
   useEffect(() => {
     const options: Intl.DateTimeFormatOptions =
-      mode === "time" ? { hour: "2-digit", minute: "2-digit" } : { dateStyle: "medium", timeStyle: "short" }
+      mode === "time" ? { hour: "2-digit", minute: "2-digit" } : mode === "date" ? { dateStyle: "medium" } : { dateStyle: "medium", timeStyle: "short" }
     if (signedIn && prefs.timeZone !== "UTC") options.timeZone = prefs.timeZone
     setText(new Intl.DateTimeFormat(locale, options).format(new Date(iso)))
   }, [iso, locale, mode, prefs.timeZone, signedIn])

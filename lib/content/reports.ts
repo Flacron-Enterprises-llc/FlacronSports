@@ -107,7 +107,8 @@ export function eventDate(iso: string, locale: Locale): string {
 /** Only a complete result can be reported: one side's score is not a result. */
 function isComplete(score: EventScore): boolean {
   if (score.kind === "team") return [score.home, score.away].every((value) => Number.isInteger(value) && value >= 0)
-  if (score.kind === "innings") return Boolean(score.home && score.away && score.winner)
+  // A drawn or tied match has no winner, and some results name one with no totals.
+  if (score.kind === "innings") return Boolean(score.winner) || score.outcome === "drawn" || score.outcome === "tied"
   if (score.kind === "sets") return Boolean(score.winner || score.retired)
   return score.kind === "combat" || score.kind === "classification"
 }
@@ -139,7 +140,8 @@ export function resultSentence(event: SportEvent, locale: Locale): string {
   const copy = TEMPLATES[locale]
   const [home = "", away = ""] = event.participants.map((participant) => participant.name)
   if (score.kind === "team") {
-    const volleyball = event.sportId === "volleyball"
+    // A golden set's score is points, so only a full match reads as sets.
+    const volleyball = event.sportId === "volleyball" && !(event.details?.kind === "volleyball" && event.details.goldenSet)
     const line = fill(volleyball ? copy.finalSets : copy.finalScore, { home, away, homeScore: String(score.home), awayScore: String(score.away) })
     const ending = event.conclusion ? ` (${copy.endings[event.conclusion]})` : ""
     const sets = volleyball ? setDetail(event).map((segment) => `${segment.home}-${segment.away}`).join(", ") : ""

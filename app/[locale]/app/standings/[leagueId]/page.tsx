@@ -31,7 +31,7 @@ export default async function StandingsPage({ params }: Props) {
   const { calculated } = table
   const [scoredFor, scoredAgainst] = calculated ? copy.scored[calculated.unit] : [copy.scoredFor, copy.scoredAgainst]
   const columns: [keyof StandingRow, string][] = [
-    ["played", copy.played], ["won", copy.won], ["drawn", copy.drawn], ["overtimeLosses", copy.overtimeLosses], ["lost", copy.lost], ["winPercent", copy.winPercent],
+    ["played", copy.played], ["won", copy.won], ["drawn", copy.drawn], ["lost", copy.lost], ["overtimeLosses", copy.overtimeLosses], ["winPercent", copy.winPercent],
     ["scoredFor", scoredFor], ["scoredAgainst", scoredAgainst], ["difference", copy.difference], ["points", copy.points],
   ]
   // A column the feed never fills is dropped. A single gap shows a dash, never zero.

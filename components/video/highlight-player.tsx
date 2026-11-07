@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ExternalLink, LoaderCircle, Play } from "lucide-react"
 import { usePreferences } from "@/components/account/prefs-provider"
 import { authFetch } from "@/lib/auth-fetch"
@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
  * Loads nothing from the video provider until the viewer presses play.
  * Clip thumbnails are frames of the video and can show the score, so spoiler mode hides them.
  */
-export function HighlightPlayer({ matchId, clipId, title, thumbnailUrl, channel, flush }: { matchId?: string; clipId?: string; title: string; thumbnailUrl?: string | null; channel?: string; flush?: boolean }) {
+export function HighlightPlayer({ matchId, clipId, title, thumbnailUrl, channel, flush, live, autoStart }: { matchId?: string; clipId?: string; title: string; thumbnailUrl?: string | null; channel?: string; flush?: boolean; live?: boolean; autoStart?: boolean }) {
   const { t } = useLocale()
   const { prefs } = usePreferences()
   const [state, setState] = useState<"idle" | "checking" | "gone">("idle")
@@ -26,6 +26,11 @@ export function HighlightPlayer({ matchId, clipId, title, thumbnailUrl, channel,
     setVideo(body.video)
     setState("idle")
   }
+
+  // Set when the viewer has already chosen this video from a list beside the player.
+  useEffect(() => {
+    if (autoStart) void play()
+  }, [])
 
   if (video) {
     return (
@@ -51,7 +56,7 @@ export function HighlightPlayer({ matchId, clipId, title, thumbnailUrl, channel,
 
   return (
     <div>
-      <button type="button" onClick={play} disabled={state === "checking"} aria-label={`${t.watch.playHighlights}: ${title}`} className={cn("fs-thumb", !flush && "rounded-lg")}>
+      <button type="button" onClick={play} disabled={state === "checking"} aria-label={`${live ? t.watch.playLiveStream : t.watch.playHighlights}: ${title}`} className={cn("fs-thumb", !flush && "rounded-lg")}>
         {thumbnailUrl && !prefs.lowData && !(clipId && prefs.spoilerMode)
           ? <img src={thumbnailUrl} alt="" loading="lazy" decoding="async" className="absolute inset-0 size-full object-cover" />
           : <span aria-hidden className="fs-band absolute inset-0"><span className="fs-grid absolute inset-0 opacity-70" /></span>}

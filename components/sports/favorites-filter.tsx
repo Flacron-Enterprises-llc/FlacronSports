@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react"
+import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { usePreferences } from "@/components/account/prefs-provider"
 import { Switch } from "@/components/dashboard/controls"
@@ -9,7 +10,7 @@ import { useLocale } from "@/lib/use-locale"
 
 /** The choice is saved with the account, and the address carries who to show so paging and links keep it. */
 export function FavoritesFilter() {
-  const { t } = useLocale()
+  const { t, href } = useLocale()
   const { prefs, ready, update } = usePreferences()
   const router = useRouter()
   const pathname = usePathname()
@@ -50,7 +51,7 @@ export function FavoritesFilter() {
     <div className="flex min-h-10 min-w-0 items-center gap-2">
       <Switch checked={applied} onChange={change} labelledBy={id} disabled={!followsSomeone && !applied} />
       <span id={id} className="text-[13px] font-medium text-ink-2">{t.scores.favoritesOnly}</span>
-      {!followsSomeone && ready !== false && <span className="text-xs text-ink-3">{t.scores.favoritesNone}</span>}
+      {!followsSomeone && ready !== false && <Link href={href("/app/my-teams")} data-testid="favorites-setup" className="text-xs font-semibold text-hot-text underline-offset-2 hover:underline">{t.scores.favoritesNone}</Link>}
     </div>
   )
 }

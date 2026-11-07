@@ -326,7 +326,7 @@ describe("comparison export", () => {
   })
 
   it("holds Plus to the basic rows in the file too", () => {
-    const record = { played: 2, wins: 1, draws: 0, losses: 1, scored: 3, conceded: 2 }
+    const record = { played: 2, wins: 1, draws: 0, losses: 1, ties: 0, noResults: 0, counted: 2, scored: 3, conceded: 2 }
     const team = { name: "A", record, form: ["W", "L"] as ("W" | "L")[], next: null }
     const basic: Comparison = { tier: "basic", sportId: "football", teams: [team, { ...team, name: "B" }], headToHead: [], fetchedAt: "" }
     const labels = teamSheet(basic, en).rows.map(([label]) => label)

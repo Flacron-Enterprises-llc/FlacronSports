@@ -37,7 +37,8 @@ const event = (overrides: Partial<SportEvent> = {}): SportEvent => ({
   score: { kind: "none" }, venue: null, provider: { name: "x", eventId: "7" }, sourceUpdatedAt: null, coverageFlags: { liveScores: false, statistics: false, video: false },
   ...overrides,
 })
-const race = (overrides: Partial<SportEvent> = {}) => event({ sportId: "motorsport", eventType: "session", participantType: "entrant", participants: [], eventName: "Harbor Grand Prix", ...overrides })
+const raceDetails = (session: "race" | "sprint" | "qualifying" = "race"): SportEvent["details"] => ({ kind: "motorsport", session, sessionNumber: null, weekend: null, className: null, round: null, circuit: null, city: null, country: null, season: null, scheduledLaps: null })
+const race = (overrides: Partial<SportEvent> = {}) => event({ sportId: "motorsport", eventType: "session", participantType: "entrant", participants: [], eventName: "Harbor Grand Prix", details: raceDetails(), ...overrides })
 const entries = (...names: string[]) => names.map((name, index) => ({ position: index + 1, name, team: null, time: null }))
 const accepted = () => fakeDb({ acceptEveryone: true })
 type Db = ReturnType<typeof fakeDb>["db"]
@@ -103,7 +104,7 @@ describe("winner and podium predictions", () => {
   it("treats a retirement as a win for the other player", async () => {
     const { db, docs } = accepted()
     await pick(db, event(), { winner: "Zoë Klein" })
-    await settleMatch(db, event({ status: "finished", score: { kind: "sets", lines: [], winner: null, retired: "Ana Ruiz" } }))
+    await settleMatch(db, event({ status: "finished", score: { kind: "sets", lines: [{ name: "Ana Ruiz", games: [] }, { name: "Zoë Klein", games: [] }], winner: null, retired: "Ana Ruiz" } }))
     expect(docs.get("prediction_points/u1")).toMatchObject({ points: POINTS.winner })
   })
   it("settles a race from the classification", async () => {
@@ -112,11 +113,11 @@ describe("winner and podium predictions", () => {
     await settleMatch(db, race({ status: "finished", score: { kind: "classification", entries: entries("A", "B", "C", "D") } }))
     expect(docs.get("prediction_points/u1")).toMatchObject({ points: POINTS.podiumExact + 2 * POINTS.podiumPlaced, exact: 0 })
   })
-  it("voids a tied cricket match, and does not count an unconfirmed winner as one", async () => {
+  it("voids a cricket match stated as tied", async () => {
     const { db, docs } = accepted()
     const cricket = event({ sportId: "cricket", participantType: "team" })
     await pick(db, cricket, { winner: "Ana Ruiz" })
-    await settleMatch(db, { ...cricket, status: "finished", score: { kind: "innings", home: { runs: 200, wickets: 9, overs: null }, away: { runs: 200, wickets: 7, overs: null }, winner: null, margin: null } })
+    await settleMatch(db, { ...cricket, status: "finished", score: { kind: "innings", home: { runs: 200, wickets: 9, overs: null }, away: { runs: 200, wickets: 7, overs: null }, winner: null, margin: null, outcome: "tied" } })
     expect(docs.get("predictions/tsdb-7_u1")).toMatchObject({ voided: true, points: 0 })
   })
   it("waits for a result, then voids at the published limits", async () => {
@@ -242,8 +243,9 @@ describe("fan clubs", () => {
 
 describe("supporter badges", () => {
   it("comes only from activity", () => {
-    expect(earnedBadges({ favorites: 0, clubs: 0, predictions: 9, exact: 4 })).toEqual([])
-    expect(earnedBadges({ favorites: 1, clubs: 1, predictions: 50, exact: 5 })).toEqual(["supporter", "club_member", "predictor", "veteran", "sharp"])
+    expect(earnedBadges({ favorites: 0, clubs: 0, predictions: 9, exact: 4, correct: 0 })).toEqual([])
+    expect(earnedBadges({ favorites: 1, clubs: 1, predictions: 50, exact: 5, correct: 0 })).toEqual(["supporter", "club_member", "predictor", "veteran", "sharp"])
+    expect(earnedBadges({ favorites: 0, clubs: 0, predictions: 0, exact: 2, correct: 3 })).toEqual(["sharp"])
   })
   it("reads the real records, drops a badge when the activity ends, and shows beside names", async () => {
     const { db, put } = accepted()

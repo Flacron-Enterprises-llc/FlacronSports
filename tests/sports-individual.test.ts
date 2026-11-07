@@ -106,7 +106,7 @@ describe("no fake teams", () => {
     expect(normalize(boxing, sports.combat)).toMatchObject({ eventType: "bout", eventName: null })
     expect(normalize(boxing, sports.combat).participants.map((item) => item.name)).toEqual(["Ivan Kovac", "Teo Álvarez"])
     expect(normalize(card, sports.combat)).toMatchObject({ eventType: "fight-card", eventName: "UFC Fight Night 292" })
-    expect(normalize(card, sports.combat).participants.map((item) => item.name)).toEqual(["Vale", "Rook"])
+    expect(normalize(card, sports.combat).participants.map((item) => item.name)).toEqual(["Sam Vale", "Tom Rook"])
   })
   it("does not split a card title that gives no safe boundary", () => {
     expect(normalize(unnamedCard, sports.combat)).toMatchObject({ participants: [], eventName: "ONE Fight Night 49" })
@@ -146,7 +146,8 @@ describe("scores come only from the source", () => {
   })
   it("leaves missing wickets missing, never zero", () => {
     const score = normalize({ ...cricket, intHomeScoreExtra: null, intAwayScoreExtra: "", strResult: "North won by 9 wickets (with 62 balls remaining)" }, sports.cricket).score
-    expect(score).toMatchObject({ home: { runs: 269, wickets: null }, away: { runs: 268, wickets: null } })
+    // A side that won by 9 wickets lost one: the margin states it, so it is not a guess.
+    expect(score).toMatchObject({ home: { runs: 269, wickets: 1 }, away: { runs: 268, wickets: null } })
   })
   it("keeps one side missing when the other never batted", () => {
     const score = normalize({ ...cricket, strStatus: "ABD", intAwayScore: null, intAwayScoreExtra: null, strResult: "Abandoned due to rain." }, sports.cricket).score
@@ -162,7 +163,7 @@ describe("scores come only from the source", () => {
     expect(normalize(boxing, sports.combat).score).toEqual({ kind: "combat", winner: "Teo Álvarez", method: "split-decision", round: null, time: null })
   })
   it("reads the headline bout from a card table", () => {
-    expect(normalize(card, sports.combat).score).toEqual({ kind: "combat", winner: "Rook", method: "tko", round: 3, time: "1:28" })
+    expect(normalize(card, sports.combat).score).toEqual({ kind: "combat", winner: "Tom Rook", method: "tko", round: 3, time: "1:28" })
   })
   it("believes neither source when the prose and the table disagree", () => {
     const prose = "Sam Vale dethroned Tom Rook by unanimous decision to become champion.\r\n\r\nMain card\r\n"
@@ -297,7 +298,10 @@ describe("reports and alerts stay grounded", () => {
   })
   it("withholds a cricket result with one side missing", () => {
     const partial = normalize({ ...cricket, intAwayScore: null, intAwayScoreExtra: null, strResult: "North won by 2 wickets" }, sports.cricket)
-    expect(buildReport(partial, "en", stamp, NOW).withheldReason).toBe("missing_score")
+    // The stated result is reported, and the side with no total is never given one.
+    const report = buildReport(partial, "en", stamp, NOW)
+    expect(report.withheldReason).toBeNull()
+    expect(JSON.stringify(report)).not.toMatch(/South[^"]{0,20}0|undefined|NaN/)
   })
   it("writes a grounded report from a structured result, in both languages", () => {
     for (const raw of [[tennis, sports.tennis], [race, sports.motorsport], [boxing, sports.combat], [cricket, sports.cricket]] as const) {

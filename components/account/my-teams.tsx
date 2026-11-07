@@ -10,9 +10,10 @@ import { Crest, LocalTime } from "@/components/sports/parts"
 import { PLANS } from "@/lib/billing/plans"
 import { favoriteTotal } from "@/lib/me/preferences-defaults"
 import { followPriority, isFollowed, moveItem } from "@/lib/sports/following"
+import { canHaveTable } from "@/lib/sports/calculated"
 import { playerPath } from "@/lib/sports/player"
 import { byStatusThenTime } from "@/lib/sports/priority"
-import type { EventFeed } from "@/lib/sports/types"
+import type { EventFeed, SportId } from "@/lib/sports/types"
 import { useLocale } from "@/lib/use-locale"
 import { MatchCalendar } from "./match-calendar"
 import { usePreferences, type MutateResult } from "./prefs-provider"
@@ -100,7 +101,7 @@ export function MyTeams({ feed }: { feed: EventFeed }) {
           <ul className="mt-2 grid gap-2.5 sm:grid-cols-2">
             {leagues.map((league, index) => (
               <li key={league.id} className={ROW}>
-                <Link href={href(`/app/standings/${league.id}`)} className="min-w-0 flex-1 truncate font-medium text-ink underline-offset-2 hover:underline">{league.name}</Link>
+                <Link href={href(league.sportId === "football" || canHaveTable(league.sportId as SportId, league.name) ? `/app/standings/${league.id}` : `/app/league/${league.id}`)} className="min-w-0 flex-1 truncate font-medium text-ink underline-offset-2 hover:underline">{league.name}</Link>
                 <Order name={league.name} index={index} count={leagues.length} onMove={(delta) => save((current) => ({ leagues: moveItem(current.leagues, current.leagues.findIndex((item) => item.id === league.id), delta) }))} />
                 <RemoveButton name={league.name} onPress={() => save((current) => ({ leagues: current.leagues.filter((item) => item.id !== league.id) }))} />
               </li>

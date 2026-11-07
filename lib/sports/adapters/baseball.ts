@@ -2,6 +2,7 @@
 // inventory: "Name Innings:" blocks for most leagues and a tabbed R H E table for the World
 // Baseball Classic.
 
+import type { RawEvent } from "../thesportsdb"
 import type { ScoreBreakdown, ScoreSegment } from "../types"
 import { numbered, sideBlocks, sum, type Phase, type Sides } from "./shared"
 
@@ -66,3 +67,47 @@ export function baseballBreakdown(text: string, sides: Sides): ScoreBreakdown | 
 }
 
 export const baseballPhase = (code: string): Phase | null => numbered(code, /^IN(\d{1,2})$/, "inning")
+
+/**
+ * A game called or suspended part way still has the innings it played, and they add up to its
+ * score: Lara 0, Anzoátegui 1 after three innings when it was abandoned (2609201).
+ */
+export const baseballStopped = (status: string): boolean => status === "abandoned" || status === "interrupted"
+
+const spaced = (text: string | null | undefined) => (text ?? "").replace(/\s+/g, " ").trim()
+
+const SCHEDULE_HORIZON_MS = 30 * 86_400_000
+
+/**
+ * A row's own contradictions settled before anything reads it.
+ * - Some rows title a game "away vs home", and then both scores follow the title, not the team
+ *   fields. Adelaide's 3-2 win at Sydney's Blacktown ground (2420582) reads that way: the innings
+ *   give Adelaide 3, and the venue is Sydney's, so the team fields are right and the scores swap.
+ * - The postponed flag stays set after a game is made up. Once the status says what became of
+ *   the game (played, canceled, abandoned), the status holds: 20 games played in the 2026 MLB,
+ *   Mexican Pacific, Taiwanese and Australian seasons still carry the flag, often one half of a
+ *   doubleheader. An unplayed game moved to a later date is upcoming on that date.
+ * - The source marks part of a season "CANC" before its schedule is set: every Mexican Pacific
+ *   game from 10 to 31 December 2026 read so on 7 November, while the league's regular season runs
+ *   to 30 December. A cancellation that far ahead is not one, so the game stays upcoming.
+ * - "FT" with no score is a game whose result was never entered, often a rained-out date (five
+ *   KBO games on 14 April 2026), so it is not shown as finished.
+ */
+export function baseballRow(raw: RawEvent, now: Date): RawEvent {
+  const [home, away] = [spaced(raw.strHomeTeam), spaced(raw.strAwayTeam)]
+  const reversed = Boolean(home && away) && home !== away && spaced(raw.strEvent) === `${away} vs ${home}`
+  const status = (raw.strStatus ?? "").trim().toUpperCase()
+  const start = Date.parse(`${(raw.strTimestamp ?? "").trim().replace(" ", "T")}${/(Z|[+-]\d{2}:?\d{2})$/.test(raw.strTimestamp ?? "") ? "" : "Z"}`)
+  const moved = (status === "NS" || status === "") && Number.isFinite(start) && start > now.getTime()
+  const stated = status !== "" && status !== "NS" && status !== "POST" && status !== "PST"
+  const unconfirmed = status === "CANC" && Number.isFinite(start) && start - now.getTime() > SCHEDULE_HORIZON_MS
+  const blank = (value: RawEvent["intHomeScore"]) => value === null || value === undefined || String(value).trim() === ""
+  const unscored = status === "FT" && blank(raw.intHomeScore) && blank(raw.intAwayScore)
+  return {
+    ...raw,
+    ...(unscored ? { strStatus: null } : {}),
+    ...(unconfirmed ? { strStatus: "NS", strPostponed: "no" } : {}),
+    ...(reversed && !raw.fromLive ? { intHomeScore: raw.intAwayScore, intAwayScore: raw.intHomeScore } : {}),
+    ...(raw.strPostponed?.toLowerCase() === "yes" && (stated || moved) ? { strPostponed: "no" } : {}),
+  }
+}

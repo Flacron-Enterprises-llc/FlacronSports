@@ -31,8 +31,9 @@ export function HighlightsSection() {
     void load()
   }, [load])
 
-  const highlights = feed?.highlights.slice(0, SHOWN) ?? []
-  const clips = (feed?.clips ?? []).slice(0, Math.max(0, SHOWN - highlights.length))
+  // The licensed football clips lead, and highlights fill what room is left.
+  const clips = (feed?.clips ?? []).slice(0, SHOWN)
+  const highlights = (feed?.highlights ?? []).slice(0, Math.max(0, SHOWN - clips.length))
 
   return (
     <section aria-label={copy.highlightsTitle} className="min-w-0">
@@ -43,21 +44,21 @@ export function HighlightsSection() {
         {feed && highlights.length + clips.length === 0 && <p className="text-sm text-ink-2">{copy.highlightsEmpty}</p>}
         {highlights.length + clips.length > 0 && (
           <ul className="fs-settle grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {highlights.map((item) => (
-              <li key={item.matchId} className={TILE}>
-                <HighlightPlayer flush matchId={item.matchId} title={item.title} thumbnailUrl={item.thumbnailUrl} channel={item.channel} />
-                <div className="px-3">
-                  <Link href={href(`/app/match/${item.matchId}`)} className="mt-0.5 line-clamp-2 text-sm font-semibold leading-5 text-ink underline-offset-2 hover:underline">{item.title}</Link>
-                  <p className="truncate text-xs text-ink-2">{item.competition}</p>
-                </div>
-              </li>
-            ))}
             {clips.map((clip) => (
               <li key={clip.id} className={TILE}>
                 <HighlightPlayer flush clipId={clip.id} title={clip.title} thumbnailUrl={clip.thumbnailUrl} />
                 <div className="px-3 pt-2">
                   <p className="line-clamp-2 text-sm font-semibold leading-5 text-ink">{clip.title}</p>
                   <p className="truncate text-xs text-ink-2">{clip.competition}</p>
+                </div>
+              </li>
+            ))}
+            {highlights.map((item) => (
+              <li key={item.matchId} className={TILE}>
+                <HighlightPlayer flush matchId={item.matchId} title={item.title} thumbnailUrl={item.thumbnailUrl} channel={item.channel} />
+                <div className="px-3">
+                  <Link href={href(`/app/match/${item.matchId}`)} className="mt-0.5 line-clamp-2 text-sm font-semibold leading-5 text-ink underline-offset-2 hover:underline">{item.title}</Link>
+                  <p className="truncate text-xs text-ink-2">{item.competition}</p>
                 </div>
               </li>
             ))}

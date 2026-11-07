@@ -5,9 +5,11 @@ import Link from "next/link"
 import { ChevronRight, Medal, MessagesSquare, Trophy, Users } from "lucide-react"
 import { btn, Notice, Panel } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
+import { SCORE_RULES } from "@/lib/community/pick-rules"
 import { pickWords, type PickFields } from "@/lib/community/pick-words"
 import type { PredictionKind } from "@/lib/community/predictions"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
+import type { SportId } from "@/lib/sports/types"
 import { useLocale } from "@/lib/use-locale"
 import { useCommunityGate } from "./community-gate"
 import { Leaderboard } from "./leaderboard"
@@ -46,10 +48,11 @@ function PodiumFields({ matchId, value, onChange, onUnavailable }: { matchId: st
   )
 }
 
-function Predictions({ matchId, kind, predictable, home, away, combat }: { matchId: string; kind: PredictionKind; predictable: boolean; home: string; away: string; combat: boolean }) {
+function Predictions({ matchId, sportId, kind, predictable, home, away, combat }: { matchId: string; sportId: SportId; kind: PredictionKind; predictable: boolean; home: string; away: string; combat: boolean }) {
   const { t } = useLocale()
   const user = useAuthUser()
   const gate = useCommunityGate()
+  const rule = SCORE_RULES[sportId]
   const [homeScore, setHomeScore] = useState("")
   const [awayScore, setAwayScore] = useState("")
   const [podium, setPodium] = useState(["", "", ""])
@@ -82,15 +85,28 @@ function Predictions({ matchId, kind, predictable, home, away, combat }: { match
     event.preventDefault()
     void send(pick)
   }
+  const scoreSubmitted = (event: FormEvent) => {
+    if (Number(homeScore) === Number(awayScore) && !rule?.canEndLevel) {
+      event.preventDefault()
+      setNotice(t.community.scoreCannotBeLevel)
+    } else submitted({ home: Number(homeScore), away: Number(awayScore) })(event)
+  }
+  const scoreField = (name: string, value: string, onChange: (next: string) => void) => (
+    <label className="min-w-0 text-sm font-medium text-ink">
+      <span className="block truncate">{name}</span>
+      {rule && <span className="block text-xs font-normal text-ink-2">{t.community.scoreUnits[rule.unit]}</span>}
+      <input className={field} type="number" min={0} max={rule?.max} required value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  )
 
   return (
     <div>
       {mine && <Notice tone="success" role="status">{t.community.yourPrediction} <span data-testid="own-prediction" className="tabular font-semibold text-ink">{pickWords(mine, { home, away }, t.community)}</span></Notice>}
       {!mine && user && predictable && gate.prompt}
       {!mine && user && predictable && !gate.locked && kind === "score" && (
-        <form onSubmit={submitted({ home: Number(homeScore), away: Number(awayScore) })} className="grid grid-cols-2 gap-3 rounded-lg bg-surface-muted p-3">
-          <label className="min-w-0 text-sm font-medium text-ink"><span className="block truncate">{home}</span><input className={field} type="number" min={0} max={300} required value={homeScore} onChange={(event) => setHomeScore(event.target.value)} /></label>
-          <label className="min-w-0 text-sm font-medium text-ink"><span className="block truncate">{away}</span><input className={field} type="number" min={0} max={300} required value={awayScore} onChange={(event) => setAwayScore(event.target.value)} /></label>
+        <form onSubmit={scoreSubmitted} className="grid grid-cols-2 gap-3 rounded-lg bg-surface-muted p-3">
+          {scoreField(home, homeScore, setHomeScore)}
+          {scoreField(away, awayScore, setAwayScore)}
           <button type="submit" disabled={busy} className={btn("primary", "md", "col-span-2")}>{t.community.predict}</button>
         </form>
       )}
@@ -119,13 +135,13 @@ function Predictions({ matchId, kind, predictable, home, away, combat }: { match
   )
 }
 
-export function MatchCommunity({ matchId, predictable, kind, combat = false, home, away }: { matchId: string; predictable: boolean; kind: PredictionKind | null; combat?: boolean; home: string; away: string }) {
+export function MatchCommunity({ matchId, sportId, predictable, kind, combat = false, home, away }: { matchId: string; sportId: SportId; predictable: boolean; kind: PredictionKind | null; combat?: boolean; home: string; away: string }) {
   const { t, href } = useLocale()
   const title = kind === "podium" ? t.community.pickPodium : kind === "winner" ? t.community.pickTitle : t.community.predictions
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
-        {kind && <Panel title={title} icon={<Medal aria-hidden />}><Predictions matchId={matchId} kind={kind} predictable={predictable} home={home} away={away} combat={combat} /></Panel>}
+        {kind && <Panel title={title} icon={<Medal aria-hidden />}><Predictions matchId={matchId} sportId={sportId} kind={kind} predictable={predictable} home={home} away={away} combat={combat} /></Panel>}
         <Panel title={t.community.leaderboard} icon={<Trophy aria-hidden />}><Leaderboard /></Panel>
       </div>
       <Panel

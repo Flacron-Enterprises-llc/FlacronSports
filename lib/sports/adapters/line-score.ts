@@ -41,6 +41,7 @@ const CAPTIONS: Record<ScoreSegment["kind"], keyof Dictionary["match"]["lineCapt
   set: "set",
   overtime: "quarter",
   shootout: "period",
+  extra: "half",
 }
 
 function totals(event: SportEvent, breakdown: ScoreBreakdown, t: Dictionary): { columns: LineColumn[]; home: LineCell[]; away: LineCell[] } {
@@ -73,7 +74,8 @@ export function lineScore(event: SportEvent, t: Dictionary, size: Size = "long")
   const end = totals(event, breakdown, t)
   const columns: LineColumn[] = [...segments.map((item) => ({ key: `${item.kind}-${item.number}`, label: segmentHeading(item, segments, t, size) })), ...end.columns]
   const homeCell = (item: ScoreSegment, index: number): LineCell => {
-    const skipped = item.kind === "inning" && item.home === null && item.away !== null && index === segments.length - 1
+    // A game stopped part way has a half inning nobody played, not one the home side skipped.
+    const skipped = item.kind === "inning" && event.status === "finished" && item.home === null && item.away !== null && index === segments.length - 1
     return { value: skipped ? "X" : item.home }
   }
   const rows: LineTable["rows"] = [

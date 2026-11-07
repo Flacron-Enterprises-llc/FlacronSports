@@ -51,8 +51,9 @@ export function fakeDb(options: { acceptEveryone?: boolean } = {}) {
     if (contains) rows = rows.filter((row) => ((row as Doc)[contains[0]] as unknown[] | undefined)?.includes(contains[1]))
     const order = spec.orderBy
     if (order) {
-      const key = (row: Row<T>) => (row as Doc)[order.field] as string | number
-      rows = rows.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0) * (order.direction === "desc" ? -1 : 1))
+      const key = (row: Row<T>) => order.field.split(".").reduce<unknown>((value, part) => (value as Doc | undefined)?.[part], row) as string | number
+      // Firestore leaves out documents that lack the ordered field.
+      rows = rows.filter((row) => key(row) !== undefined).sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0) * (order.direction === "desc" ? -1 : 1))
       if (spec.startAfter !== undefined) {
         rows = rows.filter((row) => (order.direction === "desc" ? key(row) < (spec.startAfter as string) : key(row) > (spec.startAfter as string)))
       }

@@ -1,10 +1,12 @@
 import Link from "next/link"
+import { Radio } from "lucide-react"
 import { SportIcon } from "@/components/site/sport-icon"
 import { LocalTime } from "@/components/sports/parts"
 import { ChannelLogo } from "@/components/video/channel-logo"
+import { ClipPlayer, ShowMore } from "@/components/video/clip-player"
 import { HighlightPlayer } from "@/components/video/highlight-player"
 import type { Broadcast } from "@/lib/sports/service"
-import type { Highlight } from "@/lib/video/catalog"
+import type { Highlight, LiveStream } from "@/lib/video/catalog"
 import { groupListings } from "@/lib/video/listings"
 import type { Clip } from "@/lib/video/scorebat"
 import { cn } from "@/lib/utils"
@@ -15,6 +17,7 @@ const CARD = "fs-tile fs-lift min-w-0 overflow-hidden rounded-xl border border-l
 // The first two tiles run larger. On a shorter list every tile is already large.
 const GRID = "fs-settle mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-6 xl:[&>li]:col-span-2 xl:[&>li:nth-child(-n+2)]:col-span-3"
 const GRID_EVEN = "fs-settle mt-3 grid gap-4 sm:grid-cols-2"
+const CLIPS_FIRST = 12
 
 export function HighlightGrid({ highlights, href, even }: { highlights: Omit<Highlight, "youtubeId">[]; href: Href; even?: boolean }) {
   return (
@@ -32,16 +35,38 @@ export function HighlightGrid({ highlights, href, even }: { highlights: Omit<Hig
   )
 }
 
-export function ClipGrid({ clips, even }: { clips: Clip[]; even?: boolean }) {
+const clipTitle = "mt-0.5 line-clamp-2 text-[15px] font-semibold leading-5 text-ink underline-offset-2 hover:underline"
+
+/** Each game once, with its goals grouped under it. A clip tied to a game links to that game. */
+export function ClipGrid({ clips, href, even, moreLabel }: { clips: Clip[]; href: Href; even?: boolean; moreLabel?: string }) {
   return (
-    <ul className={even ? GRID_EVEN : GRID}>
+    <ShowMore first={CLIPS_FIRST} label={moreLabel} className={even ? GRID_EVEN : GRID}>
       {clips.map((item) => (
         <li key={item.id} className={CARD}>
-          <HighlightPlayer flush clipId={item.id} title={item.title} thumbnailUrl={item.thumbnailUrl} />
+          <ClipPlayer flush leadId={item.id} videos={item.videos ?? []} title={item.title} thumbnailUrl={item.thumbnailUrl}>
+            <div className="px-3 pt-2">
+              {item.matchId ? <Link href={href(`/app/match/${item.matchId}`)} className={cn("block", clipTitle)}>{item.title}</Link> : <p className="line-clamp-2 text-[15px] font-semibold leading-5 text-ink">{item.title}</p>}
+              <p className="mt-0.5 truncate text-[13px] text-ink-2">{item.competition}</p>
+              {item.dateUTC && <p className="mt-0.5 text-xs text-ink-2"><LocalTime iso={item.dateUTC} mode="datetime" /></p>}
+            </div>
+          </ClipPlayer>
+        </li>
+      ))}
+    </ShowMore>
+  )
+}
+
+/** Streams the video feed lists for a game on now. The note says no more than that. */
+export function StreamGrid({ streams, href, label }: { streams: LiveStream[]; href: Href; label: string }) {
+  return (
+    <ul className={GRID_EVEN}>
+      {streams.map((item) => (
+        <li key={item.id} className={CARD}>
+          <HighlightPlayer flush live clipId={item.id} title={item.title} thumbnailUrl={item.thumbnailUrl} />
           <div className="px-3 pt-2">
-            <p className="line-clamp-2 text-[15px] font-semibold leading-5 text-ink">{item.title}</p>
+            <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-live"><Radio aria-hidden className="size-3.5" /> {label}</p>
+            {item.matchId ? <Link href={href(`/app/match/${item.matchId}`)} className={cn("block", clipTitle)}>{item.title}</Link> : <p className="mt-0.5 line-clamp-2 text-[15px] font-semibold leading-5 text-ink">{item.title}</p>}
             <p className="mt-0.5 truncate text-[13px] text-ink-2">{item.competition}</p>
-            {item.dateUTC && <p className="mt-0.5 text-xs text-ink-2"><LocalTime iso={item.dateUTC} mode="datetime" /></p>}
           </div>
         </li>
       ))}

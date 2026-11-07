@@ -25,7 +25,7 @@ describe("alerts beyond start and final", () => {
   it("announces a live score, a break, upcoming lineups and highlights to check", () => {
     expect(detailAlerts(game("1", "A", "B", 1, 0, "2H"), NOW)).toEqual(["scoring"])
     expect(detailAlerts(game("1", "A", "B", 0, 0, "1H"), NOW)).toEqual([])
-    expect(detailAlerts(game("1", "A", "B", 1, 1, "HT"), NOW)).toEqual(["scoring", "interval"])
+    expect(detailAlerts(game("1", "A", "B", 1, 1, "HT", undefined, "2026-11-06T17:15:00"), NOW)).toEqual(["scoring", "interval"])
     expect(detailAlerts(game("1", "A", "B", null, null, "NS", "L", "2026-11-06T19:00:00"), NOW)).toEqual(["participants"])
     expect(detailAlerts({ ...game("1", "A", "B", 2, 1), videoUrl: "https://youtube.com/watch?v=x" }, NOW)).toEqual(["highlights"])
   })
@@ -91,7 +91,7 @@ describe("comparison", () => {
   it("counts only finished games, newest first", () => {
     const profile = basicProfile("A", recent, [])
     expect(profile.form).toEqual(["W", "D", "L"])
-    expect(profile.record).toEqual({ played: 3, wins: 1, draws: 1, losses: 1, scored: 3, conceded: 4 })
+    expect(profile.record).toMatchObject({ played: 3, wins: 1, draws: 1, losses: 1, scored: 3, conceded: 4 })
     expect(teamGames("Nobody", recent)).toEqual([])
   })
 

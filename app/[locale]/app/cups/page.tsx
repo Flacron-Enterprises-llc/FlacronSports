@@ -18,10 +18,12 @@ export const dynamic = "force-dynamic"
 type Props = LocaleParams & { searchParams: Promise<{ competition?: string }> }
 
 function CupGame({ game, t, tbd, href }: { game: SportEvent; t: Dictionary; tbd: string; href(path: string): string }) {
-  const { score, shootout } = game
+  const { score, shootout, aggregate, conclusion } = game
   const scores = score.kind === "team" ? [score.home, score.away] : null
   const ranked = shootout ? [shootout.home, shootout.away] : scores
-  const won = (index: number) => ranked !== null && ranked[0] !== ranked[1] && ranked[index] > ranked[1 - index]
+  // A leg can be won and the tie lost on kicks the source does not give, so neither side is marked.
+  const open = conclusion === "penalties" && !shootout
+  const won = (index: number) => !open && ranked !== null && ranked[0] !== ranked[1] && ranked[index] > ranked[1 - index]
   const other = score.kind === "team" ? null : resultLine(game, t)
   const when = game.scheduledStartUTC && !game.dateOnly ? <LocalTime iso={game.scheduledStartUTC} mode="datetime" /> : tbd
   return (
@@ -38,6 +40,7 @@ function CupGame({ game, t, tbd, href }: { game: SportEvent; t: Dictionary; tbd:
           ))}
         </ul>
         {!scores && <p className="tabular mt-1 truncate border-t border-line pt-1 text-xs text-ink-2">{other ?? when}</p>}
+        {aggregate && <SpoilerGuard label={t.spoiler.revealResult} quiet><p className="tabular mt-1 truncate border-t border-line pt-1 text-xs text-ink-2">{t.match.aggregateScore.replace("{home}", String(aggregate.home)).replace("{away}", String(aggregate.away))}</p></SpoilerGuard>}
       </Link>
     </li>
   )

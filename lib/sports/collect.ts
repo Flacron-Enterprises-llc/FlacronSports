@@ -16,7 +16,10 @@ export const CALLS_PER_TICK = 100
 export const RESULT_CALLS = 20
 /** Sports with results on the per-event endpoint. Cricket returned none in the check. */
 export const RESULT_SPORTS = new Set<SportId>(["tennis", "motorsport", "combat-sports"])
+// Results land soon after a session ends, so a fresh one is asked again often and an old one rarely.
 const RESULT_RECHECK_MS = 6 * 3_600_000
+const RECENT_RECHECK_MS = 30 * 60_000
+const RECENT_MS = 24 * 3_600_000
 const CALLS_PER_LEAGUE = 2
 
 /**
@@ -25,9 +28,24 @@ const CALLS_PER_LEAGUE = 2
  */
 export function leaguePaths(league: { id: string; sportId: SportId }, now: Date): string[] {
   const past = `eventspastleague.php?id=${league.id}`
-  if (league.sportId === "tennis") return [`eventsseason.php?${new URLSearchParams({ id: league.id, s: String(now.getUTCFullYear()) })}`, past]
-  return [`eventsnextleague.php?id=${league.id}`, past]
+  if (league.sportId !== "tennis") return [`eventsnextleague.php?id=${league.id}`, past]
+  const season = `eventsseason.php?${new URLSearchParams({ id: league.id, s: String(now.getUTCFullYear()) })}`
+  return league.id === WALKS_THE_DAYS ? [season, past, walkedDay(now)] : [season, past]
 }
+
+// The season list has no scores or draws for any match, and stops at 3000 rows, oldest first:
+// the 2026 WTA list ended at 14 October with a month still to play. The day feed has all of
+// that for both tours, so one day is read on the WTA's turn, walking back through the window.
+// Today and yesterday are refreshed anyway.
+const WALKS_THE_DAYS = "4517"
+const WALKED_FROM_DAYS = 2
+
+function walkedDay(now: Date): string {
+  const days = WINDOW_PAST_DAYS - WALKED_FROM_DAYS
+  const back = WALKED_FROM_DAYS + Math.floor(now.getTime() / 3_600_000) % days
+  return `eventsday.php?${new URLSearchParams({ d: new Date(now.getTime() - back * DAY_MS).toISOString().slice(0, 10), s: "Tennis" })}`
+}
+
 /** Leagues playing around today come first, but never crowd out the rotation. */
 const ACTIVE_SHARE = 0.5
 
@@ -111,7 +129,8 @@ export function activeLeagues(indexes: CollectIndex[], now: Date): Set<string> {
 export function resultsWanted(rows: RawEvent[], now: Date): RawEvent[] {
   return rows.filter((raw) => {
     const start = Date.parse(`${raw.strTimestamp ?? ""}Z`)
-    return !raw.strResult && !raw.resultRows?.length && start < now.getTime() && now.getTime() - (raw.resultsCheckedAt ?? 0) > RESULT_RECHECK_MS
+    const wait = now.getTime() - start < RECENT_MS ? RECENT_RECHECK_MS : RESULT_RECHECK_MS
+    return !raw.strResult && !raw.resultRows?.length && start < now.getTime() && now.getTime() - (raw.resultsCheckedAt ?? 0) > wait
   })
 }
 
@@ -121,11 +140,11 @@ export interface GameDate {
 }
 
 /** The next dates with a game filed, soonest first. */
-export function nextDates(index: CollectIndex, after: string, limit: number): GameDate[] {
+export function nextDates(index: CollectIndex, after: string, limit: number, keep: (league: string) => boolean = () => true): GameDate[] {
   const counts = new Map<string, number>()
   for (const entry of Object.values(index)) {
-    const date = entry.split("|")[0]
-    if (date > after) counts.set(date, (counts.get(date) ?? 0) + 1)
+    const [date, league] = entry.split("|")
+    if (date > after && keep(league)) counts.set(date, (counts.get(date) ?? 0) + 1)
   }
   return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(0, limit).map(([date, games]) => ({ date, games }))
 }

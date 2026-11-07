@@ -1,9 +1,15 @@
 import { combatFields } from "./adapters/combat"
 import { cricketFields } from "./adapters/cricket"
+import { footballClock, footballDetails, footballStateExpired } from "./adapters/football"
 import { motorsportFields } from "./adapters/motorsport"
 import { tennisFields } from "./adapters/tennis"
-import { americanFootballConclusion } from "./adapters/american-football"
+import { americanFootballConclusion, americanFootballDetails, americanFootballRow } from "./adapters/american-football"
+import { baseballRow, baseballStopped } from "./adapters/baseball"
+import { basketballDetails, basketballRow } from "./adapters/basketball"
+import { hockeyCancelUnconfirmed, hockeyClock, hockeyRow } from "./adapters/ice-hockey"
+import { rugbyDetails, rugbyRow } from "./adapters/rugby"
 import { teamBreakdown, teamPhase } from "./adapters/team"
+import { volleyballDetails, volleyballRow } from "./adapters/volleyball"
 import type { EventConclusion, EventScore, EventStatus, Participant, SportEvent, SportId } from "./types"
 
 export const PROVIDER_NAME = "TheSportsDB"
@@ -17,11 +23,15 @@ export interface RawResult {
 }
 
 export interface RawEvent {
+  /** Set when the live feed's status and scores were laid over the stored row. */
+  fromLive?: boolean
   idEvent: string
   idLeague?: string | null
   strLeague?: string | null
   strSport?: string | null
   strEvent?: string | null
+  /** The source's own file name for the game, "League date Home vs Away" unless the row is reversed. */
+  strFilename?: string | null
   dateEvent?: string | null
   strSeason?: string | null
   strGroup?: string | null
@@ -57,7 +67,7 @@ export interface RawEvent {
 }
 
 const FINISHED = new Set(["FT", "AET", "PEN", "AOT", "AP", "AWD", "AW", "WO", "MATCH FINISHED", "FINISHED"])
-const LIVE = new Set(["1H", "2H", "HT", "ET", "BT", "P", "PT", "Q1", "Q2", "Q3", "Q4", "OT", "LIVE", "IN PLAY"])
+const LIVE = new Set(["1H", "2H", "HT", "ET", "BT", "P", "PT", "SO", "Q1", "Q2", "Q3", "Q4", "OT", "LIVE", "IN PLAY"])
 const SCHEDULED = new Set(["NS", "NOT STARTED", "TBD", ""])
 
 // Hockey periods, baseball innings and volleyball sets, as the live feed writes them.
@@ -125,11 +135,14 @@ export function toUtc(timestamp: string | null | undefined): string | null {
 // The fighting feed mixes real contests with scripted pro wrestling, and an unknown
 // promotion must stay out rather than be shown as a combat result.
 const COMBAT_LEAGUES = /\b(?:ufc|boxing|mma|mixed martial arts|bkfc|pfl|professional fighters league|bellator|rizin|ksw|cage warriors|caged steel|cage fury|legacy fighting alliance|uae warriors|kotc|deep|invicta|aca|pancrase|shooto|pride fc|dream|strikeforce|world extreme cagefighting|top rank|kickboxing|muay thai|glory|k-1|kok|rise|jungle fight)\b/i
+// Promotions whose short names are too plain to match by pattern: Knock Out and K-1 Japan
+// kickboxing, and MMA and kickboxing promotions now closed whose cards are still listed.
+const COMBAT_NAMES = new Set(["ONE", "KO", "KJP", "SRC", "Heros", "EliteXC", "Affliction", "IFL", "Its Showtime", "VTJ", "IVC", "Meca", "RINGS"])
 
 /** False for a record the sport's feed returns but this product does not cover. */
 export function isCovered(raw: RawEvent, sportId: SportId): boolean {
   if (sportId !== "combat-sports") return true
-  return raw.strLeague === "ONE" || COMBAT_LEAGUES.test(raw.strLeague ?? "")
+  return COMBAT_NAMES.has(raw.strLeague ?? "") || COMBAT_LEAGUES.test(raw.strLeague ?? "")
 }
 
 const competitor = (name: string): Participant => ({ id: null, name, role: "competitor", badgeUrl: null })
@@ -158,12 +171,16 @@ const LONGEST_GAME_MS = 8 * 3_600_000
  * Regional games often stop updating part way through, which leaves a final-looking
  * "2H" or "NS" on the record. A game that long past its start is not live or upcoming.
  */
-function settledStatus(raw: RawEvent, now: Date): EventStatus {
+function settledStatus(raw: RawEvent, now: Date, sportId: SportId): EventStatus {
   const status = normalizeStatus(raw)
+  if (sportId === "ice-hockey" && status === "canceled" && hockeyCancelUnconfirmed(toUtc(raw.strTimestamp), now)) return "scheduled"
   if (status !== "live" && status !== "scheduled") return status
   const start = toUtc(raw.strTimestamp)
   if (!start) return status
-  const limit = LONGEST_GAME_MS + (isDateOnly(raw) ? 86_400_000 : 0)
+  if (sportId === "football" && !isDateOnly(raw) && footballStateExpired(raw, Date.parse(start), now)) return "unknown"
+  // Midnight UTC is 7pm in New York all winter, and NHL, AHL and college rows at that hour
+  // carry no local time (checked on 1,036 rows, 6 November 2026), so for hockey it is a real start.
+  const limit = LONGEST_GAME_MS + (isDateOnly(raw) && sportId !== "ice-hockey" ? 86_400_000 : 0)
   return now.getTime() - Date.parse(start) > limit ? "unknown" : status
 }
 
@@ -177,7 +194,8 @@ function finish(raw: RawEvent, sportId: SportId): Pick<SportEvent, "conclusion" 
   return { conclusion, ...(decided && home !== null && away !== null ? { shootout: { home, away } } : {}) }
 }
 
-export function normalizeEvent(raw: RawEvent, sportId: SportId, now: Date = new Date()): SportEvent {
+export function normalizeEvent(row: RawEvent, sportId: SportId, now: Date = new Date()): SportEvent {
+  const raw = sportId === "basketball" ? basketballRow(row) : sportId === "ice-hockey" ? hockeyRow(row) : sportId === "american-football" ? americanFootballRow(row) : sportId === "baseball" ? baseballRow(row, now) : sportId === "rugby" ? rugbyRow(row, toUtc(row.strTimestamp), now) : sportId === "volleyball" ? volleyballRow(row, now) : row
   const shared = {
     id: `tsdb-${raw.idEvent}`,
     sportId,
@@ -207,12 +225,13 @@ export function normalizeEvent(raw: RawEvent, sportId: SportId, now: Date = new 
   if (sportId === "combat-sports") return { ...shared, ...individual, ...combatFields(raw, infer) }
   if (sportId === "motorsport") return { ...shared, ...individual, ...motorsportFields(raw, infer) }
 
-  const status = settledStatus(raw, now)
-  const clock = status === "live" && raw.strProgress ? raw.strProgress : null
+  const status = settledStatus(raw, now, sportId)
+  const progress = sportId === "football" ? footballClock(raw.strStatus, raw.strProgress) : sportId === "ice-hockey" ? hockeyClock(raw.strStatus, raw.strProgress) : raw.strProgress
+  const clock = status === "live" && progress ? progress : null
   // The score follows what the source stated: a game it never started has no score, however old.
   const score = normalizeScore(raw, normalizeStatus(raw))
-  const breakdown = status === "finished" && score.kind === "team"
+  const breakdown = (status === "finished" || (sportId === "baseball" && baseballStopped(status))) && score.kind === "team"
     ? teamBreakdown(raw.strResult, sportId, { home: teams.participants[0].name, away: teams.participants[1].name, homeScore: score.home, awayScore: score.away }, { home: parseScore(raw.intHomeScoreExtra), away: parseScore(raw.intAwayScoreExtra) })
     : null
-  return { ...shared, ...teams, status, score, ...(clock ? { clock } : {}), ...finish(raw, sportId), ...(breakdown ? { breakdown } : {}) }
+  return { ...shared, ...teams, status, score, ...(clock ? { clock } : {}), ...finish(raw, sportId), ...(breakdown ? { breakdown } : {}), ...(sportId === "football" ? { details: footballDetails(raw) } : sportId === "basketball" ? { details: basketballDetails(raw) } : sportId === "american-football" ? { details: americanFootballDetails(raw) } : sportId === "rugby" ? { details: rugbyDetails(raw) } : sportId === "volleyball" ? { details: volleyballDetails(raw, status === "finished"), ...(isDateOnly(raw) ? { dateOnly: true } : {}) } : {}) }
 }

@@ -3,6 +3,8 @@
 
 import type { Locale } from "@/lib/i18n"
 import { BASKETBALL_PERCENT_STATS, basketballRole, type BasketballRole } from "./adapters/basketball"
+import { cardReason, reviewOutcome } from "./adapters/football"
+import { decidedSide } from "./game-result"
 import { goalSituation, infractionKey, periodRank, type GoalSituation } from "./adapters/ice-hockey"
 import type { EventStatus, ScoreBreakdown, SportEvent, SportId } from "./types"
 
@@ -24,6 +26,10 @@ export interface TimelineItem {
   situation?: GoalSituation
   /** Hockey: the infraction's dictionary key, when it has one. */
   infraction?: string
+  /** Football: what a video review decided, as a dictionary key. */
+  review?: string
+  /** Football: why a card was shown. The key is null when the dictionary has no term for it. */
+  reason?: { key: string | null; text: string }
 }
 
 export interface StatRow {
@@ -56,6 +62,8 @@ export interface MatchDetail {
   lineups: { home: LineupPlayer[]; away: LineupPlayer[] }
   /** Period scores this game's timeline proves, for a sport whose event record has none. */
   breakdown?: ScoreBreakdown
+  /** Hockey: the timeline holds fewer goals than the score, so it is only part of the game. */
+  timelinePartial?: boolean
   fetchedAt: string
 }
 
@@ -68,6 +76,7 @@ export interface RawTimeline {
   strAssist?: string | null
   intTime?: string | number | null
   strPeriod?: string | null
+  strComment?: string | null
 }
 
 export interface RawStat {
@@ -112,9 +121,24 @@ function hockeyTimeline(rows: RawTimeline[]): TimelineItem[] {
     }
     if (type !== "penalty") return []
     const infraction = infractionKey(row.strTimelineDetail)
-    return [{ ...base, kind: "infraction", label: row.strTimelineDetail?.trim() || undefined, ...(infraction ? { infraction } : {}) }]
+    // A penalty's second name repeats the player's own.
+    const secondary = base.secondary && base.secondary !== base.player ? base.secondary : null
+    return [{ ...base, secondary, kind: "infraction", label: row.strTimelineDetail?.trim() || undefined, ...(infraction ? { infraction } : {}) }]
   })
   return items.sort((a, b) => periodRank(a.period) - periodRank(b.period) || (a.minute ?? Number.MAX_SAFE_INTEGER) - (b.minute ?? Number.MAX_SAFE_INTEGER) || byStableId(a.id, b.id))
+}
+
+/** The source names the player going off first. The page leads with the one coming on. */
+function footballItem(item: TimelineItem, row: RawTimeline): TimelineItem {
+  // Older rows name only one player, and it stays where it is.
+  if (item.kind === "substitution") return item.secondary ? { ...item, player: item.secondary, secondary: item.player } : item
+  if (item.kind === "var") {
+    const review = reviewOutcome(row.strTimelineDetail)
+    return review ? { ...item, review } : item
+  }
+  if (item.kind !== "yellow" && item.kind !== "red") return item
+  const reason = cardReason(row.strComment)
+  return reason ? { ...item, reason } : item
 }
 
 /** Clock first, then the provider's id, so two rows in one minute keep one order on every load. */
@@ -125,14 +149,15 @@ export function normalizeTimeline(rows: RawTimeline[] | null | undefined, sport:
       const kind = timelineKind((row.strTimeline ?? "").trim().toLowerCase(), (row.strTimelineDetail ?? "").toLowerCase())
       if (!kind) return []
       const item: TimelineItem = { id: row.idTimeline ?? String(index), minute: whole(row.intTime), kind, side: sideOf(row.strHome), player: row.strPlayer || null, secondary: row.strAssist || null }
-      return [kind === "other" ? { ...item, label: row.strTimelineDetail?.trim() || (row.strTimeline as string).trim() } : item]
+      if (kind === "other") return [{ ...item, label: row.strTimelineDetail?.trim() || (row.strTimeline as string).trim() }]
+      return [sport === "football" ? footballItem(item, row) : item]
     })
     .sort((a, b) => (a.minute ?? Number.MAX_SAFE_INTEGER) - (b.minute ?? Number.MAX_SAFE_INTEGER) || byStableId(a.id, b.id))
 }
 
 // The order they read best in. For football, anything else the provider adds is left
 // out rather than shown untranslated, since this list is what the French dictionary covers.
-const STATS = ["ball possession", "expected_goals", "total shots", "shots on goal", "shots off goal", "blocked shots", "corner kicks", "offsides", "fouls", "yellow cards", "red cards", "goalkeeper saves", "total passes", "passes accurate", "passes %"]
+const STATS = ["ball possession", "expected_goals", "total shots", "shots on goal", "shots off goal", "blocked shots", "shots insidebox", "shots outsidebox", "corner kicks", "offsides", "fouls", "free kicks", "yellow cards", "red cards", "goalkeeper saves", "total passes", "passes accurate", "passes %"]
 
 // The source sends these both with and without the sign.
 const PERCENT_STATS = new Set(["ball possession", "passes %", ...BASKETBALL_PERCENT_STATS])
@@ -182,8 +207,22 @@ interface HockeyWords {
   situations: Record<GoalSituation, string>
 }
 
-function kindLabel(item: TimelineItem, kinds: Record<Exclude<TimelineKind, "other">, string>, locale: Locale, hockey?: HockeyWords): string | null | undefined {
+interface FootballWords {
+  reviews: Record<string, string>
+  cardReasons: Record<string, string>
+  replaced: string
+  assist: string
+}
+
+type TimelineWords = HockeyWords & Partial<FootballWords>
+
+function kindLabel(item: TimelineItem, kinds: Record<Exclude<TimelineKind, "other">, string>, locale: Locale, hockey?: TimelineWords): string | null | undefined {
   if (item.kind === "other") return locale === "en" ? item.label : null
+  if (item.review && hockey?.reviews?.[item.review]) return `${kinds.var}: ${hockey.reviews[item.review]}`
+  if (item.reason) {
+    const why = (item.reason.key && hockey?.cardReasons?.[item.reason.key]) || (locale === "en" ? item.reason.text : null)
+    if (why) return `${kinds[item.kind as "yellow" | "red"]} · ${why}`
+  }
   if (item.kind === "infraction") {
     const named = (item.infraction && hockey?.infractions[item.infraction]) || (locale === "en" ? item.label : null)
     return named ? `${kinds.infraction}: ${named}` : kinds.infraction
@@ -191,14 +230,23 @@ function kindLabel(item: TimelineItem, kinds: Record<Exclude<TimelineKind, "othe
   return item.situation && hockey ? `${kinds[item.kind]} · ${hockey.situations[item.situation]}` : kinds[item.kind]
 }
 
-export function labelTimeline(items: TimelineItem[], kinds: Record<Exclude<TimelineKind, "other">, string>, locale: Locale, hockey?: HockeyWords): (TimelineItem & { label: string })[] {
+/** Says what the second name is, since a bare name beside a goal or a change reads as either. */
+function secondaryText(item: TimelineItem, words?: TimelineWords): string | null {
+  if (!item.secondary) return null
+  const template = item.kind === "substitution" ? words?.replaced : item.kind === "goal" ? words?.assist : undefined
+  return template ? template.replace("{name}", item.secondary) : item.secondary
+}
+
+export function labelTimeline(items: TimelineItem[], kinds: Record<Exclude<TimelineKind, "other">, string>, locale: Locale, hockey?: TimelineWords): (TimelineItem & { label: string })[] {
   return items.flatMap((item) => {
     const label = kindLabel(item, kinds, locale, hockey)
-    return label ? [{ ...item, label }] : []
+    return label ? [{ ...item, label, secondary: secondaryText(item, hockey) }] : []
   })
 }
 
-function positionGroup(position: string | null | undefined): PositionGroup {
+// These groups are football's: a quarterback is no defender, and a rugby wing no forward.
+function positionGroup(position: string | null | undefined, sport: SportId): PositionGroup {
+  if (sport !== "football") return null
   const text = (position ?? "").toLowerCase()
   if (text.includes("goalkeeper")) return "goalkeeper"
   if (text.includes("back") || text.includes("defender")) return "defender"
@@ -213,7 +261,7 @@ export function normalizeLineups(rows: RawLineup[] | null | undefined, sport: Sp
   const basketball = sport === "basketball"
   const side = (home: string) => (rows ?? [])
     .filter((row) => row.strHome === home && row.strPlayer)
-    .map((row, index) => ({ id: row.idLineup ?? row.idPlayer ?? String(index), playerId: row.idPlayer ?? null, name: row.strPlayer as string, number: whole(row.intSquadNumber), group: basketball ? null : positionGroup(row.strPosition), ...(basketball ? { role: basketballRole(row.strPosition) } : {}), substitute: row.strSubstitute === "Yes" }))
+    .map((row, index) => ({ id: row.idLineup ?? row.idPlayer ?? String(index), playerId: row.idPlayer ?? null, name: row.strPlayer as string, number: whole(row.intSquadNumber), group: basketball ? null : positionGroup(row.strPosition, sport), ...(basketball ? { role: basketballRole(row.strPosition) } : {}), substitute: row.strSubstitute === "Yes" }))
     .sort((a, b) => Number(a.substitute) - Number(b.substitute) || GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group))
   return { home: side("Yes"), away: side("No") }
 }
@@ -222,17 +270,10 @@ export type FormResult = "win" | "draw" | "loss"
 
 function resultFor(event: SportEvent, team: string): FormResult | null {
   const side = event.participants.findIndex((participant) => participant.name.toLowerCase() === team.toLowerCase())
-  if (side === -1 || event.status !== "finished") return null
-  const { score } = event
-  if (score.kind === "innings") return score.winner ? (score.winner === event.participants[side].name ? "win" : "loss") : null
-  if (score.kind !== "team") return null
-  const [own, other] = side === 0 ? [score.home, score.away] : [score.away, score.home]
-  if (own !== other) return own > other ? "win" : "loss"
-  // Level after a shootout means the source did not say who won it.
-  if (event.conclusion !== "penalties" && event.conclusion !== "shootout") return "draw"
-  if (!event.shootout) return null
-  const [ownKicks, otherKicks] = side === 0 ? [event.shootout.home, event.shootout.away] : [event.shootout.away, event.shootout.home]
-  return ownKicks === otherKicks ? null : ownKicks > otherKicks ? "win" : "loss"
+  if (side === -1) return null
+  const decided = decidedSide(event)
+  if (!decided) return null
+  return decided.winner === null ? "draw" : decided.winner === side ? "win" : "loss"
 }
 
 /** Most recent first. Given a match, only games before it, so an old match page shows the form it had then. */

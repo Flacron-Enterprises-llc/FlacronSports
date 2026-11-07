@@ -10,19 +10,21 @@ import { authFetch } from "@/lib/auth-fetch"
 import { useLocale } from "@/lib/use-locale"
 import type { MatchViewing } from "@/lib/video/catalog"
 import { BroadcastGroups } from "@/components/video/broadcast-groups"
+import { ClipPlayer } from "@/components/video/clip-player"
 import { HighlightPlayer } from "@/components/video/highlight-player"
 
 type TabId = "overview" | "updates" | "statistics" | "participants" | "chat"
 
-export function MatchTabs({ overview, updates, statistics, participants, chat }: { overview: React.ReactNode; updates: React.ReactNode; statistics: React.ReactNode; participants: React.ReactNode; chat?: React.ReactNode }) {
+/** A tab left out is one this sport's source never fills, so it is not offered at all. */
+export function MatchTabs({ overview, updates, statistics, participants, chat }: { overview: React.ReactNode; updates?: React.ReactNode; statistics?: React.ReactNode; participants: React.ReactNode; chat?: React.ReactNode }) {
   const { t } = useLocale()
   // A link to a game from the predictions page opens where the pick is made.
   const [tab, setTab] = useState<TabId>(useSearchParams()?.get("tab") === "chat" && chat ? "chat" : "overview")
   const icon = "size-4"
   const tabs = [
     { value: "overview" as const, label: t.match.overview, icon: <LayoutList aria-hidden className={icon} /> },
-    { value: "updates" as const, label: t.match.liveUpdates, icon: <ListChecks aria-hidden className={icon} /> },
-    { value: "statistics" as const, label: t.match.statistics, icon: <Activity aria-hidden className={icon} /> },
+    ...(updates ? [{ value: "updates" as const, label: t.match.liveUpdates, icon: <ListChecks aria-hidden className={icon} /> }] : []),
+    ...(statistics ? [{ value: "statistics" as const, label: t.match.statistics, icon: <Activity aria-hidden className={icon} /> }] : []),
     { value: "participants" as const, label: t.match.participants, icon: <Users aria-hidden className={icon} /> },
     ...(chat ? [{ value: "chat" as const, label: t.match.chat, icon: <MessagesSquare aria-hidden className={icon} /> }] : []),
   ]
@@ -80,10 +82,15 @@ export function MatchPlayer({ title }: { title: string }) {
   const { prefs } = usePreferences()
   const { matchId, result, state, check } = useViewing()
 
-  if (result?.video) {
+  const clips = result?.clips ?? []
+  const clipLead = clips.find((clip) => clip.kind === "live") ?? clips.find((clip) => clip.kind === "highlight") ?? clips.find((clip) => clip.kind === "goal")
+  if (result?.video || clipLead) {
     return (
       <section aria-label={t.match.viewing} className="fs-rise mt-3 overflow-hidden rounded-xl border border-line bg-surface shadow-[var(--shadow-sm)]">
-        <div className="mx-auto max-w-3xl p-3"><HighlightPlayer matchId={matchId} title={title} channel={result.video.channel} /></div>
+        <div className="mx-auto max-w-3xl space-y-4 p-3">
+          {clipLead && <ClipPlayer leadId={clipLead.id} videos={clips} title={title} thumbnailUrl={result?.clipThumbnail} />}
+          {result?.video && <HighlightPlayer matchId={matchId} title={title} channel={result.video.channel} />}
+        </div>
       </section>
     )
   }
@@ -103,6 +110,8 @@ export function ViewingPanel() {
 
   const official = result?.options.find((option) => option.action === "official_broadcaster" && option.url)
   const following = result?.options.some((option) => option.action === "follow_live")
+  const clips = (result?.clips ?? []).filter((clip) => clip.kind !== "match")
+  const streaming = clips.some((clip) => clip.kind === "live")
 
   return (
     <Panel title={t.match.viewing} icon={<PlayCircle aria-hidden />}>
@@ -111,9 +120,11 @@ export function ViewingPanel() {
       {state === "idle" && !result && prefs.lowData && <p className="text-sm leading-6 text-ink-2">{t.ui.lowDataVideo}</p>}
       {state === "idle" && result && (
         <div className="space-y-3">
-          {result.video && <p className="text-sm leading-6 text-ink-2">{t.match.videoAtTop}</p>}
+          {streaming && <p className="flex items-center gap-2 text-sm font-semibold text-ink"><Radio aria-hidden className="size-4 text-live" /> {t.watch.liveStream}</p>}
+          {streaming && <p className="text-sm leading-6 text-ink-2">{t.watch.streamAtTop} {t.watch.streamNote}</p>}
+          {(result.video || clips.some((clip) => clip.kind !== "live")) && <p className="text-sm leading-6 text-ink-2">{t.match.videoAtTop}</p>}
           {result.broadcasts.length > 0 && <BroadcastGroups broadcasts={result.broadcasts} viewerCountryCode={result.viewerCountry} />}
-          {!official && !result.video && result.broadcasts.length === 0 && <p className="text-sm leading-6 text-ink-2">{t.match.noVideo}</p>}
+          {!official && !result.video && clips.length === 0 && result.broadcasts.length === 0 && <p className="text-sm leading-6 text-ink-2">{t.match.noVideo}</p>}
           {official?.url && <a href={official.url} rel="noreferrer" target="_blank" className={btn("navy")}><ExternalLink aria-hidden className="size-4" /> {t.ui.officialBroadcaster}<span className="sr-only"> {t.footer.newTab}</span></a>}
           {following && <p className="flex items-center gap-2 text-sm font-semibold text-ink"><Radio aria-hidden className="size-4 text-live" /> {t.match.followLive}</p>}
         </div>

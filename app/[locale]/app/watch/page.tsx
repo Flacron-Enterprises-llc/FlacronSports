@@ -9,7 +9,7 @@ import { EventCard } from "@/components/sports/event-card"
 import { FilterSelect } from "@/components/sports/filter-select"
 import { LocalTime } from "@/components/sports/parts"
 import { NextGameLine } from "@/components/video/next-game"
-import { ClipGrid, HighlightGrid, ListingList } from "@/components/video/watch-lists"
+import { ClipGrid, HighlightGrid, ListingList, StreamGrid } from "@/components/video/watch-lists"
 import { pageContext, titled, type LocaleParams } from "@/lib/page-context"
 import { enabledSports } from "@/lib/sports/service"
 import { cn } from "@/lib/utils"
@@ -46,7 +46,8 @@ export default async function WatchPage({ params, searchParams }: LocaleParams &
   const country = viewerCountry((await headers()).get("cloudfront-viewer-country"))
   const broadcasts = [...feed.broadcasts].sort((a, b) => Number(b.country === country) - Number(a.country === country))
   const clips = feed.clips ?? []
-  const playable = feed.highlights.length + clips.length
+  const streams = feed.streams ?? []
+  const playable = feed.highlights.length + clips.length + streams.length
   const nothing = playable + (watchable ? 0 : feed.live.length + feed.broadcasts.length) === 0
   const filtered = Boolean(q || watchable || Object.keys(choice).length > 0)
   const [liveTitle, upcomingTitle, highlightsTitle] = t.watch.sections
@@ -64,6 +65,19 @@ export default async function WatchPage({ params, searchParams }: LocaleParams &
     const items = feed.highlights.filter((highlight) => highlight.sportId === item.id)
     return items.length > 0 ? [{ id: item.id, name: item.name[locale], items }] : []
   }) : []
+  const livePanel = (
+    <Panel flush title={labels.live} icon={<Radio aria-hidden />} description={t.watch.liveNote}>
+      {streams.length > 0 && (
+        <div className="px-4 py-3.5 sm:px-5">
+          <StreamGrid streams={streams} href={href} label={t.watch.liveStream} />
+          <p className="mt-3 text-[13px] leading-5 text-ink-2">{t.watch.streamNote}</p>
+        </div>
+      )}
+      {watchable ? null : feed.live.length === 0 ? (streams.length === 0 && <p className="px-4 py-3.5 text-sm text-ink-2 sm:px-5">{sport ? named(t.watch.noSportLive) : t.watch.noLive}</p>) : (
+        <div className="fs-rows fs-rows-2 fs-settle">{feed.live.map((event) => <EventCard key={event.id} event={event} t={t} href={href} layout="row" showCompetition />)}</div>
+      )}
+    </Panel>
+  )
 
   return (
     <AppPage>
@@ -114,7 +128,15 @@ export default async function WatchPage({ params, searchParams }: LocaleParams &
           ? <EmptyState className="mt-5" icon={<PlayCircle aria-hidden />} title={named(t.watch.noSportVideo)} body={named(t.watch.noSportVideoBody)} action={{ href: href(`/app/scores?sport=${sport}`), label: t.watch.cta }}><NextGameLine game={feed.nextGame} none={named(t.watch.noNextGame)} t={t} locale={locale} href={href} /></EmptyState>
           : <EmptyState className="mt-5" icon={<PlayCircle aria-hidden />} title={t.watch.empty} body={t.watch.emptyBody} action={{ href: href("/app/scores"), label: t.watch.cta }} />)}
 
-      {(!failed || playable > 0) && !(nothing && sport) && <section aria-labelledby="watch-highlights" className="mt-6">
+      {streams.length > 0 && <div className="mt-6">{livePanel}</div>}
+
+      {clips.length > 0 && <section aria-labelledby="watch-clips" className="mt-6">
+        <SectionHeading title={<span id="watch-clips">{t.watch.clips}</span>} icon={<Film aria-hidden className="size-[18px]" />} action={!sport ? <Link href={link("football")} className="inline-flex min-h-10 items-center gap-1 text-sm font-semibold text-hot-text hover:underline sm:min-h-8">{t.dash.viewAll}<ArrowRight aria-hidden className="size-3.5" /></Link> : undefined} />
+        <p className="text-[13px] leading-5 text-ink-2">{t.watch.clipsNote}</p>
+        <ClipGrid clips={clips} href={href} moreLabel={t.watch.moreClips} />
+      </section>}
+
+      {(!failed || playable > 0) && !(nothing && sport) && !(feed.highlights.length === 0 && clips.length > 0) && <section aria-labelledby="watch-highlights" className="mt-7">
         <h2 id="watch-highlights" className={cn("flex items-center gap-2 text-[17px] font-semibold text-ink", bySport.length > 1 && "sr-only")}><Clapperboard aria-hidden className="size-[18px] text-brand" /> {labels.highlights}</h2>
         {feed.highlights.length > 0 ? (
           sport || bySport.length <= 1 ? <HighlightGrid highlights={feed.highlights} href={href} /> : (
@@ -128,26 +150,15 @@ export default async function WatchPage({ params, searchParams }: LocaleParams &
             </div>
           )
         ) : (
-          clips.length === 0 && (
-            <div className="mt-2">
-              <p className="text-sm text-ink-2">{sport ? named(t.watch.noSportHighlights) : t.watch.noHighlights}</p>
-              {sport && !filtered && <NextGameLine game={feed.nextGame} none={named(t.watch.noNextGame)} t={t} locale={locale} href={href} />}
-            </div>
-          )
+          <div className="mt-2">
+            <p className="text-sm text-ink-2">{sport ? named(t.watch.noSportHighlights) : t.watch.noHighlights}</p>
+            {sport && !filtered && <NextGameLine game={feed.nextGame} none={named(t.watch.noNextGame)} t={t} locale={locale} href={href} />}
+          </div>
         )}
       </section>}
 
-      {clips.length > 0 && <section aria-labelledby="watch-clips" className="mt-7">
-        <h2 id="watch-clips" className="flex items-center gap-2 text-[17px] font-semibold text-ink"><Film aria-hidden className="size-[18px] text-brand" /> {t.watch.clips}</h2>
-        <ClipGrid clips={clips} />
-      </section>}
-
       {!failed && !watchable && !(nothing && sport) && <div className="mt-7 space-y-7">
-        <Panel flush title={labels.live} icon={<Radio aria-hidden />} description={t.watch.liveNote}>
-          {feed.live.length === 0 ? <p className="px-4 py-3.5 text-sm text-ink-2 sm:px-5">{sport ? named(t.watch.noSportLive) : t.watch.noLive}</p> : (
-            <div className="fs-rows fs-rows-2 fs-settle">{feed.live.map((event) => <EventCard key={event.id} event={event} t={t} href={href} layout="row" showCompetition />)}</div>
-          )}
-        </Panel>
+        {streams.length === 0 && livePanel}
         <section aria-labelledby="watch-listings">
           <h2 id="watch-listings" className="flex items-center gap-2 text-[17px] font-semibold text-ink"><CalendarClock aria-hidden className="size-[18px] text-brand" /> {labels.listings}</h2>
           <p className="mb-3 mt-0.5 text-[13px] leading-5 text-ink-2">{t.watch.listingsNote}</p>

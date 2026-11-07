@@ -109,7 +109,7 @@ function AnswerBody({ answer }: { answer: AssistantAnswer }) {
             </tbody>
           </table>
           </div>
-          <Link href={href(`/app/standings/${answer.table.leagueId}`)} className="mt-2 inline-block text-sm font-semibold text-hot-text hover:underline">{t.assistant.fullTable.replace("{total}", String(answer.table.total))}</Link>
+          <Link href={href(`/app/${answer.table.racing ? "league" : "standings"}/${answer.table.leagueId}`)} className="mt-2 inline-block text-sm font-semibold text-hot-text hover:underline">{t.assistant.fullTable.replace("{total}", String(answer.table.total))}</Link>
         </SpoilerGuard>
       )}
       {answer.notes.map((note) => <p key={note} className="mt-2 text-sm text-ink-2">{note}</p>)}

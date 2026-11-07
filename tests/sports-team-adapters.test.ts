@@ -248,7 +248,8 @@ describe("live states", () => {
     expect(currentPeriod("Q2", "basketball", "NCAA Division I Basketball Womens")).toEqual({ key: "quarter", number: 2 })
   })
   it("leaves football's status wording alone", () => {
-    expect(livePhase(live("football", "2H"), en)).toBeNull()
+    expect(livePhase({ ...live("football", "2H"), clock: "71" }, en)).toBeNull()
+    expect(livePhase(live("football", "2H"), en)).toBe("2nd half")
     expect(currentPeriod("2H")).toEqual({ key: "second-half" })
   })
   it("reads volleyball sets, shootouts, awarded and interrupted games", () => {

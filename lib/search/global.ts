@@ -56,7 +56,7 @@ export async function globalSearch(query: string, locale: Locale, sport?: SportI
   const [feed, catalogue, teams, players, reports] = await Promise.allSettled([
     getEvents({ sport }),
     allCompetitions(),
-    named ? searchTeams(needle) : Promise.resolve([]),
+    named ? searchTeams(needle, sport) : Promise.resolve([]),
     named ? searchPlayers(needle) : Promise.resolve([]),
     named ? listPublishedReports(locale) : Promise.resolve({ state: "ok" as const, reports: [] }),
   ])

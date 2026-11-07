@@ -10,6 +10,7 @@ import { LocalTime, SpoilerGuard } from "@/components/sports/parts"
 import { authFetch } from "@/lib/auth-fetch"
 import { hasPlusFeatures } from "@/lib/billing/plans"
 import type { FullReport } from "@/lib/content/full-report"
+import { labelStats } from "@/lib/sports/detail"
 import { useLocale } from "@/lib/use-locale"
 
 /** The report beyond the basic line. The server decides how much a plan receives. */
@@ -43,6 +44,7 @@ export function FullReportSection({ slug }: { slug: string }) {
   if (failed) return <div className="mt-6"><ErrorNotice onRetry={load}>{t.fullReport.failed}</ErrorNotice></div>
   if (!report) return <div role="status" aria-label={t.ui.loading} className="mt-6 space-y-2"><Skeleton className="h-4 w-3/4" /><Skeleton className="h-4 w-1/2" /></div>
   if (report.state === "empty") return <p className="mt-6 text-sm leading-6 text-ink-2">{t.fullReport.empty}</p>
+  const stats = labelStats(report.stats ?? [], t.match.stats, locale)
 
   return (
     <div className="mt-6 border-t border-line pt-5">
@@ -71,11 +73,11 @@ export function FullReportSection({ slug }: { slug: string }) {
             </ul>
           </section>
         )}
-        {report.stats && report.stats.length > 0 && (
+        {stats.length > 0 && (
           <dl className="mt-5 grid grid-cols-[1fr_auto_auto] gap-x-5 gap-y-1.5 text-sm">
-            {report.stats.map((row) => (
+            {stats.map((row) => (
               <div key={row.key} className="col-span-3 grid grid-cols-subgrid">
-                <dt className="text-ink-2">{(t.match.stats as Record<string, string>)[row.key]}</dt>
+                <dt className="text-ink-2">{row.label}</dt>
                 <dd className="tabular font-semibold text-ink">{row.home}</dd>
                 <dd className="tabular font-semibold text-ink">{row.away}</dd>
               </div>

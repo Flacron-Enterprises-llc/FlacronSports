@@ -55,7 +55,7 @@ describe("cricket side names", () => {
     ["S Paschim", ["Sudurpaschim Royals", "Chitwan Rhinos"], 0], ["Gallants", ["Colombo Kaps", "Galle Marvels"], 1], ["Rawalpindiz", ["Pindiz", "Islamabad United"], 0], ["Scorchers XI", ["Guyana Amazon Warriors", "Perth Scorchers"], 1],
   ])("matches %s", (said, list, index) => expect(matchSide(said, list as string[])).toBe(index))
   it("refuses to guess between two that fit", () => expect(matchSide("Stars", ["Melbourne Stars", "Sydney Stars"])).toBeNull())
-  it("refuses a name that fits neither", () => expect(matchSide("Warwickshire", ["Northants Steelbacks", "Birmingham Bears"])).toBeNull())
+  it("refuses a name that fits neither", () => expect(matchSide("Worcestershire", ["Northants Steelbacks", "Birmingham Bears"])).toBeNull())
 })
 
 describe("cricket result text", () => {
@@ -332,8 +332,10 @@ describe("motorsport results endpoint", () => {
       out: [{ name: "Dan Moss", team: null, status: "DNF", note: null }],
     })
   })
-  it("reads a rally's total times, leaving a broken order out of the places", () => {
-    expect(raceFromRows([{ strPlayer: "A", intPosition: "1", strDetail: "03:24:57.0" }, { strPlayer: "B", intPosition: "2", strDetail: "03:25:54.6" }, { strPlayer: "C", intPosition: "3", strDetail: "03:26:34.4" }, { strPlayer: "D", intPosition: "22", strDetail: "04:12:25.5" }])).toMatchObject({ entries: [{}, {}, {}], out: [{ name: "D", status: null, note: "04:12:25.5" }] })
+  it("reads a rally's total times, keeping each row's own stated place across a gap", () => {
+    const race = raceFromRows([{ strPlayer: "A", intPosition: "1", strDetail: "03:24:57.0" }, { strPlayer: "B", intPosition: "2", strDetail: "03:25:54.6" }, { strPlayer: "C", intPosition: "3", strDetail: "03:26:34.4" }, { strPlayer: "D", intPosition: "22", strDetail: "04:12:25.5" }])
+    expect(race?.entries.map((entry) => [entry.position, entry.name])).toEqual([[1, "A"], [2, "B"], [3, "C"], [22, "D"]])
+    expect(race?.out).toBeUndefined()
   })
   it("adds player records to a pasted table without losing its teams", () => {
     const event = normalizeEvent(raceRow({ strResult: "1\t/Ari Stone\t/Alpha\t/1:00.000\r\n2\t/Ben Ash\t/Beta\t/+1.0\r\n3\t/Cal Reed\t/Gamma\t/+2.0", resultRows: rows }), "motorsport", NOW)
@@ -370,7 +372,7 @@ describe("combat cards", () => {
     expect(bouts[0]).toMatchObject({ winner: "Tom Vale", method: "tko", round: 2, time: "4:54", section: "main", weightClass: "Featherweight" })
     expect(bouts[1]).toMatchObject({ method: "unanimous-decision", scorecards: "48-47, 48-47, 48-47" })
     expect(bouts[2]).toMatchObject({ section: "preliminary", weightClass: "Catchweight (148 lb)", method: "split-decision" })
-    expect(event.score).toMatchObject({ kind: "combat", winner: "Vale", method: "tko", round: 2 })
+    expect(event.score).toMatchObject({ kind: "combat", winner: "Tom Vale", method: "tko", round: 2 })
   })
   it("never lists the winner first in a bout's names", () => {
     const { bouts } = fight({ strResult: CARD }).details as { bouts: { names: string[] }[] }
@@ -395,16 +397,17 @@ describe("combat cards", () => {
     ["Tom Vale def. Sam Rook - TKO (slam), R5 1:38 (Main Event)", "Tom Vale", "tko", 5, "1:38", null],
     ["Lightweight: Tom Vale def. Sam Rook - R1 TKO (slam), 1:01 - UFC contract awarded", "Tom Vale", "tko", 1, "1:01", "Lightweight"],
     ["Tom Vale def. Sam Rook - Unanimous Decision (49-46 x3), 5 rounds (Main Event)", "Tom Vale", "unanimous-decision", null, null, null],
-    ["Main event: Tom Vale def. Sam Rook by KO (standing punches), Round 3 at 0:40 (bantamweight title bout).", "Tom Vale", "ko", 3, "0:40", null],
-    ["Main event: Tom Vale def. Sam Rook by unanimous decision (49-46, 49-46, 48-47), bantamweight title.", "Tom Vale", "unanimous-decision", null, null, null],
+    ["Main event: Tom Vale def. Sam Rook by KO (standing punches), Round 3 at 0:40 (bantamweight title bout).", "Tom Vale", "ko", 3, "0:40", "Bantamweight"],
+    ["Main event: Tom Vale def. Sam Rook by unanimous decision (49-46, 49-46, 48-47), bantamweight title.", "Tom Vale", "unanimous-decision", null, null, "Bantamweight"],
   ])("reads a results list row: %s", (row, winner, method, round, time, weightClass) => {
     const event = fight({ strEvent: "Harbor 211 Harbor City", strResult: `Harbor 211: Harbor City - Full Card Results\r\n${row}\r\nAri Stone def. Ben Ash - Submission (D'Arce choke), R1 1:02` })
     expect((event.details as { bouts: { winner: string }[] }).bouts[0]).toMatchObject({ winner, method, round, time, weightClass })
     expect(event.status).toBe("finished")
   })
-  it("reads a card with a table but no headliners in its title", () => {
+  it("reads a card with a table but no headliners in its title, led by its top bout", () => {
     const event = fight({ strLeague: "ONE", strEvent: "ONE Fight Night 49", strResult: CARD })
-    expect(event).toMatchObject({ status: "finished", participants: [], eventName: "ONE Fight Night 49" })
+    expect(event).toMatchObject({ status: "finished", eventName: "ONE Fight Night 49", score: { kind: "combat", winner: "Tom Vale" } })
+    expect(event.participants.map((item) => item.name)).toEqual(["Sam Rook", "Tom Vale"])
     expect((event.details as { bouts: unknown[] }).bouts).toHaveLength(3)
   })
 })
@@ -433,7 +436,7 @@ describe("single bouts", () => {
   })
   it("takes a place out of a headliner's name when the preview says so", () => {
     const event = fight({ strLeague: "BKFC", strEvent: "BKFC 96 Harbor Rook vs Vale", strStatus: "", strDescriptionEN: "Sean Rook faces Leigh Vale in Harbor.", strTimestamp: "2026-12-01T20:00:00", dateEvent: "2026-12-01" })
-    expect(event.participants.map((item) => item.name)).toEqual(["Rook", "Vale"])
+    expect(event.participants.map((item) => item.name)).toEqual(["Sean Rook", "Leigh Vale"])
   })
   it("gives up on a sentence that names neither outcome", () => {
     expect(parseCombatResult("A thrilling night in Harbor for all involved.", ["Tom Vale", "Sam Rook"])).toBeNull()
@@ -458,8 +461,8 @@ describe("combat results endpoint", () => {
     expect(boutsFromRows([...rows, { strPlayer: "Sam Rook", intPosition: "3", strDetail: "WIN" }, { strPlayer: "Tom Vale", intPosition: "3", strDetail: "LOSS" }]).map((bout) => bout.winner)).toEqual(["Ari Stone"])
   })
   it("fills an event with no text, and never overrules text that exists", () => {
-    expect(fight({ resultRows: rows })).toMatchObject({ status: "finished", score: { kind: "combat", winner: "Vale", method: null } })
-    expect(fight({ resultRows: rows, strResult: "Sam Rook dethroned Tom Vale by unanimous decision." }).score).toMatchObject({ winner: "Rook" })
+    expect(fight({ resultRows: rows })).toMatchObject({ status: "finished", score: { kind: "combat", winner: "Tom Vale", method: null } })
+    expect(fight({ resultRows: rows, strResult: "Sam Rook dethroned Tom Vale by unanimous decision." }).score).toMatchObject({ winner: "Sam Rook" })
   })
 })
 

@@ -4,11 +4,15 @@ import { ApiError } from "@/lib/api-auth"
 import { getAdminDb } from "@/lib/firebase-admin"
 import { memberFetch, MemberAccessRequired } from "@/lib/member-fetch"
 import { countMetric } from "@/lib/ops/metrics"
-import { hockeyPeriods } from "./adapters/ice-hockey"
+import { cricketFormat, multiDayLength } from "./adapters/cricket"
+import { footballHalves, legAggregate, mayHaveLegs } from "./adapters/football"
+import { hockeyCardTimeline, hockeyPeriods, hockeyTimelineShort } from "./adapters/ice-hockey"
 import { Breaker, CircuitOpenError, type BreakerStatus } from "./breaker"
 import { calculatesTable, calculateTable, canHaveTable, type CalculatedTable, type CalculatedUnit } from "./calculated"
-import { activeLeagues, chooseLeagues, dayPath, fileRows, indexPath, LEAGUE_COLLECTED, leaguePaths, mergeRows, nextDates, RESULT_CALLS, RESULT_SPORTS, resultsWanted, type CollectIndex, type CollectLeague, type GameDate } from "./collect"
+import { entrantsOf, INDIVIDUAL_SPORTS } from "./entrants"
+import { activeLeagues, CALLS_PER_TICK, chooseLeagues, dayPath, fileRows, indexPath, LEAGUE_COLLECTED, leaguePaths, mergeRows, nextDates, RESULT_CALLS, RESULT_SPORTS, resultsWanted, WINDOW_PAST_DAYS, type CollectIndex, type CollectLeague, type GameDate } from "./collect"
 import { coverageRules, eventAllowed, sportAllowed } from "./coverage"
+import { CRICKET_KINDS } from "./score-filters"
 import { normalizeLineups, normalizeStats, normalizeTimeline, type MatchDetail, type RawLineup, type RawStat, type RawTimeline } from "./detail"
 import { advancedPlayer, isPlayerId, normalizeMoves, normalizePlayer, type PlayerAdvanced, type PlayerMove, type PlayerProfile, type RawFormerTeam, type RawPlayer } from "./player"
 import { CUP_COMPETITIONS, knockoutRounds, previousSeason, RACE_SERIES, raceWeekends, type KnockoutRound, type RaceWeekend, type SeasonView } from "./seasons"
@@ -33,6 +37,7 @@ const SNAPSHOT_FRESH_MS = 45 * 60_000
 const CALENDAR_FRESH_MS = 2 * 3_600_000
 const REVALIDATE_SECONDS = 120
 const LIVE_BASE = "https://www.thesportsdb.com/api/v2/json"
+const V2_PATH = "v2/"
 const LIVE_FRESH_MS = 60_000
 const LIVE_LIMIT_MS = 5 * 60_000
 const LIVE_TIMEOUT_MS = 4000
@@ -114,9 +119,11 @@ async function request<T>(path: string, background = false): Promise<T> {
     countMetric("feed_calls")
     // Our own memory and snapshot caches do this job. Next's data cache would also log the
     // full URL, key included, whenever a busy day is too big for it.
-    const response = await fetch(`${BASE}/${apiKey().key}/${path}`, {
+    const second = path.startsWith(V2_PATH)
+    const response = await fetch(second ? `${LIVE_BASE}/${path.slice(V2_PATH.length)}` : `${BASE}/${apiKey().key}/${path}`, {
       cache: "no-store",
       signal: AbortSignal.timeout(TIMEOUT_MS),
+      ...(second ? { headers: { "X-API-KEY": apiKey().key } } : {}),
     }).catch((error: unknown) => {
       noteResult(feedBreaker, "feed", null)
       throw error
@@ -240,13 +247,14 @@ async function eventsForSport(sport: SportDefinition, date: string, refresh = fa
   const collected = await collectedDay(sport, date)
   // Far ahead the league lists are all there is, and asking the day feed would spend a call per visit.
   if (LEAGUE_COLLECTED.has(sport.id) && Math.abs(Date.parse(date) - Date.parse(utcDate())) > DAY_FEED_DAYS * 86_400_000) return { events: rowsToEvents(collected, sport, live), stale: false }
+  const running = await runningOn(sport, date, live).catch(() => [])
   try {
     const { data, stale } = await load<{ events: RawEvent[] | null }>(`eventsday.php?${query}`, refresh, nearToday ? SNAPSHOT_FRESH_MS : CALENDAR_FRESH_MS, storedOnly)
     // The sport is rechecked per record, so a stray row can never be filed under the wrong sport.
-    return { events: rowsToEvents(mergeRows(collected, data.events), sport, live), stale }
+    return { events: [...rowsToEvents(mergeRows(collected, data.events), sport, live), ...running], stale }
   } catch (error) {
     if (collected.length === 0) throw error
-    return { events: rowsToEvents(collected, sport, live), stale: true }
+    return { events: [...rowsToEvents(collected, sport, live), ...running], stale: true }
   }
 }
 
@@ -255,6 +263,8 @@ function rowsToEvents(rows: RawEvent[] | null | undefined, sport: SportDefinitio
 }
 
 interface RawLive {
+  strHomeTeam?: string | null
+  strAwayTeam?: string | null
   idEvent?: string | null
   intHomeScore?: string | number | null
   intAwayScore?: string | number | null
@@ -303,15 +313,26 @@ async function liveRows(): Promise<LiveRows> {
   return Date.now() - liveScores.at < LIVE_LIMIT_MS ? liveScores.rows : NO_LIVE
 }
 
-function withLive(raw: RawEvent, live: LiveRows): RawEvent {
+/** The live feed's row for a game, when it says more than the stored one. */
+function liveRowFor(raw: RawEvent, live: LiveRows): (RawLive & { strStatus: string }) | null {
   const row = live.get(raw.idEvent)
   const status = row?.strStatus?.trim()
-  if (!row || !status || status === "NS" || (raw.strSport && NO_LIVE_OVERLAY.has(raw.strSport))) return raw
+  return !row || !status || status === "NS" || (raw.strSport && NO_LIVE_OVERLAY.has(raw.strSport)) ? null : { ...row, strStatus: status }
+}
+
+function withLive(raw: RawEvent, live: LiveRows): RawEvent {
+  const row = liveRowFor(raw, live)
+  if (!row) return raw
+  const status = row.strStatus
+  // The live feed names its sides, so its scores are placed by name, never by a title's order.
+  const flipped = Boolean(row.strHomeTeam && row.strAwayTeam) && row.strHomeTeam === raw.strAwayTeam && row.strAwayTeam === raw.strHomeTeam
+  const [home, away] = flipped ? [row.intAwayScore, row.intHomeScore] : [row.intHomeScore, row.intAwayScore]
   return {
     ...raw,
+    fromLive: true,
     strStatus: status,
-    intHomeScore: row.intHomeScore ?? raw.intHomeScore,
-    intAwayScore: row.intAwayScore ?? raw.intAwayScore,
+    intHomeScore: home ?? raw.intHomeScore,
+    intAwayScore: away ?? raw.intAwayScore,
     strProgress: row.strProgress === null || row.strProgress === undefined ? null : String(row.strProgress),
   }
 }
@@ -413,6 +434,8 @@ export async function collectLeagueEvents(tickMs: number, now: Date = new Date()
       // Nothing gets through while the breaker is open, and each try would only hold the job up.
       if (feedBreaker.status().state === "open") stopped = true
       if (stopped) break
+      // A tennis tour adds a day read, so the count is checked per call, not per league.
+      if (calls >= CALLS_PER_TICK - RESULT_CALLS) break
       calls += 1
       const found = await load<{ events?: RawEvent[] | null }>(path, true).catch(() => null)
       if (found && !found.stale) rows.set(league.sportId, [...(rows.get(league.sportId) ?? []), ...(found.data.events ?? [])])
@@ -436,7 +459,8 @@ export async function collectLeagueEvents(tickMs: number, now: Date = new Date()
 async function collectResults(sports: SportDefinition[], now: Date): Promise<number> {
   let calls = 0
   for (const sport of sports.filter((item) => RESULT_SPORTS.has(item.id))) {
-    for (const offset of [0, 1, 2]) {
+    // A week back, so a session the source fills days late is still collected.
+    for (const offset of [0, 1, 2, 3, 4, 5, 6]) {
       const path = dayPath(sport, utcDate(new Date(now.getTime() - offset * 86_400_000)))
       const rows = await collectStore.readDay(path)
       const wanted = new Map(resultsWanted(rows, now).slice(0, Math.max(0, RESULT_CALLS - calls)).map((raw) => [raw.idEvent, raw]))
@@ -475,6 +499,28 @@ async function nextGameDates(sport: SportDefinition, date: string): Promise<Game
   const days = Array.from({ length: STORED_DAYS_AHEAD }, (_, offset) => utcDate(new Date(Date.parse(`${after}T12:00:00Z`) + (offset + 1) * 86_400_000)))
   const found = await Promise.all(days.map(async (day) => ({ date: day, games: rowsToEvents((await peek<{ events: RawEvent[] | null }>(`eventsday.php?${new URLSearchParams({ d: day, s: sport.providerKey as string })}`))?.events, sport).length })))
   return found.filter((item) => item.games > 0).slice(0, NEXT_DATES)
+}
+
+/** Cricket's next dates per format. The stored index knows a game's league, and a league has one format. */
+async function nextCricketDates(sport: SportDefinition, date: string): Promise<Record<string, GameDate[]>> {
+  const names = new Map((await allCompetitions()).map((item) => [item.id, item.name]))
+  const index = await storedIndex(sport)
+  const after = date >= utcDate() ? date : utcDate(new Date(Date.now() - 86_400_000))
+  return Object.fromEntries(CRICKET_KINDS.map((kind) => [kind, nextDates(index, after, NEXT_DATES, (league) => cricketFormat(names.get(league)) === kind)]))
+}
+
+/** A Test runs for days and the source files it under its first. Unfinished ones show on each day they are due. */
+export function ongoingMatches(rows: RawEvent[], offset: number): RawEvent[] {
+  return rows.filter((raw) => {
+    const days = multiDayLength(raw.strLeague)
+    return days !== null && offset < days && !raw.strResult?.trim() && !["FT", "AOT", "CANC", "POST", "ABD"].includes(raw.strStatus ?? "")
+  })
+}
+
+async function runningOn(sport: SportDefinition, date: string, live: LiveRows): Promise<SportEvent[]> {
+  if (sport.id !== "cricket") return []
+  const days = await Promise.all([1, 2, 3, 4].map(async (offset) => ({ offset, rows: await collectedDay(sport, utcDate(new Date(Date.parse(`${date}T12:00:00Z`) - offset * 86_400_000))) })))
+  return days.flatMap(({ offset, rows }) => rowsToEvents(ongoingMatches(rows, offset), sport, live).filter((event) => event.status !== "finished" && event.status !== "abandoned" && event.status !== "canceled").map((event) => (event.details?.kind === "cricket" ? { ...event, details: { ...event.details, matchDay: offset + 1 } } : event)))
 }
 
 /** The next dates a sport has games, for pages that name what comes next. */
@@ -568,10 +614,18 @@ async function buildEvents(options: { date?: string; sport?: SportId; refresh?: 
     .flatMap((result) => result.events)
     .filter((event) => eventAllowed(rules, event) && !seen.has(event.id) && seen.add(event.id))
     .sort((a, b) => (a.scheduledStartUTC ?? "").localeCompare(b.scheduledStartUTC ?? ""))
+  await withHockeyPeriods(events, Boolean(options.refresh))
 
   const complete = succeeded.length === sports.length && succeeded.every((result) => !result.stale)
   const chosen = options.sport && !options.refresh && !events.some((event) => event.status === "scheduled") ? sports.find((sport) => sport.id === options.sport) : undefined
-  return { ...base, state: complete ? "ok" : "stale", events, ...(chosen ? { nextDates: await nextGameDates(chosen, date).catch(() => []) } : {}) }
+  const cricket = options.sport === "cricket" && !options.refresh ? sports[0] : undefined
+  return {
+    ...base,
+    state: complete ? "ok" : "stale",
+    events,
+    ...(chosen ? { nextDates: await nextGameDates(chosen, date).catch(() => []) } : {}),
+    ...(cricket ? { nextByKind: await nextCricketDates(cricket, date).catch(() => ({})) } : {}),
+  }
 }
 
 /** A rate-limited lookup can still be answered from a daily feed already in memory. */
@@ -599,6 +653,36 @@ async function lookupRaw(providerId: string): Promise<{ raw: RawEvent; at: numbe
   }
 }
 
+const MOVING_FRESH_MS = 90_000
+
+function stillMoving({ status, scheduledStartUTC }: Pick<SportEvent, "status" | "scheduledStartUTC">): boolean {
+  if (status === "scheduled") return scheduledStartUTC !== null && Date.parse(scheduledStartUTC) <= Date.now()
+  return status === "live" || status === "interrupted"
+}
+
+/**
+ * The live feed carries only some running games. The stored row for the rest can be most of
+ * an hour old, far past what a live page accepts, so the page asks the source on the visit.
+ * A failed read keeps the old row and its old time, which is when the page should warn.
+ */
+async function rereadMoving(found: { raw: RawEvent; at: number | null }, sport: SportDefinition, live: LiveRows): Promise<{ raw: RawEvent; at: number | null }> {
+  const { raw, at } = found
+  if (liveRowFor(raw, live) || (at !== null && Date.now() - at < MOVING_FRESH_MS) || !stillMoving(normalizeEvent(raw, sport.id))) return found
+  const path = `lookupevent.php?id=${raw.idEvent}`
+  const fresh = (await loadDetail<{ events: RawEvent[] | null }>(path, MOVING_FRESH_MS).catch(() => null))?.events?.[0]
+  return fresh ? { raw: fresh, at: savedAt.get(path) ?? null } : found
+}
+
+/** Asked only in a cup's knockout rounds, since it reads the whole season. Left out if that read fails. */
+async function withAggregate(event: SportEvent, raw: RawEvent): Promise<SportEvent> {
+  const { id } = event.competition
+  if (event.sportId !== "football" || !id || !raw.strSeason || !mayHaveLegs(raw.intRound) || !CUP_COMPETITIONS.some((cup) => cup.id === id)) return event
+  if (event.score.kind !== "team" || (event.status !== "live" && event.status !== "finished")) return event
+  const found = await seasonRows(id, raw.strSeason).catch(() => null)
+  const aggregate = found && legAggregate({ ...raw, intHomeScore: event.score.home, intAwayScore: event.score.away }, found.rows)
+  return aggregate ? { ...event, aggregate } : event
+}
+
 /** `anyCoverage` is for settlement: switching a competition off must not strand open predictions. */
 export async function getEvent(id: string, options: { anyCoverage?: boolean } = {}): Promise<SportEvent | null> {
   if (process.env.API_ORIGIN) {
@@ -609,13 +693,39 @@ export async function getEvent(id: string, options: { anyCoverage?: boolean } = 
   if (!match) return null
   const found = await lookupRaw(match[1])
   if (!found) return null
-  const { raw, at } = found
-  const sport = enabledSports().find((candidate) => candidate.providerKey === raw.strSport)
-  if (!sport || !isCovered(raw, sport.id)) return null
+  const sport = enabledSports().find((candidate) => candidate.providerKey === found.raw.strSport)
+  if (!sport || !isCovered(found.raw, sport.id)) return null
   const live = await liveRows()
-  const updated = live.has(raw.idEvent) ? Math.max(at ?? 0, liveScores.at) : at
+  const { raw, at } = await rereadMoving(found, sport, live)
+  const updated = liveRowFor(raw, live) ? Math.max(at ?? 0, liveScores.at) : at
   const event = { ...normalizeEvent(withLive(await eventResults(raw, sport), live), sport.id), sourceUpdatedAt: updated ? new Date(updated).toISOString() : null }
-  return options.anyCoverage || eventAllowed(await coverageRules(), event) ? event : null
+  if (!options.anyCoverage && !eventAllowed(await coverageRules(), event)) return null
+  const [scored] = await withHockeyPeriods([event], false)
+  return withAggregate(scored, raw)
+}
+
+const HOCKEY_TIMELINE_DAYS = 2
+/** As far back as Scores opens. */
+const HOCKEY_STORED_DAYS = 31
+
+/**
+ * A hockey game's periods live only in its timeline, one call per game. The scheduled job
+ * asks for recent NHL games, which are the only ones with a timeline; a visit reads what
+ * it stored. Changes the list in place, and returns it.
+ */
+async function withHockeyPeriods(events: SportEvent[], refresh: boolean): Promise<SportEvent[]> {
+  for (const [index, event] of events.entries()) {
+    if (!hockeyCardTimeline(event) || event.breakdown) continue
+    const path = `lookuptimeline.php?id=${event.provider.eventId}`
+    const age = Date.now() - Date.parse(event.scheduledStartUTC ?? "")
+    if (!(age < HOCKEY_STORED_DAYS * 86_400_000)) continue
+    const found = refresh && age < HOCKEY_TIMELINE_DAYS * 86_400_000
+      ? await loadDetail<{ timeline?: RawTimeline[] | null }>(path, DETAIL_FRESH_MS.finished as number).catch(() => null)
+      : ((memory.get(path)?.data ?? (await readSnapshot(path).catch(() => null))?.data) as { timeline?: RawTimeline[] | null } | undefined)
+    const breakdown = hockeyPeriods(found?.timeline, event.score, event.conclusion)
+    if (breakdown) events[index] = { ...event, breakdown }
+  }
+  return events
 }
 
 const DETAIL_FRESH_MS: Partial<Record<SportEvent["status"], number>> = { live: 90_000, finished: 6 * 3_600_000 }
@@ -654,12 +764,14 @@ export async function getMatchDetail(event: SportEvent, onFetch?: () => void): P
     loadDetail<{ lineup?: RawLineup[] | null }>(`lookuplineup.php?id=${id}`, freshMs, onFetch),
   ])
   const value = <T,>(result: PromiseSettledResult<T>): T | null => (result.status === "fulfilled" ? result.value : null)
-  const periods = event.sportId === "ice-hockey" ? hockeyPeriods(value(timeline)?.timeline, event.score, event.conclusion) : null
+  // A game still running has periods to come, which a count of its goals would show as nil.
+  const periods = event.sportId === "ice-hockey" ? (event.status === "finished" ? hockeyPeriods(value(timeline)?.timeline, event.score, event.conclusion) : null) : event.sportId === "football" && event.status === "finished" ? footballHalves(value(timeline)?.timeline, event.score, event.conclusion) : null
   const detail = {
     timeline: normalizeTimeline(value(timeline)?.timeline, event.sportId),
     stats: normalizeStats(value(stats)?.eventstats, event.sportId),
     lineups: normalizeLineups(value(lineups)?.lineup, event.sportId),
     ...(periods ? { breakdown: periods } : {}),
+    ...(event.sportId === "ice-hockey" && hockeyTimelineShort(value(timeline)?.timeline, event.score, event.conclusion) ? { timelinePartial: true } : {}),
     fetchedAt: new Date().toISOString(),
   }
   const hasData = detail.timeline.length > 0 || detail.stats.length > 0 || detail.lineups.home.length > 0 || detail.lineups.away.length > 0
@@ -682,25 +794,70 @@ export interface TeamFixtures {
   feed: Omit<EventFeed, "events">
 }
 
-function chooseTeam(teams: RawTeam[], name: string, sport?: SportId) {
-  const wanted = name.toLowerCase()
+// National sides carry their sport in the name: "India Cricket", "India Rugby".
+const SPORT_SUFFIX: Partial<Record<SportId, string>> = { cricket: "Cricket", rugby: "Rugby", volleyball: "Volleyball", "ice-hockey": "Ice Hockey", basketball: "Basketball" }
+const plainTeamName = (name: string, sport: SportId | undefined) => {
+  const suffix = sport ? SPORT_SUFFIX[sport] : undefined
+  return (suffix ? name.replace(new RegExp(`\\s+${suffix}(?=\\s+Women$|$)`, "i"), "") : name).toLowerCase().trim()
+}
+
+/** A chosen sport is a rule: "India" in cricket never answers with India's football team. */
+export function chooseTeam(teams: RawTeam[], name: string, sport?: SportId) {
+  const wanted = plainTeamName(name, sport)
   const candidates = teams.flatMap((team) => {
     const definition = enabledSports().find((item) => item.providerKey === team.strSport)
+    if (!definition || (sport && definition.id !== sport)) return []
     const league = team.idLeague && team.strLeague ? { id: team.idLeague, name: team.strLeague } : null
-    return definition && team.strTeam.toLowerCase() === wanted ? [{ id: team.idTeam, name: team.strTeam, sportId: definition.id, league }] : []
+    return plainTeamName(team.strTeam, sport) === wanted ? [{ id: team.idTeam, name: team.strTeam, sportId: definition.id, league }] : []
   })
-  return candidates.find((team) => team.sportId === sport) ?? candidates[0] ?? null
+  return candidates[0] ?? null
+}
+
+/** Listed exactly first, because a shared name can push a side off the first page of results. */
+async function findTeam(name: string, sport?: SportId) {
+  const found = await fetchJson<{ teams: RawTeam[] | null }>(`searchteams.php?${new URLSearchParams({ t: name })}`)
+  const team = chooseTeam(found.teams ?? [], name, sport)
+  const suffix = sport ? SPORT_SUFFIX[sport] : undefined
+  if (team || !suffix) return team
+  const named = await fetchJson<{ teams: RawTeam[] | null }>(`searchteams.php?${new URLSearchParams({ t: `${name} ${suffix}` })}`)
+  return chooseTeam(named.teams ?? [], name, sport)
 }
 
 const MAX_SEARCH_RESULTS = 10
 
 /** Team names matching what a member has typed, for sports this site covers. */
-export async function searchTeams(text: string): Promise<{ name: string; sportId: SportId }[]> {
-  const found = await fetchJson<{ teams: RawTeam[] | null }>(`searchteams.php?${new URLSearchParams({ t: text })}`).catch(() => ({ teams: null }))
-  return (found.teams ?? []).flatMap((team) => {
+export async function searchTeams(text: string, sport?: SportId): Promise<{ name: string; sportId: SportId }[]> {
+  if (sport && INDIVIDUAL_SPORTS.has(sport)) return (await searchEntrants(text, sport)).map((name) => ({ name, sportId: sport }))
+  const suffix = sport ? SPORT_SUFFIX[sport] : undefined
+  const asked = [text, ...(suffix && !text.toLowerCase().includes(suffix.toLowerCase()) ? [`${text} ${suffix}`] : [])]
+  const lists = await Promise.all(asked.map((term) => fetchJson<{ teams: RawTeam[] | null }>(`searchteams.php?${new URLSearchParams({ t: term })}`).catch(() => ({ teams: null }))))
+  const seen = new Set<string>()
+  return lists.flatMap((found) => found.teams ?? []).flatMap((team) => {
     const definition = enabledSports().find((item) => item.providerKey === team.strSport)
-    return definition ? [{ name: team.strTeam, sportId: definition.id }] : []
+    return definition && (!sport || definition.id === sport) && !seen.has(team.idTeam) && seen.add(team.idTeam) ? [{ name: team.strTeam, sportId: definition.id }] : []
   }).slice(0, MAX_SEARCH_RESULTS)
+}
+
+const ENTRANT_FRESH_MS = 15 * 60_000
+const entrantEvents = new Map<SportId, { events: Promise<SportEvent[]>; at: number }>()
+
+/** Tennis, combat and racing have no team record, so a member's games come from the stored days. */
+export async function storedSportEvents(sport: SportId): Promise<SportEvent[]> {
+  const known = entrantEvents.get(sport)
+  if (known && Date.now() - known.at < ENTRANT_FRESH_MS) return known.events
+  const today = Date.now()
+  const days = Array.from({ length: WINDOW_PAST_DAYS + 15 }, (_, index) => utcDate(new Date(today + (14 - index) * 86_400_000)))
+  const events = Promise.all(days.map((day) => storedEvents(day, sport))).then((lists) => lists.flat())
+  entrantEvents.set(sport, { events, at: Date.now() })
+  events.catch(() => entrantEvents.delete(sport))
+  return events
+}
+
+async function searchEntrants(text: string, sport: SportId): Promise<string[]> {
+  const needle = text.toLowerCase()
+  const names = new Set<string>()
+  for (const event of await storedSportEvents(sport)) for (const name of entrantsOf(event)) if (name.toLowerCase().includes(needle)) names.add(name)
+  return [...names].sort((a, b) => a.localeCompare(b)).slice(0, MAX_SEARCH_RESULTS)
 }
 
 const sportOfKey = (key: string | null | undefined): SportId | undefined => enabledSports().find((item) => item.providerKey === key)?.id
@@ -773,8 +930,7 @@ export async function getTeamFixtures(name: string, sport?: SportId): Promise<Te
 
   let team: TeamFixtures["team"]
   try {
-    const found = await fetchJson<{ teams: RawTeam[] | null }>(`searchteams.php?${new URLSearchParams({ t: name })}`)
-    team = chooseTeam(found.teams ?? [], name, sport)
+    team = await findTeam(name, sport)
   } catch {
     return { team: null, ...empty, feed: { ...base, state: "unavailable" } }
   }
@@ -783,7 +939,8 @@ export async function getTeamFixtures(name: string, sport?: SportId): Promise<Te
   const { id, sportId } = team
   const [next, last] = await Promise.allSettled([
     fetchJson<{ events: RawEvent[] | null }>(`eventsnext.php?id=${id}`),
-    fetchJson<{ results: RawEvent[] | null }>(`eventslast.php?id=${id}`),
+    // Ten games where the first version's list stops at five.
+    fetchJson<{ schedule?: RawEvent[] | null }>(`${V2_PATH}schedule/previous/team/${id}`).then(({ schedule }) => ({ results: schedule })),
   ])
   const failures = [next, last].filter((result) => result.status === "rejected").length
   const events = (rows: RawEvent[] | null | undefined) => (rows ?? []).filter((raw) => isCovered(raw, sportId)).map((raw) => normalizeEvent(raw, sportId))
@@ -1009,11 +1166,17 @@ export async function getLeagueEvents(leagueId: string): Promise<LeagueView> {
 
 export type RaceSchedule = SeasonView<RaceWeekend>
 
-/** Many series keep an old current season on file while the newest one is already listed. */
+/**
+ * Many series keep an old current season on file while the newest one is already listed.
+ * A season not yet played holds no results, so the one before it is tried last.
+ */
 async function latestSeason(leagueId: string, current: string): Promise<string[]> {
   const found = await loadDetail<{ seasons?: { strSeason?: string | null }[] | null }>(`search_all_seasons.php?id=${leagueId}`, PLAYER_FRESH_MS).catch(() => null)
-  const newest = found?.seasons?.at(-1)?.strSeason
-  return newest && newest > current ? [newest, current] : [current]
+  const listed = (found?.seasons ?? []).flatMap((item) => (item.strSeason ? [item.strSeason] : []))
+  const newest = listed.at(-1)
+  const first = newest && newest > current ? newest : current
+  const before = listed.filter((season) => season < first).at(-1)
+  return [...new Set([first, current, ...(before ? [before] : [])])]
 }
 
 /** A series' sessions by race weekend. Results are not part of this view. */
@@ -1062,7 +1225,13 @@ export async function getCupRounds(leagueId: string): Promise<CupRounds> {
       const { rows, stale } = await seasonRows(leagueId, season)
       const rounds = knockoutRounds(rows)
       if (!rounds) continue
-      const items = rounds.map(({ key, games }) => ({ key, games: rowsToEvents(games, football) }))
+      const items = rounds.map(({ key, games }) => ({
+        key,
+        games: rowsToEvents(games, football).map((event) => {
+          const aggregate = legAggregate(games.find((raw) => raw.idEvent === event.provider.eventId) as RawEvent, rows)
+          return aggregate ? { ...event, aggregate } : event
+        }),
+      }))
       return { ...seasonView<KnockoutRound<SportEvent>>(stale ? "stale" : "ok"), competition, season, items }
     }
     return seasonView("empty")

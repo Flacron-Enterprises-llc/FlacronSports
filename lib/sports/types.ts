@@ -78,11 +78,17 @@ export interface CricketDetails {
   format: CricketFormat | null
   /** What the format schedules. The source never states which day a match has reached. */
   scheduledDays: number | null
+  /** Counted from the start date on the page's own day, for a match still inside its scheduled days. */
+  matchDay?: number
   stage: CricketStage | null
   /** "3rd Test", as the source numbers it. */
   matchLabel: string | null
   round: number | null
   season: string | null
+  group: string | null
+  /** "Phase 4 (Guyana and Barbados)", a stretch of a league played in one place. */
+  phase: string | null
+  umpires: string | null
   dayNight: boolean
   city: string | null
   country: string | null
@@ -144,6 +150,14 @@ export interface CombatBout {
   section: "main" | "preliminary" | null
   /** The judges' scores, as the source writes them. */
   scorecards: string | null
+  /** A bout that ended with no winner. */
+  outcome?: "draw" | "no-contest" | null
+  /** The belt at stake as the source names it. */
+  title?: string | null
+  /** Also set when the source only marks a defending champion. */
+  titleFight?: boolean
+  /** The source's own note on the bout, such as a missed weight. */
+  note?: string | null
 }
 
 export interface CombatDetails {
@@ -174,6 +188,8 @@ export interface ClassificationEntry {
   points?: number
   /** The entrant's own record, when the source links one. */
   playerId?: string
+  /** The car's class in an overall order that mixes classes, such as IMSA's GTP and GTD. */
+  category?: string
 }
 
 /** An entrant with no classified place. */
@@ -194,7 +210,7 @@ export interface StandingEntry {
   points: number
 }
 
-export type MotorsportSession = "practice" | "testing" | "sprint-qualifying" | "qualifying" | "sprint" | "race"
+export type MotorsportSession = "practice" | "testing" | "sprint-qualifying" | "qualifying" | "sprint" | "race" | "stage"
 
 export interface MotorsportDetails {
   kind: "motorsport"
@@ -213,7 +229,7 @@ export interface MotorsportDetails {
 
 /** One period of a game. A side the source left blank stays null, never zero. */
 export interface ScoreSegment {
-  kind: "quarter" | "half" | "period" | "inning" | "extras" | "set" | "overtime" | "shootout"
+  kind: "quarter" | "half" | "period" | "inning" | "extras" | "set" | "overtime" | "shootout" | "extra"
   number: number
   home: number | null
   away: number | null
@@ -232,7 +248,70 @@ export interface ScoreBreakdown {
 /** How a finished game ended, when it was not in regular time. */
 export type EventConclusion = "extra-time" | "overtime" | "penalties" | "shootout" | "awarded" | "walkover"
 
-export type SportDetails = CricketDetails | TennisDetails | CombatDetails | MotorsportDetails
+export interface FootballDetails {
+  kind: "football"
+  /** The match week. Null for a stage, or where the source gives no usable number. */
+  round: number | null
+  stage: "quarter" | "semi" | "final" | null
+  group: string | null
+  season: string | null
+  city: string | null
+  country: string | null
+  /** The source's own words on the game, in English only. May state the result. */
+  summary: string | null
+}
+
+export interface BasketballDetails {
+  kind: "basketball"
+  /** The numbered round, where a league has them. The NBA and WNBA number weeks and do not. */
+  round: number | null
+  stage: "preseason" | "play-in" | "first-round" | "quarter" | "semi" | "final" | null
+  group: string | null
+  season: string | null
+  city: string | null
+  country: string | null
+  spectators: number | null
+}
+
+export interface AmericanFootballDetails {
+  kind: "american-football"
+  /** The week of the regular season. Null for preseason and playoff games. */
+  week: number | null
+  stage: "preseason" | "wild-card" | "divisional" | "conference-final" | "super-bowl" | "division-semi-final" | "division-final" | "grey-cup" | "postseason" | "fcs-final" | "national-final" | "quarter-final" | "semi-final" | "playoff" | "final" | null
+  season: string | null
+  city: string | null
+  country: string | null
+  spectators: number | null
+}
+
+export type RugbyStage = "preseason" | "qualifying-final" | "eliminator" | "playoff" | "quarter" | "semi" | "preliminary-final" | "third-place" | "final" | "grand-final"
+
+export interface RugbyDetails {
+  kind: "rugby"
+  /** Union and league share the source's one rugby feed. Null for a competition not known to be either. */
+  code: "union" | "league" | "sevens" | null
+  round: number | null
+  stage: RugbyStage | null
+  group: string | null
+  season: string | null
+  city: string | null
+  country: string | null
+  spectators: number | null
+}
+
+export interface VolleyballDetails {
+  kind: "volleyball"
+  round: number | null
+  stage: "quarter" | "semi" | "third-place" | "final" | null
+  group: string | null
+  season: string | null
+  city: string | null
+  country: string | null
+  /** A cup tie level on sets after two legs is settled by one set to 15, filed as its own game. Its score is points. */
+  goldenSet: boolean
+}
+
+export type SportDetails = CricketDetails | TennisDetails | CombatDetails | MotorsportDetails | FootballDetails | BasketballDetails | AmericanFootballDetails | VolleyballDetails | RugbyDetails
 
 export type EventScore =
   | { kind: "none" }
@@ -292,6 +371,8 @@ export interface SportEvent {
   conclusion?: EventConclusion
   /** Only when the source states it. */
   shootout?: { home: number; away: number }
+  /** Football: the two legs of a tie added up, in this game's home and away order. */
+  aggregate?: { home: number; away: number }
   breakdown?: ScoreBreakdown
   /** Facts particular to the sport. What reveals a result lives in score, not here. */
   details?: SportDetails
@@ -319,4 +400,6 @@ export interface EventFeed {
   limited: boolean
   /** For one sport with nothing still to come on this day: the next dates that have games. */
   nextDates?: { date: string; games: number }[]
+  /** Cricket: the same, for each format, so a format with no game today still leads somewhere. */
+  nextByKind?: Record<string, { date: string; games: number }[]>
 }

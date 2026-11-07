@@ -1,7 +1,8 @@
 // Watch filters per sport. Options are read from what Watch really holds, each one
 // leaving out only its own filter, so every option offered returns something.
 
-import type { SportEvent, SportId } from "@/lib/sports/types"
+import { cricketFormat as readFormat } from "@/lib/sports/adapters/cricket"
+import type { CricketFormat, SportEvent, SportId } from "@/lib/sports/types"
 
 export type FacetKey = "competition" | "team" | "athlete" | "tournament" | "race" | "session" | "series" | "format"
 
@@ -40,14 +41,17 @@ export const fold = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "
 
 const CLIP_COUNTRIES: Record<string, string> = {
   england: "english", spain: "spanish", italy: "italian", germany: "german", france: "french", portugal: "portuguese",
-  netherlands: "dutch", brazil: "brazilian", argentina: "argentinian", scotland: "scottish", turkey: "turkish",
+  netherlands: "dutch", brazil: "brazilian", argentina: "argentinian", scotland: "scottish", turkey: "turkish", turkiye: "turkish",
+  mexico: "mexican", poland: "polish", croatia: "croatian", japan: "japanese", cyprus: "cypriot",
 }
 const CLIP_CUPS = new Set(["champions league", "europa league", "conference league"])
 
-/** Clips write "ENGLAND: Premier League" where fixtures write "English Premier League". */
+/** Clips write "ENGLAND: Premier League" and "EUROPE: Champions League, League Stage" where fixtures write "English Premier League". */
 export function competitionKey(name: string): string {
   const [prefix, rest] = fold(name).split(/:\s*/, 2)
-  const text = rest === undefined ? prefix : CLIP_CUPS.has(prefix) ? `uefa ${prefix}` : `${CLIP_COUNTRIES[prefix] ?? prefix} ${rest}`
+  const stage = rest?.split(",")[0].trim()
+  const cup = CLIP_CUPS.has(prefix) ? prefix : prefix === "europe" && stage && CLIP_CUPS.has(stage) ? stage : null
+  const text = rest === undefined ? prefix : cup ? `uefa ${cup}` : `${CLIP_COUNTRIES[prefix] ?? prefix} ${rest}`
   return text.replace(/\s+/g, "")
 }
 
@@ -81,18 +85,15 @@ export function buildFacets<T>(keys: FacetKey[], items: WatchItem<T>[], choice: 
   })
 }
 
-// The feed's cricket competitions state their format by name, or are single-format by rule.
-const CRICKET_FORMATS: [RegExp, string][] = [
-  [/\btest\b/i, "Test"],
-  [/sheffield shield|county championship/i, "First-class"],
-  [/the hundred/i, "The Hundred"],
-  [/one day|\bodi\b|cricket world cup|champions trophy/i, "ODI"],
-  [/twenty20|\bt20|\bsa20\b|big bash|premier league|super smash|super league|major league cricket|shpageeza|commonwealth games/i, "T20"],
-]
-
 const BILATERAL = /international series|test match series|test championship/i
 
-export const cricketFormat = (competition: string): string | null => CRICKET_FORMATS.find(([pattern]) => pattern.test(competition))?.[1] ?? null
+const FORMAT_NAMES: Record<CricketFormat, string> = { test: "Test", "first-class": "First-class", odi: "ODI", t20: "T20", hundred: "The Hundred" }
+
+/** The adapter's reading of a league, so Watch and Scores agree on what a format is. */
+export const cricketFormat = (competition: string): string | null => {
+  const format = readFormat(competition)
+  return format ? FORMAT_NAMES[format] : null
+}
 
 /** Internationals sit in one competition per format, so the two sides are what name a series. */
 function cricketSeries(event: SportEvent): string | null {
@@ -109,7 +110,8 @@ export function splitTennisTitle(title: string): { tournament: string; names: [s
   return match ? { tournament: match[1].trim(), names: [match[2].trim(), match[3].trim()] } : null
 }
 
-const SESSION = /\s+((?:free\s+)?practice(?:\s+\d+)?|fp\d|(?:sprint\s+)?(?:qualifying|shootout)(?:\s+\d+)?|sprint(?:\s+race)?|warm[\s-]?up|race\s+\d+|hyperpole)$/i
+// Supercars write "Qualifying Race 31" and "Top 10 Shootout Race 31", each a session of that race.
+const SESSION = /\s+((?:free\s+)?practice(?:\s+\d+)?|fp\d|(?:(?:sprint|top\s+\d+)\s+)?(?:qualifying|shootout)(?:\s+(?:race\s+)?\d+)?|superpole(?:\s+race)?|sprint(?:\s+race)?|(?:feature|reverse\s+grid)\s+race|warm[\s-]?up|race\s+\d+|hyperpole)$/i
 
 /** Sessions add a word to the weekend's name, and the race itself carries the bare name. */
 export function splitSession(name: string): { race: string; session: string } {
@@ -140,8 +142,8 @@ export function eventFacets(event: SportEvent): FacetValues {
   }
 }
 
-/** Clip titles read "Home - Away". */
-export const clipFacets = (title: string, competition: string): FacetValues => ({
-  competition: list(competition),
-  team: title.split(/\s+-\s+/).map((name) => name.trim()).filter(Boolean),
+/** Clip titles read "Home - Away". A clip tied to a game uses the site's names, so a filter lists one name per club. */
+export const clipFacets = (title: string, competition: string, game?: { competition: string; teams: string[] }): FacetValues => ({
+  competition: list(game?.competition ?? competition),
+  team: game?.teams ?? title.split(/\s+-\s+/).map((name) => name.trim()).filter(Boolean),
 })

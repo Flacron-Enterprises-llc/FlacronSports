@@ -5,6 +5,8 @@ import { getAdminDb } from "@/lib/firebase-admin"
 import { memberFetch, MemberAccessRequired } from "@/lib/member-fetch"
 import { countMetric } from "@/lib/ops/metrics"
 import { cricketFormat, multiDayLength } from "./adapters/cricket"
+import { CRICKET_DATA_PREFIX, cricketDataEvent, fillFromCricketData, matchFor, mergeCricketData, readCricketDataMatch, usableMatches, type RawCricketMatch } from "./adapters/cricketdata"
+import { afterAnswer, budgetDecision, dailyHits, fetchCurrentMatches, keepMatches, type CricketBudget } from "./cricketdata"
 import { footballHalves, legAggregate, mayHaveLegs } from "./adapters/football"
 import { hockeyCardTimeline, hockeyPeriods, hockeyTimelineShort } from "./adapters/ice-hockey"
 import { Breaker, CircuitOpenError, type BreakerStatus } from "./breaker"
@@ -239,8 +241,85 @@ async function collectedDay(sport: SportDefinition, date: string): Promise<RawEv
 }
 
 const DAY_FEED_DAYS = 31
+const CRICKET_DATA_PATH = "cricketdata/currentMatches"
+const CRICKET_BUDGET_PATH = "cricketdata/budget"
 
 async function eventsForSport(sport: SportDefinition, date: string, refresh = false, storedOnly = false): Promise<{ events: SportEvent[]; stale: boolean }> {
+  if (sport.id !== "cricket") return firstSourceEvents(sport, date, refresh, storedOnly)
+  try {
+    const result = await firstSourceEvents(sport, date, refresh, storedOnly)
+    return { ...result, events: await withCricketData(sport, date, result.events) }
+  } catch (error) {
+    const events = await withCricketData(sport, date, []).catch(() => [])
+    if (events.length === 0) throw error
+    return { events, stale: true }
+  }
+}
+
+const CRICKET_NEARBY_DAYS = [-4, -3, -2, -1, 1]
+
+/** The stored cricket rows of a day, read only to keep one game from showing on two days. */
+async function storedCricketDay(sport: SportDefinition, date: string): Promise<SportEvent[]> {
+  const query = new URLSearchParams({ d: date, s: sport.providerKey as string })
+  return rowsToEvents(mergeRows(await collectedDay(sport, date), (await peek<{ events: RawEvent[] | null }>(`eventsday.php?${query}`))?.events), sport)
+}
+
+/** Scores and state of play from the second source, laid over the day or added where the first source has no game. */
+async function withCricketData(sport: SportDefinition, date: string, events: SportEvent[]): Promise<SportEvent[]> {
+  const stored = await storedCricketData()
+  if (!stored || stored.matches.length === 0) return events
+  const matches = usableMatches(stored.matches, stored.at, Date.now())
+  const days = CRICKET_NEARBY_DAYS.map((offset) => utcDate(new Date(Date.parse(`${date}T12:00:00Z`) + offset * 86_400_000)))
+  const nearby = (await Promise.all(days.map((day) => storedCricketDay(sport, day).catch(() => [])))).flat()
+  return mergeCricketData(events, nearby, matches, date, stored.at, utcDate())
+}
+
+interface CricketDataStore {
+  matches: RawCricketMatch[]
+  at: number
+}
+
+/** Written only by the scheduled job. Visitors read it and never call the source. */
+async function storedCricketData(): Promise<CricketDataStore | null> {
+  const cached = memory.get(CRICKET_DATA_PATH)
+  if (cached && Date.now() - cached.at < FRESH_MS) return cached.data as CricketDataStore
+  const snapshot = await readSnapshot(CRICKET_DATA_PATH)
+  if (!snapshot) return (cached?.data as CricketDataStore | undefined) ?? null
+  const data = { matches: (snapshot.data as { matches?: RawCricketMatch[] }).matches ?? [], at: snapshot.at }
+  remember(CRICKET_DATA_PATH, data, Date.now())
+  return data
+}
+
+/** Called by the scheduled job only. At most one call a run, inside the day's allowance. */
+export async function refreshCricketData(now: Date = new Date(), fetcher: typeof fetch = fetch): Promise<Record<string, unknown>> {
+  const key = process.env.CRICKETDATA_API_KEY?.trim()
+  if (!key) return { skipped: "not_configured" }
+  const saved = ((await readSnapshot(CRICKET_BUDGET_PATH))?.data ?? memory.get(CRICKET_BUDGET_PATH)?.data) as CricketBudget | undefined
+  const decision = budgetDecision(saved, now, dailyHits())
+  if (!decision.call) return { skipped: decision.reason }
+  const saveBudget = async (budget: CricketBudget) => {
+    remember(CRICKET_BUDGET_PATH, budget, now.getTime())
+    await writeSnapshot(CRICKET_BUDGET_PATH, budget, now.getTime())
+  }
+  // Counted before the call, so a call that dies half way is still counted and never retried at once.
+  let budget: CricketBudget = { ...decision.budget, used: decision.budget.used + 1, lastAt: now.getTime() }
+  await saveBudget(budget)
+  const answer = await fetchCurrentMatches(key, fetcher)
+  budget = afterAnswer(budget, answer.info, answer.limitReached)
+  await saveBudget(budget)
+  if (!answer.ok) return { refused: true, hitsToday: budget.hitsToday, hitsLimit: budget.hitsLimit }
+  const previous = (await storedCricketData())?.matches ?? []
+  const finished = (raw: RawCricketMatch) => {
+    const status = readCricketDataMatch(raw)?.status
+    return status === "finished" || status === "abandoned"
+  }
+  const data: CricketDataStore = { matches: keepMatches(previous, answer.matches, now, finished), at: now.getTime() }
+  remember(CRICKET_DATA_PATH, data, now.getTime())
+  await writeSnapshot(CRICKET_DATA_PATH, { matches: data.matches }, data.at)
+  return { matches: answer.matches.length, stored: data.matches.length, hitsToday: budget.hitsToday, hitsLimit: budget.hitsLimit, stopped: budget.stopped }
+}
+
+async function firstSourceEvents(sport: SportDefinition, date: string, refresh = false, storedOnly = false): Promise<{ events: SportEvent[]; stale: boolean }> {
   const query = new URLSearchParams({ d: date, s: sport.providerKey as string })
   const nearToday = Math.abs(Date.parse(date) - Date.parse(utcDate())) <= 86_400_000
   const live = nearToday ? await liveRows() : NO_LIVE
@@ -344,7 +423,8 @@ export async function storedEvents(date: string, sport?: SportId): Promise<Sport
   const live = await liveRows()
   const days = await Promise.all(sports.map(async (item) => {
     const query = new URLSearchParams({ d: date, s: item.providerKey as string })
-    return rowsToEvents(mergeRows(await collectedDay(item, date), (await peek<{ events: RawEvent[] | null }>(`eventsday.php?${query}`))?.events), item, live)
+    const events = rowsToEvents(mergeRows(await collectedDay(item, date), (await peek<{ events: RawEvent[] | null }>(`eventsday.php?${query}`))?.events), item, live)
+    return item.id === "cricket" ? withCricketData(item, date, events).catch(() => events) : events
   }))
   return days.flat().filter((event) => eventAllowed(rules, event))
 }
@@ -689,6 +769,7 @@ export async function getEvent(id: string, options: { anyCoverage?: boolean } = 
     const remote = await fromBackend<{ event: SportEvent | null }>(`/api/matches/${encodeURIComponent(id)}`)
     return remote?.event ?? null
   }
+  if (id.startsWith(CRICKET_DATA_PREFIX)) return cricketDataById(id, options)
   const match = id.match(/^tsdb-(\d+)$/)
   if (!match) return null
   const found = await lookupRaw(match[1])
@@ -700,8 +781,22 @@ export async function getEvent(id: string, options: { anyCoverage?: boolean } = 
   const updated = liveRowFor(raw, live) ? Math.max(at ?? 0, liveScores.at) : at
   const event = { ...normalizeEvent(withLive(await eventResults(raw, sport), live), sport.id), sourceUpdatedAt: updated ? new Date(updated).toISOString() : null }
   if (!options.anyCoverage && !eventAllowed(await coverageRules(), event)) return null
+  if (sport.id === "cricket") {
+    const stored = await storedCricketData().catch(() => null)
+    const same = stored && matchFor(event, usableMatches(stored.matches, stored.at, Date.now()))
+    if (stored && same) return fillFromCricketData(event, same, stored.at)
+  }
   const [scored] = await withHockeyPeriods([event], false)
   return withAggregate(scored, raw)
+}
+
+async function cricketDataById(id: string, options: { anyCoverage?: boolean }): Promise<SportEvent | null> {
+  const stored = await storedCricketData()
+  const raw = stored?.matches.find((item) => `${CRICKET_DATA_PREFIX}${item.id}` === id)
+  const match = stored && raw ? usableMatches([raw], stored.at, Date.now())[0] : undefined
+  if (!stored || !match) return null
+  const event = cricketDataEvent(match, stored.at)
+  return options.anyCoverage || eventAllowed(await coverageRules(), event) ? event : null
 }
 
 const HOCKEY_TIMELINE_DAYS = 2

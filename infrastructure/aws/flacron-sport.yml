@@ -30,6 +30,10 @@ Parameters:
     Type: String
   TheSportsDbSecretArn:
     Type: String
+  CricketDataSecretArn:
+    Type: String
+    Default: ""
+    Description: Full ARN of flacron-sport/production/cricketdata. Empty leaves cricket on the main sports feed alone.
   AnthropicSecretArn:
     Type: String
     Default: ""
@@ -90,6 +94,7 @@ Parameters:
 
 Conditions:
   HasAnthropicKey: !Not [!Equals [!Ref AnthropicSecretArn, ""]]
+  HasCricketDataKey: !Not [!Equals [!Ref CricketDataSecretArn, ""]]
 
 Resources:
   Repository:
@@ -252,6 +257,7 @@ Resources:
             - { Name: SCOREBAT_TOKEN, ValueFrom: !Ref ScorebatSecretArn }
             - { Name: THESPORTSDB_API_KEY, ValueFrom: !Ref TheSportsDbSecretArn }
             - !If [HasAnthropicKey, { Name: ANTHROPIC_API_KEY, ValueFrom: !Ref AnthropicSecretArn }, !Ref AWS::NoValue]
+            - !If [HasCricketDataKey, { Name: CRICKETDATA_API_KEY, ValueFrom: !Ref CricketDataSecretArn }, !Ref AWS::NoValue]
             - { Name: FIREBASE_ADMIN_PROJECT_ID, ValueFrom: !Sub "${FirebaseSecretArn}:project_id::" }
             - { Name: FIREBASE_ADMIN_CLIENT_EMAIL, ValueFrom: !Sub "${FirebaseSecretArn}:client_email::" }
             - { Name: FIREBASE_ADMIN_PRIVATE_KEY, ValueFrom: !Sub "${FirebaseSecretArn}:private_key::" }

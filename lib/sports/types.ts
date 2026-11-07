@@ -95,6 +95,8 @@ export interface CricketDetails {
   women: boolean
   toss: { side: string; choice: "bat" | "field" } | null
   spectators: number | null
+  /** The source's own line on the state of play, in English: "Day 3: Stumps - West Indies trail by 23 runs". May state the result. */
+  statusNote?: string | null
 }
 
 export interface TennisRound {

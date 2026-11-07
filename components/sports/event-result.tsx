@@ -15,6 +15,17 @@ export function ResultNote({ event, t, quiet }: { event: SportEvent; t: Dictiona
   )
 }
 
+/** Cricket's state of play in the source's words, where no result line already says it. Can reveal the result. */
+export function StatusNote({ event, t, quiet }: { event: SportEvent; t: Dictionary; quiet?: boolean }) {
+  const note = event.details?.kind === "cricket" ? event.details.statusNote : null
+  if (!note || resultNote(event, t)) return null
+  return (
+    <SpoilerGuard label={t.spoiler.revealResult} quiet={quiet}>
+      <p className="text-sm text-ink-2">{note}</p>
+    </SpoilerGuard>
+  )
+}
+
 /** Entrants appear only inside the reveal: their order is the result. */
 export function Classification({ entries, t, limit, quiet }: { entries: ClassificationEntry[]; t: Dictionary; limit?: number; quiet?: boolean }) {
   const shown = limit ? entries.slice(0, limit) : entries
@@ -129,6 +140,7 @@ export function EventResult({ event, t }: { event: SportEvent; t: Dictionary }) 
       <InningsTable event={event} t={t} />
       {score.kind === "classification" && <Classification entries={score.entries} t={t} />}
       <ResultNote event={event} t={t} />
+      <StatusNote event={event} t={t} />
     </div>
   )
 }

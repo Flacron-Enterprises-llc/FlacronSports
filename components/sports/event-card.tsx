@@ -11,7 +11,7 @@ import { sportChip } from "@/lib/sports/sport-terms"
 import type { EventConclusion, EventFeed, EventStatus, SportEvent } from "@/lib/sports/types"
 import { cn } from "@/lib/utils"
 import { EventActions } from "./event-actions"
-import { Classification, ResultNote } from "./event-result"
+import { Classification, ResultNote, StatusNote } from "./event-result"
 import { Crest, FavoriteStar, LocalTime, ScoreValue, SpoilerReveal, SpoilerScope, SpoilerText } from "./parts"
 import { PeriodScore } from "./period-score"
 
@@ -125,6 +125,7 @@ function EventLines({ event, t, href }: { event: SportEvent; t: Dictionary; href
       )}
       {score.kind === "classification" && <div className="mt-1.5"><Classification entries={score.entries} t={t} limit={3} quiet /></div>}
       {score.kind !== "team" && score.kind !== "none" && score.kind !== "classification" && <div className="mt-1"><ResultNote event={event} t={t} quiet /></div>}
+      {event.details?.kind === "cricket" && event.details.statusNote && <div className="mt-1 empty:hidden"><StatusNote event={event} t={t} quiet /></div>}
       {event.breakdown && <div className="mt-1"><PeriodScore event={event} t={t} compact /></div>}
       {hasResult(event) && <div className="mt-1.5 empty:hidden"><SpoilerReveal label={t.spoiler.revealResult} /></div>}
     </>

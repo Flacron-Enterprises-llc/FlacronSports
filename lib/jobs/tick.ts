@@ -19,7 +19,7 @@ import { selectForReports } from "@/lib/sports/priority"
 import type { EventFeed, SportId } from "@/lib/sports/types"
 import { videoFor } from "@/lib/video/catalog"
 import { refreshClips, storedClips } from "@/lib/video/scorebat"
-import { collectLeagueEvents, enabledSports, feedIsLimited, getEvent, getEvents, getMatchDetail, providerStatus, refreshBroadcasts, sportFeedStates, storedEvents, utcDate } from "@/lib/sports/service"
+import { collectLeagueEvents, enabledSports, feedIsLimited, getEvent, getEvents, getMatchDetail, providerStatus, refreshBroadcasts, refreshCricketData, sportFeedStates, storedEvents, utcDate } from "@/lib/sports/service"
 import type { SportEvent } from "@/lib/sports/types"
 
 const PAGE_SIZE = 300
@@ -250,12 +250,14 @@ export async function runTick(now: Date = new Date()) {
 }
 
 async function tick(db: Firestore, now: Date) {
+  // Before the day is read, so this run's games already carry the new cricket scores.
+  const [cricketScores] = Object.values(await runIsolated({ cricketScores: () => refreshCricketData(now) }))
   const context = await loadContext(db, now)
   const jobs = await runIsolated(Object.fromEntries(JOB_NAMES.map((name) => [name, () => JOBS[name](context)])))
   await recordCoverage(db, context.events, now.toISOString()).catch((error: unknown) => {
     console.error("Coverage not recorded", error instanceof Error ? error.message : "unknown")
   })
-  return { feed: { yesterday: context.yesterday.state, today: context.today.state, events: context.events.length }, ...jobs }
+  return { feed: { yesterday: context.yesterday.state, today: context.today.state, events: context.events.length }, cricketScores, ...jobs }
 }
 
 /**

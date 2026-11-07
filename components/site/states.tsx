@@ -124,7 +124,7 @@ export function StatTile({ label, value, hint, icon, href, tone, band }: { label
     <>
       <span className="flex items-center gap-1.5 text-[13px] font-medium leading-5 text-white/75 [&_svg]:size-3.5 [&_svg]:shrink-0">
         {live ? <span aria-hidden className="fs-live-dot size-2 shrink-0 rounded-full bg-[#ff6b7f]" /> : icon}
-        <span className="min-w-0 truncate">{label}</span>
+        <span className="min-w-0 leading-tight">{label}</span>
       </span>
       <span className="fs-score mt-1.5 block text-[1.75rem] font-semibold text-white sm:text-[2rem]">{value === null ? <span aria-hidden>–</span> : <CountUp value={value} />}</span>
     </>

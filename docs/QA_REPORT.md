@@ -8,12 +8,12 @@ The code and the automated checks pass. Launch is not cleared: the items under "
 
 | Check | Result |
 |---|---|
-| Unit and integration tests | 835 of 835 |
+| Unit and integration tests | 1476 of 1476 |
 | TypeScript | No errors |
 | CI pipeline, including the browser and accessibility suite | Passing |
-| Live site checks on production, all plans | 183 of 183 on commit 75919a3 |
-| Live Basic journey, limits and upgrade to Premium | 52 of 52 on commit 75919a3 |
-| Scheduled job after the final deploy | Finished, feed ok, no FlacronSport alarms, dead-letter queue empty |
+| Live journey: every sport, Watch, News, predictions, chat, rooms, assistant, tables | 187 of 187 on commit 4f9e5aa |
+| Live page, plan wall and API checks | 184 of 184 on commit e7300ea, before the redesign |
+| Live Basic journey and upgrade | 52 of 52 on commit 75919a3, before the redesign |
 
 ## What the live checks covered
 

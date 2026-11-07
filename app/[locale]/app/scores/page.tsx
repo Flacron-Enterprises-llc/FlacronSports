@@ -105,8 +105,8 @@ export default async function ScoresPage({ params, searchParams }: Props) {
           <div className="w-full sm:w-40 sm:shrink-0"><DateJump value={date} template={link({ date: "{date}" }).replace("%7Bdate%7D", "{date}")} /></div>
         </div>
 
-        <div className="mt-2 flex flex-col gap-2 border-t border-line pt-2 lg:flex-row lg:items-center">
-          <form className="relative min-w-0 lg:flex-1" role="search">
+        <div className="mt-2 flex flex-col gap-2 border-t border-line pt-2 lg:flex-row lg:flex-wrap lg:items-center">
+          <form className="relative min-w-0 lg:min-w-[20rem] lg:flex-1" role="search">
             {sport && <input type="hidden" name="sport" value={sport} />}
             {search.status && <input type="hidden" name="status" value={search.status} />}
             {search.date && <input type="hidden" name="date" value={search.date} />}

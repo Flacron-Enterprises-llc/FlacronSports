@@ -104,7 +104,7 @@ function QuickActions() {
     { to: "/app/watch", label: t.ui.quickWatch, icon: PlayCircle },
   ]
   return (
-    <nav aria-label={t.ui.quickActions} className="fs-noscrollbar -mx-4 min-w-0 flex-1 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+    <nav aria-label={t.ui.quickActions} className="fs-noscrollbar -mx-4 min-w-0 flex-none basis-[calc(100%+2rem)] overflow-x-auto px-4 sm:mx-0 sm:flex-1 sm:basis-0 sm:px-0">
       <ul className="flex gap-1.5">
         {actions.map(({ to, label, icon: Icon }) => (
           <li key={to} className="shrink-0">

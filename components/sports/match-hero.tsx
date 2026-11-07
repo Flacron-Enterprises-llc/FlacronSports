@@ -147,7 +147,7 @@ export function MatchHero({ event, t, locale, title, duel, updated }: { event: S
           </p>
           <span className="flex shrink-0 items-center gap-2">
             {position && <span className="tabular text-[13px] font-semibold text-white">{position}</span>}
-            <span className="rounded-full bg-white/95 dark:bg-surface"><StatusLabel status={event.status} conclusion={event.conclusion} t={t} /></span>
+            <span className="rounded-full bg-white/95 dark:bg-surface"><StatusLabel status={event.status} conclusion={event.conclusion} t={t} event={event} /></span>
           </span>
         </div>
 

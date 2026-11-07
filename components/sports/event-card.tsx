@@ -37,13 +37,28 @@ const PLAIN_TONE: Record<EventStatus, string> = {
   unknown: "text-ink-2",
 }
 
+const DAY_MS = 86_400_000
+
+/**
+ * What to say when the source has stopped short of a result. A multi-day match still inside
+ * its scheduled days is named by its day; anything else that has started is awaiting a result.
+ */
+export function statusText(status: EventStatus, t: Dictionary, event?: Pick<SportEvent, "details" | "scheduledStartUTC">): string {
+  if (status !== "unknown" || !event) return t.status[status]
+  const details = event.details?.kind === "cricket" ? event.details : null
+  const start = event.scheduledStartUTC ? Date.parse(event.scheduledStartUTC.slice(0, 10)) : Number.NaN
+  const day = details?.matchDay ?? (Number.isFinite(start) ? Math.floor((Date.parse(new Date().toISOString().slice(0, 10)) - start) / DAY_MS) + 1 : null)
+  if (details?.scheduledDays && day && day >= 1 && day <= details.scheduledDays) return t.status.playDay.replace("{day}", String(day)).replace("{days}", String(details.scheduledDays))
+  return t.status.awaitingResult
+}
+
 /** `plain` drops the pill, for the narrow time column of a match row. */
-export function StatusLabel({ status, conclusion, t, plain }: { status: EventStatus; conclusion?: EventConclusion; t: Dictionary; plain?: boolean }) {
+export function StatusLabel({ status, conclusion, t, plain, event }: { status: EventStatus; conclusion?: EventConclusion; t: Dictionary; plain?: boolean; event?: Pick<SportEvent, "details" | "scheduledStartUTC"> }) {
   return (
     <span className={plain ? cn("inline-flex items-center gap-1.5 text-[11.5px] font-semibold leading-4", PLAIN_TONE[status]) : cn("inline-flex shrink-0 items-center gap-1.5 rounded-full border-transparent px-2 py-0.5 text-[11.5px] font-semibold", TONE[status])}>
       {status === "live" && <span aria-hidden className="fs-live-dot size-1.5 shrink-0 rounded-full bg-live" />}
       <span>
-        {t.status[status]}
+        {statusText(status, t, event)}
         {conclusion && status === "finished" && <SpoilerText> · {t.status.conclusions[conclusion]}</SpoilerText>}
       </span>
     </span>
@@ -147,7 +162,7 @@ export function EventCard({ event, t, href, timeMode = "time", layout = "card", 
       <article className={cn("fs-row grid grid-cols-[3.75rem_minmax(0,1fr)_auto] gap-x-2.5 px-3 py-2 sm:grid-cols-[4.75rem_minmax(0,1fr)_auto] sm:gap-x-3 sm:px-4", live && "fs-row-live")}>
         <SpoilerScope>
           <div className="min-w-0 pt-1.5">
-            {!upcoming && <StatusLabel status={event.status} conclusion={event.conclusion} t={t} plain />}
+            {!upcoming && <StatusLabel status={event.status} conclusion={event.conclusion} t={t} plain event={event} />}
             {upcoming && <span className="sr-only">{t.status.scheduled}</span>}
             {(phase || clock) && <p className="tabular text-[11.5px] font-semibold leading-4 text-ink-2">{[phase, clock].filter(Boolean).join(" ")}</p>}
             {!live && <p className={cn("tabular", upcoming ? "text-[13px] font-semibold leading-5 text-ink" : "text-[11.5px] leading-4 text-ink-2")}>{startText(event, t, "time")}</p>}
@@ -180,7 +195,7 @@ export function EventCard({ event, t, href, timeMode = "time", layout = "card", 
             <span className="flex shrink-0 items-center gap-1.5">
               {phase && <span className="tabular text-xs font-semibold text-ink-2">{phase}</span>}
               {clock && <span className="tabular text-xs font-semibold text-ink-2">{clock}</span>}
-              <StatusLabel status={event.status} conclusion={event.conclusion} t={t} />
+              <StatusLabel status={event.status} conclusion={event.conclusion} t={t} event={event} />
             </span>
           </div>
           <EventLines event={event} t={t} href={href} />

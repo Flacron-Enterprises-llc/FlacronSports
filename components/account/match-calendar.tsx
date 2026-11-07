@@ -63,7 +63,7 @@ export function MatchCalendar() {
                     <Link href={href(`/app/match/${event.id}`)} className="block truncate font-medium text-ink underline-offset-2 hover:underline">{eventTitle(event)}</Link>
                     <span className="block truncate text-xs text-ink-2">{event.competition.name}</span>
                   </span>
-                  {event.status !== "scheduled" && <StatusLabel status={event.status} t={t} />}
+                  {event.status !== "scheduled" && <StatusLabel status={event.status} t={t} event={event} />}
                   <ReminderBell event={event} />
                 </li>
               ))}

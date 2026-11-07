@@ -27,7 +27,7 @@ function cricketFacts(details: CricketDetails, t: Dictionary): Fact[] {
     [copy.stage, details.stage && copy.cricketStages[details.stage]],
     [copy.group, details.group],
     [copy.phase, details.phase],
-    [copy.round, details.round],
+    // The source's round number in cricket is a fixture count, not a round anyone plays, so it stays out.
     [copy.season, details.season],
     [copy.scheduled, details.scheduledDays && fill(copy.days, { days: details.scheduledDays })],
     [copy.start, details.dayNight && copy.dayNight],
@@ -191,7 +191,7 @@ export function sportChip(event: Pick<SportEvent, "details">, t: Dictionary): st
   if (details?.kind === "rugby") return [details.stage && copy.rugbyStages[details.stage], details.round && fill(copy.roundNumber, { n: details.round }), details.group && `${copy.group} ${details.group}`].filter(Boolean).join(" · ") || null
   if (details?.kind === "volleyball") return volleyballChip(details, t)
   if (details?.kind === "basketball") return [details.stage && copy.basketballStages[details.stage], details.round && fill(copy.roundNumber, { n: details.round }), details.group && `${copy.group} ${details.group}`].filter(Boolean).join(" · ") || null
-  if (details?.kind === "cricket") return [details.format && copy.cricketFormats[details.format], details.matchLabel, details.stage && copy.cricketStages[details.stage], details.matchDay && details.scheduledDays ? fill(copy.dayOf, { day: details.matchDay, days: details.scheduledDays }) : null].filter(Boolean).join(" · ") || null
+  if (details?.kind === "cricket") return [details.format && copy.cricketFormats[details.format], details.matchLabel, details.stage && copy.cricketStages[details.stage]].filter(Boolean).join(" · ") || null
   if (details?.kind === "tennis") return [tennisRoundText(details.round, t), details.gender && copy.gender[details.gender], details.format === "doubles" ? copy.tennisFormats.doubles : null].filter(Boolean).join(" · ") || null
   if (details?.kind === "motorsport") return [sessionText(details, t), details.className].filter(Boolean).join(" · ")
   if (details?.kind === "combat") return [details.discipline && copy.disciplines[details.discipline], details.bouts.length > 1 ? fill(copy.boutCount, { count: details.bouts.length }) : details.weightClass && weightClassText(details.weightClass, t)].filter(Boolean).join(" · ") || null

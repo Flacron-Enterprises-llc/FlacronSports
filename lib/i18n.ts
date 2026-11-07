@@ -40,7 +40,7 @@ const en = {
   },
   status: {
     scheduled: "Upcoming", live: "Live", finished: "Finished", postponed: "Postponed", canceled: "Canceled",
-    interrupted: "Interrupted", abandoned: "Abandoned", unknown: "Status unconfirmed",
+    interrupted: "Interrupted", abandoned: "Abandoned", unknown: "Status unconfirmed", awaitingResult: "Result not published yet", playDay: "Day {day} of {days}",
     conclusions: { "extra-time": "After extra time", overtime: "After overtime", penalties: "After penalties", shootout: "After shootout", awarded: "Awarded", walkover: "Walkover" },
   },
   match: {
@@ -700,7 +700,7 @@ const fr: Dictionary = {
   },
   status: {
     scheduled: "À venir", live: "En direct", finished: "Terminé", postponed: "Reporté", canceled: "Annulé",
-    interrupted: "Interrompu", abandoned: "Abandonné", unknown: "Statut non confirmé",
+    interrupted: "Interrompu", abandoned: "Abandonné", unknown: "Statut non confirmé", awaitingResult: "Résultat pas encore publié", playDay: "Jour {day} sur {days}",
     conclusions: { "extra-time": "Après prolongation", overtime: "Après prolongation", penalties: "Après tirs au but", shootout: "Après tirs au but", awarded: "Match attribué", walkover: "Forfait" },
   },
   match: {

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const getUser = vi.fn()
-vi.mock("@/lib/firebase-admin", () => ({ getAdminAuth: () => ({ getUser }), getAdminDb: () => null }))
+import { ADMIN_ACCESS, clearAdminCache, isPlatformAdmin } from "@/lib/billing/platform-admin"
 
-const { clearAdminCache, isPlatformAdmin, ADMIN_ACCESS } = await import("@/lib/billing/platform-admin")
+const getUser = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/firebase-admin", () => ({ getAdminAuth: () => ({ getUser }), getAdminDb: () => null }))
 
 describe("platform administrators", () => {
   beforeEach(() => {

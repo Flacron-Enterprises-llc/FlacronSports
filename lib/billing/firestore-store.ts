@@ -1,4 +1,5 @@
 import type { Transaction } from "firebase-admin/firestore"
+import { ADMIN_ACCESS, isPlatformAdmin } from "./platform-admin"
 import { getAdminDb } from "@/lib/firebase-admin"
 import { activeDayPass, applyPurchaseRefund, resolvePurchaseGrant, type BillingPurchase } from "./addons"
 import { computeAccess, withDayPass, type EffectiveAccess, type EntitlementRecord } from "./entitlements"
@@ -127,6 +128,8 @@ export async function getUserPurchases(uid: string): Promise<BillingPurchase[]> 
 
 /** Benefit check, day pass included. Anything unreadable resolves downward, never to paid. */
 export async function getEffectiveAccess(uid: string): Promise<EffectiveAccess> {
+  // Platform administrators hold every feature without a plan.
+  if (await isPlatformAdmin(uid)) return ADMIN_ACCESS
   const subscription = await getSubscriptionAccess(uid)
   try {
     return withDayPass(subscription, activeDayPass(await getUserPurchases(uid), Date.now()))

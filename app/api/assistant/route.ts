@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { ADMIN_ACCESS, isPlatformAdmin } from "@/lib/billing/platform-admin"
 import { z } from "zod"
 import { ApiError, apiErrorResponse, requireUser, requireVerifiedUser } from "@/lib/api-auth"
 import { readAssistantBalance } from "@/lib/billing/allowance"
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
   try {
     const user = await requireUser(request)
     const now = new Date()
-    const access = await getSubscriptionAccess(user.uid)
+    const access = (await isPlatformAdmin(user.uid)) ? ADMIN_ACCESS : await getSubscriptionAccess(user.uid)
     const limit = PLANS[access.plan].assistantRequestsPerMonth
     const [balance, purchases] = await Promise.all([readAssistantBalance(firestoreDocDb(), user.uid, limit, now), getUserPurchases(user.uid)])
     return NextResponse.json({
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
 
     // The subscription sets the plan allowance: a day pass adds its own 10 credits
     // rather than lifting the account to Premium's monthly 300.
-    const access = await getSubscriptionAccess(user.uid)
+    const access = (await isPlatformAdmin(user.uid)) ? ADMIN_ACCESS : await getSubscriptionAccess(user.uid)
     const client = modelClientFromEnv()
     // Unreadable preferences count as spoiler mode on: hiding a result is the safe mistake.
     const spoiler = client ? await getPreferences(user.uid).then((prefs) => prefs.spoilerMode, () => true) : true

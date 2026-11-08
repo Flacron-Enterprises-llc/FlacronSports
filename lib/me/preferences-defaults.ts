@@ -78,3 +78,12 @@ export const DEFAULT_PREFERENCES: Preferences = {
 /** Everything the Basic plan's favorites limit counts. */
 export const favoriteTotal = (prefs: Pick<Preferences, "favorites" | "leagues" | "players">): number =>
   prefs.favorites.length + prefs.leagues.length + prefs.players.length
+
+/** The dashboard's "Get set up" checklist: follow a team, choose alerts, decide on spoiler mode. */
+export function setupChecklist(prefs: Preferences, spoilerDecided: boolean): { team: boolean; alerts: boolean; spoiler: boolean } {
+  return {
+    team: prefs.favorites.length > 0,
+    alerts: JSON.stringify(prefs.alerts) !== JSON.stringify(DEFAULT_PREFERENCES.alerts),
+    spoiler: prefs.spoilerMode || spoilerDecided,
+  }
+}

@@ -5,7 +5,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 export type CookieCategory = "necessary" | "functional" | "analytics" | "advertising"
 
 const KEY = "fs-consent"
-const VERSION = 1
+// 2: Analytics now includes the Flacron Growth Engine, so returning visitors choose again.
+const VERSION = 2
 
 interface ConsentRecord {
   version: number

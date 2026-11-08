@@ -71,7 +71,7 @@ export function MyTeams({ feed }: { feed: EventFeed }) {
         <Panel className="p-4 sm:p-4">
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <span className="font-medium text-ink">{t.ui.favoritesUsed.replace("{count}", String(total)).replace("{limit}", String(limit))}</span>
-            <Link href={href("/app/billing#plans")} className="font-semibold text-hot-text hover:underline">{t.dash.upgrade}</Link>
+            <Link href={href("/app/billing#plans")} data-fcge-upgrade="any" className="font-semibold text-hot-text hover:underline">{t.dash.upgrade}</Link>
           </div>
           <Meter value={total} max={limit} label={t.myTeams.following} className="mt-2" />
         </Panel>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { ApiError, apiErrorResponse, requireSwitch, requireVerifiedUser } from "@/lib/api-auth"
 import { activeDayPass, addonOnSale, isAddonSku, priceIdForAddon } from "@/lib/billing/addons"
 import { getStoredCustomerId, getSubscriptionAccess, getUserPurchases, storeCustomerId } from "@/lib/billing/firestore-store"
+import { funnelMetadata } from "@/lib/billing/growth-engine-funnel"
 import { APP_ID } from "@/lib/billing/plans"
 import { settleOpenSessions } from "@/lib/billing/open-sessions"
 import { getStripe } from "@/lib/billing/stripe-client"
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
     const user = await requireVerifiedUser(request)
     requireSwitch("FEATURE_PAYMENTS")
     rateLimit(`addon:${user.uid}`, 10, 60_000)
-    const { sku } = await request.json().catch(() => ({}))
+    const { sku, fcgeRef } = await request.json().catch(() => ({}))
 
     if (!isAddonSku(sku)) throw new ApiError(400, "invalid_addon", "Choose a valid add-on")
     const price = priceIdForAddon(sku)
@@ -52,7 +53,9 @@ export async function POST(request: Request) {
       if (reuse) return NextResponse.json({ url: reuse })
     }
 
-    const metadata = { app_id: APP_ID, firebase_uid: user.uid, sku }
+    // A Growth Engine offer link credits the purchase (docs/growth-engine.md). Add-ons are
+    // one-time payments, so offer codes are not applied here.
+    const metadata = { app_id: APP_ID, firebase_uid: user.uid, sku, ...funnelMetadata({ fcgeRef }) }
     const origin = process.env.APP_BASE_URL || new URL(request.url).origin
 
     const session = await stripe.checkout.sessions.create({

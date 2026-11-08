@@ -37,7 +37,7 @@ export function FullReportSection({ slug }: { slug: string }) {
       <div className="mt-6 rounded-lg border border-line bg-surface-muted p-4">
         <p className="flex items-center gap-2 text-sm font-semibold text-ink"><Sparkles aria-hidden className="size-4 text-hot-text" /> {t.fullReport.lockedTitle}</p>
         <p className="mt-1 text-sm leading-6 text-ink-2">{t.fullReport.lockedBody}</p>
-        <Link href={href("/app/billing#plans")} className={btn("navy", "sm", "mt-3")}>{t.fullReport.upgrade}</Link>
+        <Link href={href("/app/billing#plans")} data-fcge-upgrade="any" className={btn("navy", "sm", "mt-3")}>{t.fullReport.upgrade}</Link>
       </div>
     )
   }
@@ -115,7 +115,7 @@ export function ForYouReports() {
   if (!hasPlusFeatures(plan)) {
     return (
       <p className="fs-rise mb-5 rounded-lg border border-line bg-surface-muted p-3 text-sm leading-6 text-ink-2">
-        {t.fullReport.forYouLocked} <Link href={href("/app/billing#plans")} className="font-semibold text-hot-text hover:underline">{t.fullReport.upgrade}</Link>
+        {t.fullReport.forYouLocked} <Link href={href("/app/billing#plans")} data-fcge-upgrade="any" className="font-semibold text-hot-text hover:underline">{t.fullReport.upgrade}</Link>
       </p>
     )
   }

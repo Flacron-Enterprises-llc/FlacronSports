@@ -10,6 +10,7 @@ import { btn, Panel, Skeleton } from "@/components/site/states"
 import { ExportButton } from "@/components/sports/export-button"
 import { LocalTime, SpoilerGuard, SpoilerReveal, SpoilerScope } from "@/components/sports/parts"
 import { authFetch } from "@/lib/auth-fetch"
+import { trackFeatureUsed } from "@/lib/growth-engine"
 import { hasPlusFeatures } from "@/lib/billing/plans"
 import type { Comparison, PlayerComparison, TeamProfile } from "@/lib/sports/compare"
 import { playerRows, teamSheet } from "@/lib/sports/compare-rows"
@@ -212,7 +213,7 @@ function PlayerCompare() {
           </div>
         </Panel>
       )}
-      {plan === "plus" && data && <p className="text-sm text-ink-2">{t.compare.playerPlusNote} <Link href={href("/app/billing#plans")} className="font-semibold text-hot-text hover:underline">{t.compare.upgrade}</Link></p>}
+      {plan === "plus" && data && <p className="text-sm text-ink-2">{t.compare.playerPlusNote} <Link href={href("/app/billing#plans")} data-fcge-upgrade="any" className="font-semibold text-hot-text hover:underline">{t.compare.upgrade}</Link></p>}
     </div>
   )
 }
@@ -269,7 +270,10 @@ export function CompareTool({ sports }: { sports: { id: SportId; name: string }[
 
   const save = async () => {
     const response = await authFetch("/api/compare/saved", { method: "POST", body: JSON.stringify({ first, second, sport }) }).catch(() => null)
-    if (response?.ok) return loadViews()
+    if (response?.ok) {
+      trackFeatureUsed("compare_view_saved", { sport: sport || undefined })
+      return loadViews()
+    }
     const body = (await response?.json().catch(() => null)) as { code?: string } | null
     setError(body?.code === "views_limit" ? t.compare.viewsLimit : t.compare.failed)
   }
@@ -291,7 +295,7 @@ export function CompareTool({ sports }: { sports: { id: SportId; name: string }[
     return (
       <Panel title={t.compare.lockedTitle} icon={<Lock aria-hidden />}>
         <p className="text-sm leading-6 text-ink-2">{t.compare.lockedBody}</p>
-        <Link href={href("/app/billing#plans")} className={btn("navy", "md", "mt-3")}>{t.compare.upgrade}</Link>
+        <Link href={href("/app/billing#plans")} data-fcge-upgrade="any" className={btn("navy", "md", "mt-3")}>{t.compare.upgrade}</Link>
       </Panel>
     )
   }
@@ -341,7 +345,7 @@ export function CompareTool({ sports }: { sports: { id: SportId; name: string }[
       {busy && <Panel><div role="status" aria-label={t.ui.loading} className="space-y-2"><Skeleton className="h-4 w-3/4" /><Skeleton className="h-4 w-1/2" /></div></Panel>}
       {data && asked && <Results data={data} asked={asked} />}
       {data && plan === "premium" && <button type="button" onClick={save} className={btn("outline", "md")}><Bookmark aria-hidden className="size-4" /> {t.compare.save}</button>}
-      {plan === "plus" && data && <p className="text-sm text-ink-2">{t.compare.plusNote} <Link href={href("/app/billing#plans")} className="font-semibold text-hot-text hover:underline">{t.compare.upgrade}</Link></p>}
+      {plan === "plus" && data && <p className="text-sm text-ink-2">{t.compare.plusNote} <Link href={href("/app/billing#plans")} data-fcge-upgrade="any" className="font-semibold text-hot-text hover:underline">{t.compare.upgrade}</Link></p>}
       {views.length > 0 && (
         <Panel title={t.compare.savedViews} icon={<Bookmark aria-hidden />}>
           <ul className="divide-y divide-line">

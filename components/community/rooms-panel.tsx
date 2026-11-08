@@ -263,7 +263,7 @@ export function RoomsPanel({ matchId, inviteToken = null }: { matchId: string | 
             </ul>
           )}
           {loaded && !canHost && (
-            <Notice tone="warning" role="status" title={t.community.createRoom} action={<Link href={href("/app/billing")} className={btn("outline", "sm")}>{t.community.upgradeRoom}</Link>}>{t.community.planRequired}</Notice>
+            <Notice tone="warning" role="status" title={t.community.createRoom} action={<Link href={href("/app/billing")} data-fcge-upgrade="any" className={btn("outline", "sm")}>{t.community.upgradeRoom}</Link>}>{t.community.planRequired}</Notice>
           )}
           {loaded && canHost && (
             <Panel id="room-create" title={t.community.createRoom} icon={<Plus aria-hidden />}>

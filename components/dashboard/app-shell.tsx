@@ -27,6 +27,7 @@ import { sportSwitchPath } from "@/lib/sports/sport-link"
 import { SPORTS } from "@/lib/sports/types"
 import { useLocale } from "@/lib/use-locale"
 import { cn } from "@/lib/utils"
+import { identifyGrowthUser } from "@/lib/growth-engine"
 import { AccountProvider, useAccount } from "./account-context"
 import { OfflineBanner, useFocusTrap, usePopover } from "./controls"
 import { BootLoader, NavProgress, useExit } from "./loading"
@@ -148,7 +149,7 @@ function Sidebar({ path, onClose }: { path: string; onClose?: () => void }) {
             </div>
           )}
           {loaded && plan === "basic" && (
-            <Link href={href("/app/billing#plans")} onClick={onClose} className="mt-3 inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-orange px-3 text-[13px] font-semibold text-hot-on transition-colors hover:bg-orange-hover">
+            <Link href={href("/app/billing#plans")} data-fcge-upgrade="any" onClick={onClose} className="mt-3 inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-orange px-3 text-[13px] font-semibold text-hot-on transition-colors hover:bg-orange-hover">
               <Sparkles aria-hidden className="size-3.5" /> {t.dash.upgrade}
             </Link>
           )}
@@ -481,8 +482,18 @@ export function AppShell({ children, community }: { children: React.ReactNode; c
 
   return (
     <AccountProvider user={user} community={community}>
+      <GrowthEnginePlan />
       {showBoot && <BootLoader status={t.dash.loading} leaving={workspaceReady} />}
       <Frame path={path}>{children}</Frame>
     </AccountProvider>
   )
+}
+
+/** The plan joins the Growth Engine identity once the dashboard has read it. */
+function GrowthEnginePlan() {
+  const { user, plan, loaded } = useAccount()
+  useEffect(() => {
+    if (user && loaded) identifyGrowthUser({ uid: user.uid, plan })
+  }, [user, plan, loaded])
+  return null
 }

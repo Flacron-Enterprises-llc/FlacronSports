@@ -84,13 +84,13 @@ export function PlanCards({ onPick, currentInterval }: { onPick?: (plan: PaidPla
               {current === id && (!onPick || !currentInterval || currentInterval === interval) ? (
                 <p className="rounded-md border border-line py-2 text-center text-sm font-semibold text-ink-2">{t.pricing.current}</p>
               ) : onPick ? (
-                <button type="button" onClick={() => onPick(id, interval)} className="rounded-md bg-orange py-2 text-sm font-semibold text-[#0a1a33] hover:bg-orange-hover">{`${t.pricing.choose} ${plan.name}`}</button>
+                <button type="button" data-fcge-upgrade={id} onClick={() => onPick(id, interval)} className="rounded-md bg-orange py-2 text-sm font-semibold text-[#0a1a33] hover:bg-orange-hover">{`${t.pricing.choose} ${plan.name}`}</button>
               ) : user ? (
-                <button type="button" disabled={pending !== null} onClick={() => buy(id)} className="rounded-md bg-orange py-2 text-sm font-semibold text-[#0a1a33] hover:bg-orange-hover disabled:opacity-60">
+                <button type="button" data-fcge-upgrade={id} disabled={pending !== null} onClick={() => buy(id)} className="rounded-md bg-orange py-2 text-sm font-semibold text-[#0a1a33] hover:bg-orange-hover disabled:opacity-60">
                   {pending === id ? t.pricing.opening : `${t.pricing.choose} ${plan.name}`}
                 </button>
               ) : (
-                <Link href={href(`/signup?plan=${id}&interval=${interval}`)} className="rounded-md bg-orange py-2 text-center text-sm font-semibold text-[#0a1a33] hover:bg-orange-hover">
+                <Link href={href(`/signup?plan=${id}&interval=${interval}`)} data-fcge-upgrade={id} className="rounded-md bg-orange py-2 text-center text-sm font-semibold text-[#0a1a33] hover:bg-orange-hover">
                   {t.pricing.choose} {plan.name}
                 </Link>
               )}

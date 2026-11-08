@@ -10,11 +10,12 @@ import { authErrorField, authErrorKey, isEmail, passwordAccepted, safeNext, type
 import { pendingPlan, rememberPlan, startCheckout, type PendingPlan } from "@/lib/billing-client"
 import { isBillingInterval, isPaidPlan } from "@/lib/billing/plans"
 import { getCurrentUser, signInWithEmail, signInWithGoogle, signUpWithEmail } from "@/lib/firebase-auth"
+import { trackGrowthEvent } from "@/lib/growth-engine"
 import { localePath } from "@/lib/i18n"
 import { completeTotpSignIn, startSecondFactor, type SecondFactorChallenge } from "@/lib/mfa"
 import { useLocale } from "@/lib/use-locale"
 
-type AuthResult = { user: { emailVerified: boolean } | null; cause?: unknown; emailSent?: boolean }
+type AuthResult = { user: { emailVerified: boolean } | null; cause?: unknown; emailSent?: boolean; isNewUser?: boolean }
 
 export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
   const { locale, t, href } = useLocale()
@@ -121,7 +122,9 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
     acting.current = true
     setBusy("form")
     const address = email.trim()
-    const moved = await settle(signup ? await signUpWithEmail(address, password) : await signInWithEmail(address, password))
+    const result = signup ? await signUpWithEmail(address, password) : await signInWithEmail(address, password)
+    if (signup && result.user) trackGrowthEvent("user_registered", { method: "email" })
+    const moved = await settle(result)
     if (!moved) setBusy(null)
   }
 
@@ -129,7 +132,9 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
     clearErrors()
     acting.current = true
     setBusy("google")
-    if (!(await settle(await signInWithGoogle()))) setBusy(null)
+    const result = await signInWithGoogle()
+    if (result.user && result.isNewUser) trackGrowthEvent("user_registered", { method: "google" })
+    if (!(await settle(result))) setBusy(null)
   }
 
   const verify = async (event: React.FormEvent) => {

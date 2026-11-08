@@ -9,7 +9,7 @@ import { SportIcon } from "@/components/site/sport-icon"
 import { AppPage, chipClass, EmptyState, Meter, Panel, StatTile } from "@/components/site/states"
 import { EventCard, FeedNotice } from "@/components/sports/event-card"
 import { LiveRefresh, LocalTime } from "@/components/sports/parts"
-import { DEFAULT_PREFERENCES, favoriteTotal, type HomeSection } from "@/lib/me/preferences-defaults"
+import { favoriteTotal, setupChecklist, type HomeSection } from "@/lib/me/preferences-defaults"
 import { followPriority, isFollowed } from "@/lib/sports/following"
 import { resolveHomeFeed, trendingCompetitions } from "@/lib/sports/home-feed"
 import { readStored, SPOILER_DECIDED_KEY, writeStored } from "@/lib/storage-consent"
@@ -61,10 +61,11 @@ function Checklist({ onHide }: { onHide(): void }) {
   const [decided, setDecided] = useState(false)
   useEffect(() => setDecided(readStored<boolean>(SPOILER_DECIDED_KEY, false)), [])
 
+  const done = setupChecklist(prefs, decided)
   const steps = [
-    { label: t.dash.checkTeam, done: prefs.favorites.length > 0, to: "/app/scores" },
-    { label: t.dash.checkAlerts, done: JSON.stringify(prefs.alerts) !== JSON.stringify(DEFAULT_PREFERENCES.alerts), to: "/app/settings#alerts" },
-    { label: t.dash.checkSpoiler, done: prefs.spoilerMode || decided, to: "/app/settings#general" },
+    { label: t.dash.checkTeam, done: done.team, to: "/app/scores" },
+    { label: t.dash.checkAlerts, done: done.alerts, to: "/app/settings#alerts" },
+    { label: t.dash.checkSpoiler, done: done.spoiler, to: "/app/settings#general" },
   ]
   const finished = steps.filter((step) => step.done).length
   if (finished === steps.length) return null

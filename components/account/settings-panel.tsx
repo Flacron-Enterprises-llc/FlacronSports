@@ -16,6 +16,7 @@ import { hasPlusFeatures } from "@/lib/billing/plans"
 import { localePath } from "@/lib/i18n"
 import type { AlertType } from "@/lib/me/preferences-defaults"
 import { readStored, SPOILER_DECIDED_KEY, writeStored } from "@/lib/storage-consent"
+import { trackFeatureUsed } from "@/lib/growth-engine"
 import { SPORTS } from "@/lib/sports/types"
 import { useLocale } from "@/lib/use-locale"
 import { CalendarFeedPanel } from "./calendar-feed-panel"
@@ -59,14 +60,16 @@ export function SettingsPanel() {
     if (prefs.timeZone === "UTC" && detected && detected !== "UTC") void update({ timeZone: detected })
   }, [user, ready, prefs.timeZone, update])
 
-  const save = async (patch: Parameters<typeof update>[0]) => {
-    if (await update(patch)) toast(t.settings.saved)
-    else toast(t.ui.saveFailed)
+  const save = async (patch: Parameters<typeof update>[0]): Promise<boolean> => {
+    const saved = await update(patch)
+    toast(saved ? t.settings.saved : t.ui.saveFailed)
+    return saved
   }
 
-  const toggleAlert = (type: AlertType) => {
-    const types = prefs.alerts.types.includes(type) ? prefs.alerts.types.filter((item) => item !== type) : [...prefs.alerts.types, type]
-    return save({ alerts: { ...prefs.alerts, types } })
+  const toggleAlert = async (type: AlertType) => {
+    const enabling = !prefs.alerts.types.includes(type)
+    const types = enabling ? [...prefs.alerts.types, type] : prefs.alerts.types.filter((item) => item !== type)
+    if ((await save({ alerts: { ...prefs.alerts, types } })) && enabling) trackFeatureUsed("alerts_enabled", { alert: type })
   }
 
   const exportData = async () => {

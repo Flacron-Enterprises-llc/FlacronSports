@@ -6,6 +6,7 @@ import { btn, Panel } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
 import { billingMessage } from "@/lib/billing-client"
 import { ADDONS, type AddonSku } from "@/lib/billing/addons"
+import { getOfferHandoff, trackGrowthEvent } from "@/lib/growth-engine"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { useLocale } from "@/lib/use-locale"
 import { cn } from "@/lib/utils"
@@ -31,9 +32,13 @@ export function AddonOffers({ compact }: { compact?: boolean }) {
   const buy = async (sku: AddonSku) => {
     setPending(sku)
     setError(null)
-    const response = await authFetch("/api/billing/addon", { method: "POST", body: JSON.stringify({ sku }) }).catch(() => null)
+    const { fcgeRef } = getOfferHandoff()
+    const response = await authFetch("/api/billing/addon", { method: "POST", body: JSON.stringify({ sku, fcgeRef }) }).catch(() => null)
     const data = await response?.json().catch(() => null)
-    if (data?.url) return window.location.assign(data.url)
+    if (data?.url) {
+      trackGrowthEvent("checkout_started", { sku })
+      return window.location.assign(data.url)
+    }
     setError(billingMessage(data?.code, t))
     setPending(null)
   }

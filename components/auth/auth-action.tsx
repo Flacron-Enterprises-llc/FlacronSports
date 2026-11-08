@@ -9,6 +9,7 @@ import { AnimatedCheck, IconBadge } from "@/components/site/status-card"
 import { authErrorKey, passwordAccepted } from "@/lib/auth-rules"
 import { pendingPlan, startCheckout } from "@/lib/billing-client"
 import { applyEmailCode, confirmReset, getCurrentUser, refreshVerification } from "@/lib/firebase-auth"
+import { trackEmailVerified } from "@/lib/growth-engine"
 import { localePath } from "@/lib/i18n"
 import { useLocale } from "@/lib/use-locale"
 
@@ -40,6 +41,7 @@ export function AuthAction() {
         setState("verified")
         const user = await getCurrentUser().catch(() => null)
         if (!user || !(await refreshVerification().catch(() => false))) return
+        trackEmailVerified(user.uid)
         setSignedIn(true)
         await new Promise((resolve) => setTimeout(resolve, SUCCESS_PAUSE_MS))
         const pricing = localePath(locale, "/pricing")

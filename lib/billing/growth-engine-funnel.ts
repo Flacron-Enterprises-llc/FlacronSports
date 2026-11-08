@@ -29,7 +29,7 @@ export function normalizePromoCode(value: unknown): string | null {
 type Tagged = { metadata?: Stripe.Metadata | null } | null | undefined
 
 /** Tagged for another product on the shared account (or not tagged at all): never apply it here. */
-export function belongsToApp(promotionCode: Tagged & { coupon?: Tagged }, appId: string): boolean {
+export function belongsToApp(promotionCode: ({ metadata?: Stripe.Metadata | null; coupon?: Tagged }) | null | undefined, appId: string): boolean {
   const tagged = [promotionCode?.metadata, promotionCode?.coupon?.metadata].map((metadata) => metadata?.app_id || null).filter(Boolean)
   return tagged.length > 0 && tagged.every((id) => id === appId)
 }

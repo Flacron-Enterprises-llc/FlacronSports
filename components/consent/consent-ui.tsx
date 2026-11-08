@@ -85,6 +85,7 @@ function CookiePreferences() {
                     {always && <span className="rounded-full bg-surface-muted px-2 py-px text-[11px] text-ink-3">{t.consent.always}</span>}
                   </p>
                   <p className="mt-1 text-[13px] leading-relaxed text-ink-2">{category.text}</p>
+                  {category.id === "analytics" && <p className="mt-1 text-[13px] leading-relaxed text-ink-2">{t.consent.analyticsNote}</p>}
                 </div>
                 <Switch
                   aria-labelledby={`${base}-${category.id}`}

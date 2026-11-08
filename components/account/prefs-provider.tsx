@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { authFetch } from "@/lib/auth-fetch"
+import { trackFeatureUsed } from "@/lib/growth-engine"
 import { PLANS } from "@/lib/billing/plans"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { DEFAULT_PREFERENCES, type Preferences } from "@/lib/me/preferences-defaults"
@@ -109,6 +110,7 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
         const next = (await response.json()) as Preferences
         latest.current = next
         setPrefs(next)
+        if (!following) trackFeatureUsed("team_followed")
         return following ? "removed" : "added"
       }
       const result = queue.current.then(run, run)

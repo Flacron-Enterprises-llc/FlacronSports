@@ -1,10 +1,12 @@
 import type { Metadata, Viewport } from "next"
 import localFont from "next/font/local"
 import { notFound } from "next/navigation"
+import { Suspense } from "react"
 import { Toaster } from "@/components/ui/sonner"
 import { ConsentProvider } from "@/components/consent/consent-provider"
 import { CookieConsent } from "@/components/consent/consent-ui"
 import { PreferencesProvider } from "@/components/account/prefs-provider"
+import { GrowthEngineTracker } from "@/components/growth-engine-tracker"
 import { ServiceWorker } from "@/components/site/service-worker"
 import { getDictionary, isLocale, LOCALES } from "@/lib/i18n"
 import "../globals.css"
@@ -50,7 +52,11 @@ export default async function RootLayout({ children, params }: { children: React
       <body className="min-h-dvh antialiased">
         <a href="#main" className="skip-link">{getDictionary(locale).ui.skip}</a>
         <ConsentProvider>
-          <PreferencesProvider>{children}</PreferencesProvider>
+          <PreferencesProvider>
+            {children}
+            {/* Reads the query string for offer links, so it renders on the client only. */}
+            <Suspense fallback={null}><GrowthEngineTracker /></Suspense>
+          </PreferencesProvider>
           <CookieConsent />
           <Toaster />
           <ServiceWorker />

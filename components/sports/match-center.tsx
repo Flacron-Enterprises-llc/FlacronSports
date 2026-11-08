@@ -7,6 +7,7 @@ import { usePreferences } from "@/components/account/prefs-provider"
 import { ErrorNotice, Tabs } from "@/components/dashboard/controls"
 import { btn, Panel, Skeleton } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
+import { trackFeatureUsed } from "@/lib/growth-engine"
 import { useLocale } from "@/lib/use-locale"
 import type { MatchViewing } from "@/lib/video/catalog"
 import { BroadcastGroups } from "@/components/video/broadcast-groups"
@@ -125,7 +126,7 @@ export function ViewingPanel() {
           {(result.video || clips.some((clip) => clip.kind !== "live")) && <p className="text-sm leading-6 text-ink-2">{t.match.videoAtTop}</p>}
           {result.broadcasts.length > 0 && <BroadcastGroups broadcasts={result.broadcasts} viewerCountryCode={result.viewerCountry} />}
           {!official && !result.video && clips.length === 0 && result.broadcasts.length === 0 && <p className="text-sm leading-6 text-ink-2">{t.match.noVideo}</p>}
-          {official?.url && <a href={official.url} rel="noreferrer" target="_blank" className={btn("navy")}><ExternalLink aria-hidden className="size-4" /> {t.ui.officialBroadcaster}<span className="sr-only"> {t.footer.newTab}</span></a>}
+          {official?.url && <a href={official.url} rel="noreferrer" target="_blank" onClick={() => trackFeatureUsed("viewing_option_opened", { option: "official_broadcaster" })} className={btn("navy")}><ExternalLink aria-hidden className="size-4" /> {t.ui.officialBroadcaster}<span className="sr-only"> {t.footer.newTab}</span></a>}
           {following && <p className="flex items-center gap-2 text-sm font-semibold text-ink"><Radio aria-hidden className="size-4 text-live" /> {t.match.followLive}</p>}
         </div>
       )}

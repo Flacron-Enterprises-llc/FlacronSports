@@ -8,6 +8,7 @@ import { AnimatedCheck, IconBadge } from "@/components/site/status-card"
 import { authErrorKey, safeNext } from "@/lib/auth-rules"
 import { pendingPlan, startCheckout } from "@/lib/billing-client"
 import { getCurrentUser, refreshVerification, resendVerification, signOutUser } from "@/lib/firebase-auth"
+import { trackEmailVerified } from "@/lib/growth-engine"
 import { localePath } from "@/lib/i18n"
 import { useLocale } from "@/lib/use-locale"
 
@@ -39,6 +40,8 @@ export function VerifyEmail() {
       if (await refreshVerification()) {
         leaving.current = true
         setVerified(true)
+        const user = await getCurrentUser().catch(() => null)
+        if (user) trackEmailVerified(user.uid)
         await new Promise((resolve) => setTimeout(resolve, SUCCESS_PAUSE_MS))
         const pending = pendingPlan()
         if (pending) await startCheckout(pending)

@@ -2,13 +2,16 @@ import path from "node:path"
 
 /** @type {import('next').NextConfig} */
 
+// Flacron Growth Engine: its SDK, chat and promo scripts, and the API they call (docs/growth-engine.md).
+const GROWTH_ENGINE = "https://dleleyb9ufrgz.cloudfront.net"
+
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://apis.google.com",
+  `script-src 'self' 'unsafe-inline' https://apis.google.com ${GROWTH_ENGINE}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https:",
   "font-src 'self'",
-  "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com",
+  `connect-src 'self' https://*.googleapis.com https://*.firebaseio.com ${GROWTH_ENGINE}`,
   "frame-src https://*.firebaseapp.com https://www.youtube-nocookie.com https://www.scorebat.com",
   "object-src 'none'",
   "base-uri 'self'",

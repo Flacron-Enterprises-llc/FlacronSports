@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Download, LoaderCircle } from "lucide-react"
 import { btn } from "@/components/site/states"
 import { authFetch } from "@/lib/auth-fetch"
+import { trackFeatureUsed } from "@/lib/growth-engine"
 import { useAuthUser } from "@/lib/hooks/useAuthUser"
 import { useLocale } from "@/lib/use-locale"
 
@@ -27,6 +28,7 @@ export function ExportButton({ matchId, endpoint = "/api/exports", body, label, 
     link.click()
     URL.revokeObjectURL(url)
     setState("idle")
+    trackFeatureUsed("report_exported", { kind: endpoint === "/api/exports" ? "match" : "comparison" })
   }
 
   return (

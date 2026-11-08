@@ -230,6 +230,7 @@ const en = {
     policy: "Cookies Policy", accept: "Accept all", reject: "Reject non-essential", manage: "Manage preferences",
     prefs: "Cookie preferences", prefsLead: "Choose which optional cookies FlacronSport may use. You can change this at any time from the footer.",
     save: "Save choices", always: "Always on", gpc: "Global Privacy Control detected: non-essential cookies are off for this browser.",
+    analyticsNote: "Analytics includes the Flacron Growth Engine, Flacron's own product-analytics, email and support-chat service. Once you sign in, your usage is linked to your account. Turning Analytics off also hides the support chat.",
   },
   auth: {
     signInTitle: "Welcome back", signUpTitle: "Create your account", email: "Email", password: "Password", confirm: "Confirm password",
@@ -890,6 +891,7 @@ const fr: Dictionary = {
     policy: "Politique relative aux cookies", accept: "Tout accepter", reject: "Refuser les cookies non essentiels", manage: "Gérer les préférences",
     prefs: "Préférences de cookies", prefsLead: "Choisissez les cookies facultatifs que FlacronSport peut utiliser. Vous pouvez modifier ce choix à tout moment depuis le pied de page.",
     save: "Enregistrer mes choix", always: "Toujours actifs", gpc: "Global Privacy Control détecté : les cookies non essentiels sont désactivés pour ce navigateur.",
+    analyticsNote: "Les cookies d'analyse incluent le Flacron Growth Engine, le service de Flacron pour l'analyse produit, les e-mails et le chat d'assistance. Une fois connecté, votre utilisation est associée à votre compte. Désactiver l'analyse masque aussi le chat d'assistance.",
   },
   auth: {
     signInTitle: "Bon retour", signUpTitle: "Créez votre compte", email: "E-mail", password: "Mot de passe", confirm: "Confirmer le mot de passe",

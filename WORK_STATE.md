@@ -17,7 +17,7 @@ Stack updates must pass the running image as `ImageTag` and `DesiredCount=1`, or
 
 ## Owner actions
 
-GitHub Support purge of PR #1, paid TheSportsDB and API-Football keys, ScoreBat plan decision and terms, approved channel review, rotate the Stripe and ScoreBat keys shared in chat, video license, community decisions, counsel review.
+GitHub Support purge of PR #1, paid TheSportsDB and API-Football keys, ScoreBat plan decision and terms, approved channel review, rotate the Stripe and ScoreBat keys shared in chat, video license, community decisions, counsel review, Growth Engine row in the Cookies Policy, turning on the Growth Engine email drafts.
 
 ## Next tasks
 
@@ -44,3 +44,10 @@ GitHub Support purge of PR #1, paid TheSportsDB and API-Football keys, ScoreBat 
 - See D-034. Plans are Basic $19.99, Plus $29.99, Premium $49.99, with annual at $199.99, $299.99 and $499.99.
 - ScoreBat paid token is live in `flacron-sport/production/scorebat`: the feed has no upgrade notice and the newest clip was under a day old.
 - The handoff PDF still shows the old table; D-034 and `lib/billing/plans.ts` decide.
+
+## 2026-11-08: Flacron Growth Engine
+
+- See D-036 and `docs/growth-engine.md`. The SDK loads only with Analytics consent and also shows the support chat.
+- Offer links (`?code=&fcge_ref=`) reach the Stripe Checkout metadata. The Growth Engine's test-mode Stripe webhook is `we_1UZTHjKFLhrvSzkg9G0wrFV3`.
+- 76 email templates and 26 automations wait as drafts in the Growth Engine.
+- Local and staging builds set `NEXT_PUBLIC_FCGE_DISABLED=true`.

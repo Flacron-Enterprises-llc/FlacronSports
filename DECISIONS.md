@@ -77,3 +77,12 @@ Owner confirmed on 2026-11-06: everything in the product needs a plan. This over
 This replaces the three day grace in D-010. The spec says failed renewals keep access only through the period already paid, and Stripe moves the period end forward before the renewal is paid, so grace on that date kept access far too long. The billing page still shows the card prompt.
 
 Public share cards stay outside the plan wall: a member chooses one game to share, and the score shows only if they chose to reveal it.
+
+## D-036: FlacronSport is connected to the Flacron Growth Engine
+
+On 2026-11-08 the app was connected once to the Flacron Growth Engine, which now runs lifecycle email, webinars, giveaways, offer codes, popups and the support chat from its own dashboard. The app only loads the SDK, identifies the signed-in user, reports a few lifecycle events and passes offer links through checkout. Details are in `docs/growth-engine.md`.
+
+- The SDK, and with it the support chat, loads only with Analytics consent. The consent version went to 2 so returning visitors choose again.
+- Payments are not reported from the browser. The Growth Engine reads this Stripe account's webhooks filtered by `app_id=flacron-sport`.
+- An offer code is applied at checkout only when Stripe tags it for this app. Any other code goes to Stripe's own code field.
+- The Cookies Policy was not edited: it is the owner's legal text (D-005). Naming the Growth Engine there needs owner or counsel review.

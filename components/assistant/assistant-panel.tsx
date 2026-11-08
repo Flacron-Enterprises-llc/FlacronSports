@@ -12,6 +12,7 @@ import { LocalTime, SpoilerGuard } from "@/components/sports/parts"
 import type { AssistantAnswer } from "@/lib/assistant/engine"
 import { suggestionsFor } from "@/lib/assistant/suggestions"
 import { authFetch } from "@/lib/auth-fetch"
+import { trackFeatureUsed } from "@/lib/growth-engine"
 import { useLocale } from "@/lib/use-locale"
 
 interface Turn {
@@ -185,7 +186,10 @@ export function AssistantPanel() {
     const update: Partial<Turn> = response?.ok
       ? { answer: data.answer }
       : { error: data?.code === "allowance_exhausted" ? t.assistant.exhausted : data?.code === "email_not_verified" ? t.auth.notYet : t.assistant.failed, exhausted: data?.code === "allowance_exhausted" }
-    if (response?.ok) setBalance(data.balance)
+    if (response?.ok) {
+      setBalance(data.balance)
+      trackFeatureUsed("assistant_question")
+    }
     setTurns((current) => current.map((turn) => (turn.id === id ? { ...turn, ...update } : turn)))
     setBusy(false)
   }

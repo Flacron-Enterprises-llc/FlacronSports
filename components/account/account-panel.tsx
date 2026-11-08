@@ -96,7 +96,7 @@ export function AccountPanel() {
                 <button type="button" disabled={busy} onClick={() => setCancel(access.cancelAtPeriodEnd)} className={btn("outline")}>{access.cancelAtPeriodEnd ? t.account.undo : t.account.cancel}</button>
               </>
             ) : loaded ? (
-              <Link href={href("/app/billing#plans")} className={btn("primary")}><Sparkles aria-hidden className="size-4" />{t.account.choose}</Link>
+              <Link href={href("/app/billing#plans")} data-fcge-upgrade="any" className={btn("primary")}><Sparkles aria-hidden className="size-4" />{t.account.choose}</Link>
             ) : null}
           </div>
         </Panel>

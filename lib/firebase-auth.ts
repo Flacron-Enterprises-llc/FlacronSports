@@ -11,6 +11,7 @@ import {
   applyActionCode,
   confirmPasswordReset,
   reload,
+  getAdditionalUserInfo,
   User
 } from 'firebase/auth';
 
@@ -107,7 +108,7 @@ export const signInWithGoogle = async () => {
     const provider = getGoogleProvider();
     const result = await signInWithPopup(authInstance, provider);
     await syncMemberCookie(result.user);
-    return { user: result.user, error: null };
+    return { user: result.user, error: null, isNewUser: getAdditionalUserInfo(result)?.isNewUser === true };
   } catch (error: any) {
     return { user: null, error: error.message, cause: error };
   }

@@ -30,7 +30,7 @@ export function HouseAd() {
       <div data-testid="house-ad" className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line bg-surface-muted px-4 py-3">
         <span className="rounded bg-surface px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-ink-3">{t.ads.label}</span>
         <p className="min-w-0 flex-1 text-sm text-ink-2"><span className="font-semibold text-ink">{title}</span> {body}</p>
-        <Link href={href("/app/billing#plans")} className="shrink-0 text-sm font-semibold text-hot-text hover:underline">{t.ads.cta}</Link>
+        <Link href={href("/app/billing#plans")} data-fcge-upgrade="any" className="shrink-0 text-sm font-semibold text-hot-text hover:underline">{t.ads.cta}</Link>
         <button type="button" onClick={() => setHidden(true)} aria-label={t.ads.dismiss} className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-ink-3 hover:text-ink"><X aria-hidden className="size-4" /></button>
       </div>
     </aside>

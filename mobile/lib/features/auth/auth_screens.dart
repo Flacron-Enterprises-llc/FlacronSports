@@ -32,100 +32,125 @@ class _AuthScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.fs;
     final top = MediaQuery.paddingOf(context).top;
+    const heroColors = [Color(0xFF0B3C85), FsColors.navy, FsColors.navyDeep];
+    final header = ClipRRect(
+      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(36)),
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.fromLTRB(24, top + 12, 24, 76),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: heroColors),
+        ),
+        child: Stack(clipBehavior: Clip.none, children: [
+          // Soft brand glow, kept inside the rounded header.
+          Positioned(
+            right: -90,
+            top: -70,
+            child: IgnorePointer(
+              child: Container(
+                width: 260,
+                height: 260,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(colors: [FsColors.orange.withValues(alpha: 0.30), FsColors.orange.withValues(alpha: 0)]),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: -60,
+            bottom: -110,
+            child: IgnorePointer(
+              child: Container(
+                width: 220,
+                height: 220,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(colors: [const Color(0xFF1E5BB8).withValues(alpha: 0.35), const Color(0xFF1E5BB8).withValues(alpha: 0)]),
+                ),
+              ),
+            ),
+          ),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              if (showBack)
+                IconButton(
+                  onPressed: () => context.canPop() ? context.pop() : context.go('/signin'),
+                  icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                  style: IconButton.styleFrom(backgroundColor: Colors.white.withValues(alpha: 0.12)),
+                )
+              else
+                Image.asset('assets/brand/fs-mark-reversed.png', height: 30),
+              const Spacer(),
+              ValueListenableBuilder<String>(
+                valueListenable: AppLocale.notifier,
+                builder: (context, code, _) => TextButton(
+                  onPressed: () => AppLocale.set(code == 'fr' ? 'en' : 'fr'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.white.withValues(alpha: 0.10),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    shape: const StadiumBorder(),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.translate_rounded, size: 15),
+                    const SizedBox(width: 6),
+                    Text(code == 'fr' ? 'English' : 'Français', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 30),
+            if (icon != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(16)),
+                child: Icon(icon, color: Colors.white, size: 28),
+              ).animate().scale(begin: const Offset(0.6, 0.6), curve: Curves.easeOutBack, duration: 500.ms),
+              const SizedBox(height: 16),
+            ],
+            Text(title,
+                    style: const TextStyle(fontFamily: 'Sora', fontSize: 30, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.8, height: 1.1))
+                .animate()
+                .fadeIn(duration: 400.ms)
+                .slideY(begin: 0.2, end: 0, curve: AppTheme.ease),
+            const SizedBox(height: 8),
+            Text(subtitle, style: TextStyle(fontSize: 15, height: 1.45, color: Colors.white.withValues(alpha: 0.78)))
+                .animate()
+                .fadeIn(delay: 100.ms, duration: 400.ms),
+          ]),
+        ]),
+      ),
+    );
+
+    final card = Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.fromLTRB(20, 26, 20, 22),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: c.line),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: context.isDark ? 0.45 : 0.10), blurRadius: 36, offset: const Offset(0, 18), spreadRadius: -12),
+        ],
+      ),
+      child: child,
+    ).animate().fadeIn(delay: 120.ms, duration: 450.ms).slideY(begin: 0.06, end: 0, curve: AppTheme.ease);
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
+      value: SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent),
       child: Scaffold(
         backgroundColor: c.bg,
-        body: CustomScrollView(
-          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-          slivers: [
-            SliverToBoxAdapter(
-              child: Container(
-                padding: EdgeInsets.fromLTRB(24, top + 12, 24, 54),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF0B3C85), FsColors.navy, FsColors.navyDeep],
-                  ),
-                ),
-                child: Stack(clipBehavior: Clip.none, children: [
-                  Positioned(
-                    right: -60,
-                    top: -40,
-                    child: Container(
-                      width: 200,
-                      height: 200,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(colors: [FsColors.orange.withValues(alpha: 0.35), Colors.transparent]),
-                      ),
-                    ),
-                  ),
-                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [
-                      if (showBack)
-                        IconButton(
-                          onPressed: () => context.canPop() ? context.pop() : context.go('/signin'),
-                          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                          style: IconButton.styleFrom(backgroundColor: Colors.white.withValues(alpha: 0.1)),
-                        )
-                      else
-                        Image.asset('assets/brand/fs-mark-reversed.png', height: 30),
-                      const Spacer(),
-                      ValueListenableBuilder<String>(
-                        valueListenable: AppLocale.notifier,
-                        builder: (context, code, _) => TextButton(
-                          onPressed: () => AppLocale.set(code == 'fr' ? 'en' : 'fr'),
-                          style: TextButton.styleFrom(foregroundColor: Colors.white70),
-                          child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            const Icon(Icons.translate_rounded, size: 16),
-                            const SizedBox(width: 6),
-                            Text(code == 'fr' ? 'English' : 'Français'),
-                          ]),
-                        ),
-                      ),
-                    ]),
-                    const SizedBox(height: 28),
-                    if (icon != null) ...[
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(16)),
-                        child: Icon(icon, color: Colors.white, size: 28),
-                      ).animate().scale(begin: const Offset(0.6, 0.6), curve: Curves.easeOutBack, duration: 500.ms),
-                      const SizedBox(height: 16),
-                    ],
-                    Text(title,
-                            style: const TextStyle(fontFamily: 'Sora', fontSize: 30, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.8, height: 1.1))
-                        .animate()
-                        .fadeIn(duration: 400.ms)
-                        .slideY(begin: 0.2, end: 0, curve: AppTheme.ease),
-                    const SizedBox(height: 8),
-                    Text(subtitle, style: TextStyle(fontSize: 15, height: 1.45, color: Colors.white.withValues(alpha: 0.75)))
-                        .animate()
-                        .fadeIn(delay: 100.ms, duration: 400.ms),
-                  ]),
-                ]),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Transform.translate(
-                offset: const Offset(0, -28),
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-                  decoration: BoxDecoration(
-                    color: c.surface,
-                    borderRadius: BorderRadius.circular(26),
-                    border: Border.all(color: c.line),
-                    boxShadow: [BoxShadow(color: FsColors.navy.withValues(alpha: 0.12), blurRadius: 40, offset: const Offset(0, 16), spreadRadius: -16)],
-                  ),
-                  child: child,
-                ).animate().fadeIn(delay: 120.ms, duration: 450.ms).slideY(begin: 0.06, end: 0, curve: AppTheme.ease),
-              ),
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-          ],
+        body: SingleChildScrollView(
+          // Clamping, so pulling down never reveals an empty band above the header.
+          physics: const ClampingScrollPhysics(),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + 24),
+          // One column: the card is painted after the header, so it always sits on top of it.
+          child: Column(children: [
+            header,
+            Transform.translate(offset: const Offset(0, -44), child: card),
+          ]),
         ),
       ),
     );

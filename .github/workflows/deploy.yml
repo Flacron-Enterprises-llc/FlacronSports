@@ -3,6 +3,10 @@ name: Deploy backend
 on:
   push:
     branches: [main]
+    # The mobile app has its own workflow; app-only changes do not redeploy the site.
+    paths-ignore:
+      - "mobile/**"
+      - ".github/workflows/mobile.yml"
 
 concurrency:
   group: deploy-production

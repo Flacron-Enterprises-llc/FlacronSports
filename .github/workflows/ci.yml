@@ -3,7 +3,12 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "mobile/**"
+      - ".github/workflows/mobile.yml"
   pull_request:
+    paths-ignore:
+      - "mobile/**"
 
 permissions:
   contents: read

@@ -365,6 +365,10 @@ const en = {
     export: "Download my data", delete: "Delete my account",
     deleteConfirm: "Delete your account for good? An active subscription is canceled immediately. This cannot be undone.",
     guest: "Sign in to manage alerts, privacy and your data.", help: "Help",
+    profile: "Profile", photo: "Profile photo", photoHelp: "JPEG, PNG or WebP. Shown on your account and in the mobile app.",
+    uploadPhoto: "Upload photo", changePhoto: "Change photo", removePhoto: "Remove", photoSaved: "Profile photo updated.", photoRemoved: "Profile photo removed.",
+    photoTooLarge: "That image is too large. Choose one under 10 MB.", photoUnsupported: "Use a JPEG, PNG or WebP image.", photoFailed: "The photo could not be saved. Try again.",
+    displayName: "Display name", displayNameHelp: "How you appear in greetings, rooms and leaderboards.", saveName: "Save", nameSaved: "Name saved.", email: "Email",
   },
   tour: {
     replay: "Replay App Tour", next: "Next", back: "Back", skip: "Skip", finish: "Finish",
@@ -1032,6 +1036,10 @@ const fr: Dictionary = {
     export: "Télécharger mes données", delete: "Supprimer mon compte",
     deleteConfirm: "Supprimer définitivement votre compte ? Un abonnement actif est annulé immédiatement. Cette action est irréversible.",
     guest: "Connectez-vous pour gérer les alertes, la confidentialité et vos données.", help: "Aide",
+    profile: "Profil", photo: "Photo de profil", photoHelp: "JPEG, PNG ou WebP. Affichée sur votre compte et dans l'application mobile.",
+    uploadPhoto: "Ajouter une photo", changePhoto: "Changer la photo", removePhoto: "Supprimer", photoSaved: "Photo de profil mise à jour.", photoRemoved: "Photo de profil supprimée.",
+    photoTooLarge: "Cette image est trop lourde. Choisissez-en une de moins de 10 Mo.", photoUnsupported: "Utilisez une image JPEG, PNG ou WebP.", photoFailed: "La photo n'a pas pu être enregistrée. Réessayez.",
+    displayName: "Nom affiché", displayNameHelp: "Votre nom dans les salutations, les salons et les classements.", saveName: "Enregistrer", nameSaved: "Nom enregistré.", email: "E-mail",
   },
   tour: {
     replay: "Revoir la visite guidée", next: "Suivant", back: "Retour", skip: "Passer", finish: "Terminer",

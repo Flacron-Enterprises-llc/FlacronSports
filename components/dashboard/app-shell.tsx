@@ -32,17 +32,13 @@ import { AccountProvider, useAccount } from "./account-context"
 import { OfflineBanner, useFocusTrap, usePopover } from "./controls"
 import { BootLoader, NavProgress, useExit } from "./loading"
 import { NotificationBell } from "./notification-bell"
+import { UserAvatar, useProfile } from "@/components/account/user-avatar"
 
 function stripLocale(path: string): string {
   return path.replace(/^\/fr(?=\/|$)/, "") || "/"
 }
 
 const isCurrent = (to: string, path: string) => (to === "/app" ? path === "/app" : path === to || path.startsWith(`${to}/`))
-
-function initials(name: string | null | undefined, email: string | null | undefined): string {
-  const parts = (name || email || "?").trim().split(/[\s@._-]+/).filter(Boolean)
-  return ((parts[0]?.[0] ?? "?") + (parts[1]?.[0] ?? "")).toUpperCase()
-}
 
 function useNav() {
   const { t } = useLocale()
@@ -93,8 +89,7 @@ function Sidebar({ path, onClose }: { path: string; onClose?: () => void }) {
   const { t, href } = useLocale()
   const { user, plan, balance, dayPassEnd, loaded } = useAccount()
   const groups = useNav()
-  const name = user?.displayName ?? null
-  const email = user?.email ?? null
+  const { name, email } = useProfile(user)
   const included = balance?.included
 
   return (
@@ -129,7 +124,7 @@ function Sidebar({ path, onClose }: { path: string; onClose?: () => void }) {
       <div className="shrink-0 border-t border-[var(--sidebar-line)] p-3">
         <div className="fs-side-card rounded-xl p-3.5">
           <div className="flex items-center gap-2.5">
-            <span aria-hidden className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#1e5bb8] to-[#002961] font-display text-[13px] font-semibold text-white">{initials(name, email)}</span>
+            <UserAvatar user={user} className="size-9" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-semibold text-white">{name ?? email}</p>
               {loaded ? (
@@ -315,8 +310,7 @@ function UserMenu() {
   const router = useRouter()
   const { user, plan } = useAccount()
   const { open, setOpen, box, trigger } = usePopover()
-  const name = user?.displayName ?? null
-  const email = user?.email ?? null
+  const { name, email } = useProfile(user)
   const item = "flex min-h-10 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-ink-2 transition-colors hover:bg-surface-muted hover:text-ink"
   const close = () => setOpen(false)
 
@@ -327,7 +321,7 @@ function UserMenu() {
   return (
     <div ref={box} className="relative">
       <button ref={trigger} type="button" aria-haspopup="true" aria-expanded={open} aria-label={t.ui.accountMenu} onClick={() => setOpen(!open)} className="flex items-center gap-1 rounded-full p-0.5 transition-colors hover:bg-surface-muted sm:pr-1.5">
-        <span aria-hidden className="inline-flex size-9 items-center justify-center rounded-full bg-gradient-to-br from-[#002961] to-[#1e5bb8] font-display text-[13px] font-semibold text-white ring-2 ring-surface">{initials(name, email)}</span>
+        <UserAvatar user={user} className="size-9" ring />
         <ChevronDown aria-hidden className={cn("hidden size-3.5 text-ink-3 transition-transform duration-200 sm:block", open && "rotate-180")} />
       </button>
       {open && (

@@ -7,6 +7,7 @@ import { getStripe } from "@/lib/billing/stripe-client"
 import { eraseCommunityData } from "@/lib/community/account"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin"
+import { AVATAR_COLLECTION } from "@/lib/me/avatar"
 import { userOwnedRecords } from "@/lib/me/records"
 
 export const dynamic = "force-dynamic"
@@ -31,6 +32,7 @@ export async function DELETE(request: Request) {
     await eraseCommunityData(firestoreDocDb(), user.uid)
     await db.collection("user_preferences").doc(user.uid).delete()
     await db.collection("users").doc(user.uid).delete()
+    await db.collection(AVATAR_COLLECTION).doc(user.uid).delete()
     if (user.email) await db.collection("dashboard_settings").doc(user.email).delete()
     await audit("account.deleted", user.uid)
     await auth.deleteUser(user.uid)

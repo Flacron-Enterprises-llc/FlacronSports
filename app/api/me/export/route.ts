@@ -5,6 +5,7 @@ import { getEffectiveAccess } from "@/lib/billing/firestore-store"
 import { exportCommunityData } from "@/lib/community/account"
 import { firestoreDocDb } from "@/lib/doc-db"
 import { getAdminDb } from "@/lib/firebase-admin"
+import { AVATAR_COLLECTION } from "@/lib/me/avatar"
 import { getPreferences } from "@/lib/me/preferences"
 import { userOwnedRecords } from "@/lib/me/records"
 import { rateLimit } from "@/lib/rate-limit"
@@ -23,9 +24,14 @@ export async function GET(request: Request) {
     const { alerts, sends } = await userMessageRecords(db, user.uid)
     const purchases = await db.collection("billing_purchases").where("uid", "==", user.uid).get()
     const { compareViews, follows, assistantUsage, savedReports, calendarSubscriptions } = await userOwnedRecords(db, user.uid)
+    const avatar = await db.collection(AVATAR_COLLECTION).doc(user.uid).get()
     const body = {
       exportedAt: new Date().toISOString(),
       account: { uid: user.uid, email: user.email },
+      // The image itself is the member's own upload; its record is listed, the bytes as base64.
+      profilePhoto: avatar.exists
+        ? { contentType: avatar.data()?.contentType, updatedAtUTC: avatar.data()?.updatedAtUTC, base64: Buffer.from(avatar.data()?.data ?? []).toString("base64") }
+        : null,
       preferences: await getPreferences(user.uid),
       plan: await getEffectiveAccess(user.uid),
       payments: payments.docs.map((doc) => doc.data()),

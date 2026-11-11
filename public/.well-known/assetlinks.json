@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.flacronsport.app",
+      "sha256_cert_fingerprints": [
+        "ED:8B:01:3C:DC:E5:5C:B8:0D:71:6F:48:1D:3E:6F:5D:3F:F2:F8:83:FE:22:9B:CD:6F:36:4C:26:6F:12:3E:A7"
+      ]
+    }
+  }
+]

@@ -20,6 +20,7 @@ import { trackFeatureUsed } from "@/lib/growth-engine"
 import { SPORTS } from "@/lib/sports/types"
 import { useLocale } from "@/lib/use-locale"
 import { CalendarFeedPanel } from "./calendar-feed-panel"
+import { ProfilePanel } from "./profile-panel"
 import { usePreferences } from "./prefs-provider"
 
 const ALERT_ROWS: AlertType[] = ["start", "final", "participants", "scoring", "interval", "highlights"]
@@ -96,7 +97,7 @@ export function SettingsPanel() {
     router.push(localePath(next, "/app/settings"))
   }
 
-  const sections = [["general", t.settings.general], ["alerts", t.settings.alerts], ["calendar", t.discover.feedManage], ["privacy", t.settings.privacy], ["help", t.settings.help]]
+  const sections = [["profile", t.settings.profile], ["general", t.settings.general], ["alerts", t.settings.alerts], ["calendar", t.discover.feedManage], ["privacy", t.settings.privacy], ["help", t.settings.help]]
   const selectClass = "fs-input h-10 w-auto max-w-[11rem] px-2 text-sm sm:h-9"
 
   return (
@@ -108,6 +109,7 @@ export function SettingsPanel() {
       </nav>
 
       <div className="fs-settle min-w-0 space-y-4">
+        {user && <ProfilePanel />}
         <Panel id="general" title={t.settings.general} icon={<SlidersHorizontal aria-hidden />}>
           <div className="divide-y divide-line">
             <Row title={t.settings.language}>
